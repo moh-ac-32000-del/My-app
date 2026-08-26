@@ -7,14 +7,8 @@ import { AppShell, GlassCard, PageHeader, SectionTitle } from '@/components/AppS
 import { useStore } from '@/context/StoreContext';
 import { useColors } from '@/hooks/useColors';
 import { translate } from '@/constants/i18n';
-import type { AccentColor } from '@/types/business';
-
-const accents: Array<{ key: AccentColor; color: string }> = [
-  { key: 'cyan', color: '#65D9FF' },
-  { key: 'violet', color: '#A998FF' },
-  { key: 'amber', color: '#F2C86B' },
-  { key: 'mint', color: '#65D8A6' },
-];
+import { accentOptions, type AccentColor } from '@/constants/colors';
+import { CURRENCY_OPTIONS, getCurrency, type CurrencyCode } from '@/constants/currencies';
 
 function SettingInput({ label, value, onChangeText, icon, multiline = false }: { label: string; value: string; onChangeText: (value: string) => void; icon: React.ComponentProps<typeof Ionicons>['name']; multiline?: boolean }) {
   const colors = useColors();
@@ -36,17 +30,31 @@ export default function SettingsScreen() {
   const [name, setName] = useState<string>(profile.name);
   const [phone, setPhone] = useState<string>(profile.phone);
   const [address, setAddress] = useState<string>(profile.address);
-  const [currency, setCurrency] = useState<string>(profile.currency);
+  const [currency, setCurrency] = useState<CurrencyCode>(profile.currency);
   const [accent, setAccent] = useState<AccentColor>(profile.accent);
+  const [isCurrencyPickerOpen, setIsCurrencyPickerOpen] = useState<boolean>(false);
 
   const save = async () => {
     if (!name.trim()) {
       Alert.alert(translate('storeName', profile.language), translate('fieldRequired', profile.language));
       return;
     }
-    await saveProfile({ name: name.trim(), phone: phone.trim(), address: address.trim(), currency: currency.trim() || 'ر.س', accent });
+    await saveProfile({ name: name.trim(), phone: phone.trim(), address: address.trim(), currency, accent });
     await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     Alert.alert(translate('saved', profile.language));
+  };
+
+  const selectCurrency = async (nextCurrency: CurrencyCode) => {
+    setCurrency(nextCurrency);
+    setIsCurrencyPickerOpen(false);
+    await saveProfile({ currency: nextCurrency });
+    await Haptics.selectionAsync();
+  };
+
+  const selectAccent = async (nextAccent: AccentColor) => {
+    setAccent(nextAccent);
+    await saveProfile({ accent: nextAccent });
+    await Haptics.selectionAsync();
   };
 
   const logout = async () => {
@@ -74,14 +82,48 @@ export default function SettingsScreen() {
         <SettingInput label={translate('storeName', profile.language)} value={name} onChangeText={setName} icon="business-outline" />
         <SettingInput label={translate('storePhone', profile.language)} value={phone} onChangeText={setPhone} icon="call-outline" />
         <SettingInput label={translate('storeAddress', profile.language)} value={address} onChangeText={setAddress} icon="location-outline" multiline />
-        <SettingInput label={translate('currency', profile.language)} value={currency} onChangeText={setCurrency} icon="cash-outline" />
+        <Text style={[styles.label, { color: colors.mutedForeground }]}>{translate('currency', profile.language)}</Text>
+        <Pressable
+          testID="currency-picker"
+          onPress={() => setIsCurrencyPickerOpen((current) => !current)}
+          style={({ pressed }) => [styles.currencyPicker, { backgroundColor: colors.input, borderColor: colors.border }, pressed && styles.pressed]}
+        >
+          <Ionicons name={isCurrencyPickerOpen ? 'chevron-up' : 'chevron-down'} size={18} color={colors.mutedForeground} />
+          <View style={styles.currencyCopy}>
+            <Text style={[styles.currencyCode, { color: colors.foreground }]}>{currency} · {getCurrency(currency).symbol}</Text>
+            <Text style={[styles.currencyName, { color: colors.mutedForeground }]}>{getCurrency(currency).name}</Text>
+          </View>
+          <Ionicons name="cash-outline" size={18} color={colors.mutedForeground} />
+        </Pressable>
+        {isCurrencyPickerOpen ? (
+          <View style={[styles.currencyOptions, { backgroundColor: colors.glassStrong, borderColor: colors.border }]}>
+            {CURRENCY_OPTIONS.map((option) => {
+              const selected = option.code === currency;
+              return (
+                <Pressable
+                  key={option.code}
+                  testID={`currency-${option.code}`}
+                  onPress={() => void selectCurrency(option.code)}
+                  style={({ pressed }) => [styles.currencyOption, { borderBottomColor: colors.border }, selected && { backgroundColor: colors.accent }, pressed && styles.pressed]}
+                >
+                  <Text style={[styles.currencySymbol, { color: selected ? colors.primary : colors.foreground }]}>{option.symbol}</Text>
+                  <View style={styles.currencyCopy}>
+                    <Text style={[styles.currencyCode, { color: colors.foreground }]}>{option.code}</Text>
+                    <Text style={[styles.currencyName, { color: colors.mutedForeground }]}>{option.name}</Text>
+                  </View>
+                  {selected ? <Ionicons name="checkmark-circle" size={19} color={colors.primary} /> : <View style={{ width: 19 }} />}
+                </Pressable>
+              );
+            })}
+          </View>
+        ) : null}
       </GlassCard>
 
       <SectionTitle title={translate('accentColor', profile.language)} />
       <GlassCard style={styles.card}>
         <View style={styles.colorRow}>
-          {accents.map((item) => (
-            <Pressable key={item.key} testID={`accent-${item.key}`} onPress={() => setAccent(item.key)} style={[styles.colorOption, { backgroundColor: item.color }, accent === item.key && { borderColor: colors.foreground, borderWidth: 3 }]}>
+          {accentOptions.map((item) => (
+            <Pressable key={item.key} testID={`accent-${item.key}`} onPress={() => void selectAccent(item.key)} style={[styles.colorOption, { backgroundColor: item.color }, accent === item.key && { borderColor: colors.foreground, borderWidth: 3 }]}>
               {accent === item.key ? <Ionicons name="checkmark" size={18} color={colors.primaryForeground} /> : null}
             </Pressable>
           ))}
@@ -136,6 +178,13 @@ const styles = StyleSheet.create({
   multilineInput: { minHeight: 48, textAlignVertical: 'top' },
   colorRow: { flexDirection: 'row-reverse', justifyContent: 'space-around', alignItems: 'center' },
   colorOption: { width: 42, height: 42, borderRadius: 15, alignItems: 'center', justifyContent: 'center', borderColor: 'transparent' },
+  currencyPicker: { minHeight: 58, borderWidth: 1, borderRadius: 15, flexDirection: 'row-reverse', alignItems: 'center', gap: 10, paddingHorizontal: 13, marginBottom: 14 },
+  currencyCopy: { flex: 1, alignItems: 'flex-end' },
+  currencyCode: { fontSize: 14, fontFamily: 'Inter_700Bold', textAlign: 'right' },
+  currencyName: { fontSize: 11, fontFamily: 'Inter_400Regular', textAlign: 'right', marginTop: 3 },
+  currencySymbol: { minWidth: 26, fontSize: 17, fontFamily: 'Inter_700Bold', textAlign: 'center' },
+  currencyOptions: { borderWidth: 1, borderRadius: 18, overflow: 'hidden', marginTop: -4, marginBottom: 14 },
+  currencyOption: { minHeight: 58, flexDirection: 'row-reverse', alignItems: 'center', gap: 10, paddingHorizontal: 13, borderBottomWidth: 1 },
   preferenceRow: { flexDirection: 'row-reverse', alignItems: 'center', gap: 11 },
   preferenceIcon: { width: 36, height: 36, borderRadius: 13, alignItems: 'center', justifyContent: 'center' },
   preferenceCopy: { flex: 1, alignItems: 'flex-end' },

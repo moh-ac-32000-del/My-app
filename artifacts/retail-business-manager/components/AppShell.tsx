@@ -117,7 +117,7 @@ export function PageHeader({
             <Ionicons name="arrow-forward" size={20} color={colors.foreground} />
           </Pressable>
         ) : (
-          <View style={styles.brandMark}>
+          <View style={[styles.brandMark, { backgroundColor: colors.glow, borderColor: colors.primary }]}>
             <MaterialCommunityIcons name="storefront-outline" size={22} color={colors.primary} />
           </View>
         )}
@@ -164,10 +164,6 @@ export function EmptyState({ icon, title, hint }: { icon: IconName; title: strin
   );
 }
 
-export function formatAmount(value: number, currency: string) {
-  return `${value.toLocaleString('ar-SA')} ${currency}`;
-}
-
 const styles = StyleSheet.create({
   background: { flex: 1, overflow: 'hidden' },
   orb: { position: 'absolute', width: 260, height: 260, borderRadius: 130, opacity: 0.28 },
@@ -178,7 +174,7 @@ const styles = StyleSheet.create({
   header: { marginBottom: 24 },
   headerRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   headerText: { flex: 1, alignItems: 'flex-end' },
-  brandMark: { width: 44, height: 44, borderRadius: 16, backgroundColor: 'rgba(101,217,255,0.13)', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(101,217,255,0.28)' },
+  brandMark: { width: 44, height: 44, borderRadius: 16, alignItems: 'center', justifyContent: 'center', borderWidth: 1 },
   eyebrow: { fontSize: 12, fontFamily: 'Inter_600SemiBold', marginBottom: 3 },
   pageTitle: { fontSize: 27, fontFamily: 'Inter_700Bold', textAlign: 'right' },
   pageSubtitle: { fontSize: 13, fontFamily: 'Inter_400Regular', marginTop: 5, textAlign: 'right' },

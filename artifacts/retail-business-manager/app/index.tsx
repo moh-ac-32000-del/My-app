@@ -10,6 +10,7 @@ import { SplashView } from '@/components/SplashView';
 import { translate } from '@/constants/i18n';
 import { useStore } from '@/context/StoreContext';
 import { useColors } from '@/hooks/useColors';
+import { formatMoney } from '@/constants/currencies';
 
 export default function DashboardScreen() {
   const colors = useColors();
@@ -58,7 +59,7 @@ export default function DashboardScreen() {
         <Text style={[styles.heroHint, { color: colors.mutedForeground }]}>{translate('startByAdding', profile.language)}</Text>
         <View style={[styles.heroLine, { backgroundColor: colors.border }]} />
         <View style={styles.heroFoot}>
-          <Text style={[styles.heroFootValue, { color: colors.primary }]}>0 {profile.currency}</Text>
+          <Text style={[styles.heroFootValue, { color: colors.primary }]}>{formatMoney(0, profile.currency)}</Text>
           <Text style={[styles.heroFootLabel, { color: colors.mutedForeground }]}>{translate('cashBalance', profile.language)}</Text>
         </View>
       </GlassCard>

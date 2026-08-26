@@ -2,7 +2,9 @@ import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useColors } from '@/hooks/useColors';
-import { GlassCard, formatAmount } from '@/components/AppShell';
+import { GlassCard } from '@/components/AppShell';
+import { formatMoney } from '@/constants/currencies';
+import type { CurrencyCode } from '@/constants/currencies';
 
 type IconName = React.ComponentProps<typeof Ionicons>['name'];
 
@@ -52,11 +54,11 @@ export function AmountMetric({
   label: string;
   value: number;
   icon: IconName;
-  currency: string;
+  currency: CurrencyCode;
   tone?: 'primary' | 'success' | 'warning' | 'danger';
   onPress?: () => void;
 }) {
-  return <MetricCard label={label} value={formatAmount(value, currency)} icon={icon} tone={tone} onPress={onPress} />;
+  return <MetricCard label={label} value={formatMoney(value, currency)} icon={icon} tone={tone} onPress={onPress} />;
 }
 
 const styles = StyleSheet.create({

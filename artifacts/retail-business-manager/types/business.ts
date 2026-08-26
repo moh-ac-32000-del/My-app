@@ -1,13 +1,16 @@
 import type { Language } from '@/constants/i18n';
+import type { AccentColor } from '@/constants/colors';
+import type { CurrencyCode } from '@/constants/currencies';
 
-export type AccentColor = 'cyan' | 'violet' | 'amber' | 'mint';
+export type { AccentColor };
+export type { CurrencyCode };
 
 export interface StoreProfile {
   id: string;
   name: string;
   phone: string;
   address: string;
-  currency: string;
+  currency: CurrencyCode;
   language: Language;
   accent: AccentColor;
   logoUri?: string;

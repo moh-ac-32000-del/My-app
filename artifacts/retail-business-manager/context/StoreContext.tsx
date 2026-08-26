@@ -1,7 +1,9 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, ReactNode, useContext, useEffect, useMemo, useState } from 'react';
-import type { AccentColor, StoreProfile } from '@/types/business';
+import type { StoreProfile } from '@/types/business';
 import type { Language } from '@/constants/i18n';
+import { DEFAULT_CURRENCY, normalizeCurrency } from '@/constants/currencies';
+import { normalizeAccent, type AccentColor } from '@/constants/colors';
 
 const PROFILE_KEY = '@retail-business-manager/store-profile';
 const AUTH_KEY = '@retail-business-manager/authenticated';
@@ -11,9 +13,9 @@ const defaultProfile: StoreProfile = {
   name: 'متجري',
   phone: '',
   address: '',
-  currency: 'ر.س',
+  currency: DEFAULT_CURRENCY,
   language: 'ar',
-  accent: 'cyan',
+  accent: 'blue',
 };
 
 interface StoreContextValue {
@@ -40,7 +42,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           AsyncStorage.getItem(AUTH_KEY),
         ]);
         if (storedProfile) {
-          setProfile({ ...defaultProfile, ...JSON.parse(storedProfile) } as StoreProfile);
+          const savedProfile = JSON.parse(storedProfile) as Partial<StoreProfile>;
+          setProfile({
+            ...defaultProfile,
+            ...savedProfile,
+            currency: normalizeCurrency(savedProfile.currency),
+            accent: normalizeAccent(savedProfile.accent),
+          });
         }
         setIsAuthenticatedState(storedAuth === 'true');
       } catch {
