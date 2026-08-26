@@ -1,10 +1,12 @@
-# [Project name]
+# Retail Business Manager
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+تطبيق موبايل لإدارة المحلات التجارية، يبدأ بمحلات الاتصالات والهواتف ومصمم للتوسع إلى أنواع نشاط مختلفة.
 
 ## Run & Operate
 
 - `pnpm --filter @workspace/api-server run dev` — run the API server (port 5000)
+- `pnpm --filter @workspace/retail-business-manager run dev` — run the Expo mobile app
+- `pnpm --filter @workspace/retail-business-manager run typecheck` — typecheck the mobile app
 - `pnpm run typecheck` — full typecheck across all packages
 - `pnpm run build` — typecheck + build all packages
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
@@ -22,23 +24,34 @@ _Replace the heading above with the project's name, and this line with one sente
 
 ## Where things live
 
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
+- `artifacts/retail-business-manager/app/` — Expo Router screens for login, dashboard, business modules, and settings
+- `artifacts/retail-business-manager/components/` — reusable glass UI, metrics, quick actions, and shared shell
+- `artifacts/retail-business-manager/context/StoreContext.tsx` — locally persisted store identity and starter session state
+- `artifacts/retail-business-manager/constants/` — centralized colors and localization dictionaries
+- `artifacts/retail-business-manager/data/collections.ts` — future Firestore collection names and store-scoped document types
+- `artifacts/retail-business-manager/services/firebase.ts` — future Firebase configuration boundary using Expo environment variables
 
 ## Architecture decisions
 
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
+- Arabic RTL is the current interface language; English and Turkish dictionary keys are prepared for a later language switch.
+- Store identity is independent from the app name and persists locally until Firebase Authentication, Firestore, and Storage are connected.
+- Every future cloud document is expected to include `storeId`, enabling multiple stores and role-based access.
+- The first release focuses on navigation and a credible operational foundation; sales, purchasing, cash, inventory, and reporting modules have deliberate development states.
 
 ## Product
 
-_Describe the high-level user-facing capabilities of this app once they exist._
+The starter app includes an Arabic RTL login flow, a black glass dashboard with zero-state business metrics, quick-action navigation, business identity settings, accent selection, and real routes for sales, purchases, customers, cash, inventory, and reports.
 
 ## User preferences
 
-_Populate as you build — explicit user instructions worth remembering across sessions._
+- Keep the product generic and rebrandable; never hardcode a specific shop or company name.
+- Preserve the premium black Glass/Liquid visual direction and avoid emoji-based UI.
+- Do not build the next-stage accounting features until the foundation is reviewed.
 
 ## Gotchas
 
-_Populate as you build — sharp edges, "always run X before Y" rules._
+- The mobile workflow is managed by the artifact and should be restarted through the workflow controls when dependencies or Metro configuration change.
+- Firebase environment variables are optional in the starter; the app intentionally uses AsyncStorage until the cloud stage is approved.
 
 ## Pointers
 
