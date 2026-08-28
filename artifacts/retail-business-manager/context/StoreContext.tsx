@@ -1,16 +1,17 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, ReactNode, useContext, useEffect, useMemo, useState } from 'react';
 import type { StoreProfile } from '@/types/business';
-import type { Language } from '@/constants/i18n';
+import { isRTL, normalizeLanguage, translate, type Language, type TranslationKey } from '@/constants/i18n';
 import { DEFAULT_CURRENCY, normalizeCurrency } from '@/constants/currencies';
 import { normalizeAccent, type AccentColor } from '@/constants/colors';
 
 const PROFILE_KEY = '@retail-business-manager/store-profile';
 const AUTH_KEY = '@retail-business-manager/authenticated';
+const LEGACY_LANGUAGE_KEY = '@retail-business-manager/language';
 
 const defaultProfile: StoreProfile = {
   id: 'local-store',
-  name: 'متجري',
+  name: '',
   phone: '',
   address: '',
   currency: DEFAULT_CURRENCY,
@@ -20,6 +21,10 @@ const defaultProfile: StoreProfile = {
 
 interface StoreContextValue {
   profile: StoreProfile;
+  language: Language;
+  isRTL: boolean;
+  direction: 'rtl' | 'ltr';
+  t: (key: TranslationKey) => string;
   isAuthenticated: boolean;
   isReady: boolean;
   saveProfile: (updates: Partial<StoreProfile>) => Promise<void>;
@@ -37,18 +42,36 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     async function loadLocalState() {
       try {
-        const [storedProfile, storedAuth] = await Promise.all([
+        const [storedProfile, storedAuth, storedLanguage] = await Promise.all([
           AsyncStorage.getItem(PROFILE_KEY),
           AsyncStorage.getItem(AUTH_KEY),
+          AsyncStorage.getItem(LEGACY_LANGUAGE_KEY),
         ]);
         if (storedProfile) {
           const savedProfile = JSON.parse(storedProfile) as Partial<StoreProfile>;
-          setProfile({
+          const savedLanguage = normalizeLanguage(savedProfile.language ?? storedLanguage);
+          const savedName = ['متجري', 'My store', 'Mağazam'].includes(savedProfile.name ?? '') ? '' : savedProfile.name;
+          const normalizedProfile: StoreProfile = {
             ...defaultProfile,
             ...savedProfile,
+            name: savedName ?? defaultProfile.name,
             currency: normalizeCurrency(savedProfile.currency),
             accent: normalizeAccent(savedProfile.accent),
-          });
+            language: savedLanguage,
+          };
+          setProfile(normalizedProfile);
+          await Promise.all([
+            AsyncStorage.setItem(PROFILE_KEY, JSON.stringify(normalizedProfile)),
+            AsyncStorage.removeItem(LEGACY_LANGUAGE_KEY),
+          ]);
+        } else {
+          const savedLanguage = normalizeLanguage(storedLanguage);
+          const initialProfile = { ...defaultProfile, language: savedLanguage };
+          setProfile(initialProfile);
+          await Promise.all([
+            AsyncStorage.setItem(PROFILE_KEY, JSON.stringify(initialProfile)),
+            AsyncStorage.removeItem(LEGACY_LANGUAGE_KEY),
+          ]);
         }
         setIsAuthenticatedState(storedAuth === 'true');
       } catch {
@@ -62,7 +85,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const saveProfile = async (updates: Partial<StoreProfile>) => {
-    const nextProfile = { ...profile, ...updates };
+    const nextProfile: StoreProfile = {
+      ...profile,
+      ...updates,
+      language: normalizeLanguage(updates.language ?? profile.language),
+    };
     setProfile(nextProfile);
     await AsyncStorage.setItem(PROFILE_KEY, JSON.stringify(nextProfile));
   };
@@ -77,9 +104,22 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     await AsyncStorage.setItem(AUTH_KEY, 'false');
   };
 
+  const language = profile.language;
+  const rtl = isRTL(language);
   const value = useMemo(
-    () => ({ profile, isAuthenticated, isReady, saveProfile, setAuthenticated, resetLocalSession }),
-    [profile, isAuthenticated, isReady],
+    () => ({
+      profile,
+      language,
+      isRTL: rtl,
+      direction: (rtl ? 'rtl' : 'ltr') as 'rtl' | 'ltr',
+      t: (key: TranslationKey) => translate(key, language),
+      isAuthenticated,
+      isReady,
+      saveProfile,
+      setAuthenticated,
+      resetLocalSession,
+    }),
+    [profile, language, rtl, isAuthenticated, isReady],
   );
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;

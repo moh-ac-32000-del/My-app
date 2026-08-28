@@ -6,8 +6,9 @@ import { usePathname, useRouter } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
-import { translate, TranslationKey } from '@/constants/i18n';
 import { useStore } from '@/context/StoreContext';
+import { useI18n } from '@/hooks/useI18n';
+import type { TranslationKey } from '@/constants/i18n';
 
 type IconName = React.ComponentProps<typeof Ionicons>['name'];
 
@@ -21,8 +22,9 @@ const primaryNav: Array<{ path: string; label: TranslationKey; icon: IconName }>
 
 export function AppBackground({ children }: { children: ReactNode }) {
   const colors = useColors();
+  const { direction } = useI18n();
   return (
-    <View style={[styles.background, { backgroundColor: colors.background }]}>
+    <View style={[styles.background, { backgroundColor: colors.background, direction }]}>
       <LinearGradient
         colors={[colors.glow, 'transparent', 'transparent']}
         start={{ x: 0.9, y: 0 }}
@@ -38,6 +40,7 @@ export function AppBackground({ children }: { children: ReactNode }) {
 
 export function AppShell({ children, scroll = true }: { children: ReactNode; scroll?: boolean }) {
   const colors = useColors();
+  const { isRTL, direction, t } = useI18n();
   const insets = useSafeAreaInsets();
   const pathname = usePathname();
   const router = useRouter();
@@ -45,7 +48,7 @@ export function AppShell({ children, scroll = true }: { children: ReactNode; scr
   const bottomInset = Platform.OS === 'web' ? 34 : insets.bottom;
 
   const content = (
-    <View style={[styles.content, { paddingTop: Platform.OS === 'web' ? 67 : insets.top + 8 }]}>
+    <View style={[styles.content, { direction, paddingTop: Platform.OS === 'web' ? 67 : insets.top + 8 }]}>
       {children}
       <View style={{ height: 112 + bottomInset }} />
     </View>
@@ -66,7 +69,7 @@ export function AppShell({ children, scroll = true }: { children: ReactNode; scr
       )}
       <View style={[styles.navWrap, { paddingBottom: bottomInset }]}>
         <BlurView intensity={55} tint="dark" style={[StyleSheet.absoluteFill, styles.blurNav]} />
-        <View style={[styles.nav, { backgroundColor: colors.glassStrong, borderColor: colors.border }]}>
+        <View style={[styles.nav, { backgroundColor: colors.glassStrong, borderColor: colors.border, flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
           {primaryNav.map((item) => {
             const active = item.path === '/' ? pathname === '/' : pathname.startsWith(item.path);
             return (
@@ -80,7 +83,7 @@ export function AppShell({ children, scroll = true }: { children: ReactNode; scr
                   <Ionicons name={item.icon} size={19} color={active ? colors.primary : colors.mutedForeground} />
                 </View>
                 <Text style={[styles.navLabel, { color: active ? colors.foreground : colors.mutedForeground }]}>
-                  {translate(item.label, profile.language)}
+                  {t(item.label)}
                 </Text>
               </Pressable>
             );
@@ -105,26 +108,27 @@ export function PageHeader({
   const colors = useColors();
   const router = useRouter();
   const { profile } = useStore();
+  const { isRTL, t } = useI18n();
   return (
     <View style={styles.header}>
-      <View style={styles.headerRow}>
+      <View style={[styles.headerRow, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
         {showBack ? (
           <Pressable
             testID="back-button"
             onPress={() => router.back()}
             style={({ pressed }) => [styles.iconButton, { backgroundColor: colors.glass, borderColor: colors.border }, pressed && styles.pressed]}
           >
-            <Ionicons name="arrow-forward" size={20} color={colors.foreground} />
+            <Ionicons name={isRTL ? 'arrow-forward' : 'arrow-back'} size={20} color={colors.foreground} />
           </Pressable>
         ) : (
           <View style={[styles.brandMark, { backgroundColor: colors.glow, borderColor: colors.primary }]}>
             <MaterialCommunityIcons name="storefront-outline" size={22} color={colors.primary} />
           </View>
         )}
-        <View style={styles.headerText}>
-          <Text style={[styles.eyebrow, { color: colors.primary }]}>{showBack ? profile.name : translate('appName', profile.language)}</Text>
-          <Text style={[styles.pageTitle, { color: colors.foreground }]}>{title}</Text>
-          {subtitle ? <Text style={[styles.pageSubtitle, { color: colors.mutedForeground }]}>{subtitle}</Text> : null}
+          <View style={[styles.headerText, { alignItems: isRTL ? 'flex-end' : 'flex-start' }]}>
+          <Text style={[styles.eyebrow, { color: colors.primary, textAlign: isRTL ? 'right' : 'left' }]}>{showBack ? (profile.name || t('storeNameDefault')) : t('appName')}</Text>
+          <Text style={[styles.pageTitle, { color: colors.foreground, textAlign: isRTL ? 'right' : 'left' }]}>{title}</Text>
+          {subtitle ? <Text style={[styles.pageSubtitle, { color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' }]}>{subtitle}</Text> : null}
         </View>
         {action ?? <View style={{ width: 42 }} />}
       </View>
@@ -143,9 +147,10 @@ export function GlassCard({ children, style }: { children: ReactNode; style?: ob
 
 export function SectionTitle({ title, action }: { title: string; action?: string }) {
   const colors = useColors();
+  const { isRTL } = useI18n();
   return (
-    <View style={styles.sectionTitleRow}>
-      <Text style={[styles.sectionTitle, { color: colors.foreground }]}>{title}</Text>
+    <View style={[styles.sectionTitleRow, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
+      <Text style={[styles.sectionTitle, { color: colors.foreground, textAlign: isRTL ? 'right' : 'left' }]}>{title}</Text>
       {action ? <Text style={[styles.sectionAction, { color: colors.primary }]}>{action}</Text> : null}
     </View>
   );

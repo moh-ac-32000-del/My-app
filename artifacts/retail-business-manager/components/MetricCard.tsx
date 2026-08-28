@@ -5,6 +5,7 @@ import { useColors } from '@/hooks/useColors';
 import { GlassCard } from '@/components/AppShell';
 import { formatMoney } from '@/constants/currencies';
 import type { CurrencyCode } from '@/constants/currencies';
+import { useI18n } from '@/hooks/useI18n';
 
 type IconName = React.ComponentProps<typeof Ionicons>['name'];
 
@@ -22,16 +23,17 @@ export function MetricCard({
   onPress?: () => void;
 }) {
   const colors = useColors();
+  const { isRTL } = useI18n();
   const toneColor = { primary: colors.primary, success: colors.success, warning: colors.warning, danger: colors.destructive }[tone];
   const content = (
     <>
-      <View style={styles.metricTop}>
+        <View style={[styles.metricTop, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
         <View style={[styles.metricIcon, { backgroundColor: `${toneColor}20` }]}>
           <Ionicons name={icon} size={18} color={toneColor} />
         </View>
-        <Text style={[styles.metricLabel, { color: colors.mutedForeground }]}>{label}</Text>
+        <Text style={[styles.metricLabel, { color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' }]}>{label}</Text>
       </View>
-      <Text style={[styles.metricValue, { color: colors.foreground }]}>{value}</Text>
+      <Text style={[styles.metricValue, { color: colors.foreground, textAlign: isRTL ? 'right' : 'left' }]}>{value}</Text>
     </>
   );
   return onPress ? (
@@ -58,7 +60,8 @@ export function AmountMetric({
   tone?: 'primary' | 'success' | 'warning' | 'danger';
   onPress?: () => void;
 }) {
-  return <MetricCard label={label} value={formatMoney(value, currency)} icon={icon} tone={tone} onPress={onPress} />;
+  const { language } = useI18n();
+  return <MetricCard label={label} value={formatMoney(value, currency, language)} icon={icon} tone={tone} onPress={onPress} />;
 }
 
 const styles = StyleSheet.create({

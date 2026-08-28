@@ -7,15 +7,17 @@ import { AppShell, GlassCard, PageHeader, SectionTitle } from '@/components/AppS
 import { AmountMetric, MetricCard } from '@/components/MetricCard';
 import { QuickAction } from '@/components/QuickActions';
 import { SplashView } from '@/components/SplashView';
-import { translate } from '@/constants/i18n';
+import { formatLocalizedDate } from '@/constants/i18n';
 import { useStore } from '@/context/StoreContext';
 import { useColors } from '@/hooks/useColors';
 import { formatMoney } from '@/constants/currencies';
+import { useI18n } from '@/hooks/useI18n';
 
 export default function DashboardScreen() {
   const colors = useColors();
   const router = useRouter();
   const { profile, isReady, isAuthenticated } = useStore();
+  const { t, isRTL, language } = useI18n();
   const insets = useSafeAreaInsets();
 
   useEffect(() => {
@@ -28,71 +30,71 @@ export default function DashboardScreen() {
   if (!isAuthenticated) return <SplashView />;
 
   const metrics = [
-    { label: translate('cashBalance', profile.language), value: 0, icon: 'wallet-outline' as const, tone: 'primary' as const, path: '/cash' },
-    { label: translate('todaySales', profile.language), value: 0, icon: 'trending-up-outline' as const, tone: 'success' as const, path: '/sales' },
-    { label: translate('todayPurchases', profile.language), value: 0, icon: 'trending-down-outline' as const, tone: 'warning' as const, path: '/purchases' },
-    { label: translate('totalDebts', profile.language), value: 0, icon: 'alert-circle-outline' as const, tone: 'danger' as const, path: '/customers' },
+    { label: t('cashBalance'), value: 0, icon: 'wallet-outline' as const, tone: 'primary' as const, path: '/cash' },
+    { label: t('todaySales'), value: 0, icon: 'trending-up-outline' as const, tone: 'success' as const, path: '/sales' },
+    { label: t('todayPurchases'), value: 0, icon: 'trending-down-outline' as const, tone: 'warning' as const, path: '/purchases' },
+    { label: t('totalDebts'), value: 0, icon: 'alert-circle-outline' as const, tone: 'danger' as const, path: '/customers' },
   ];
 
   return (
     <AppShell>
       <PageHeader
-        title={translate('dashboard', profile.language)}
-        subtitle={`${translate('today', profile.language)} • 26 أغسطس 2026`}
+        title={t('dashboard')}
+        subtitle={`${t('today')} • ${formatLocalizedDate(new Date(), language)}`}
         action={
           <Pressable
             testID="profile-button"
             onPress={() => router.push('/settings')}
             style={({ pressed }) => [styles.profileButton, { backgroundColor: colors.accent, borderColor: colors.border }, pressed && styles.pressed]}
           >
-            <Text style={[styles.profileInitial, { color: colors.primary }]}>{profile.name.slice(0, 1)}</Text>
+            <Text style={[styles.profileInitial, { color: colors.primary }]}>{(profile.name || t('storeNameDefault')).slice(0, 1)}</Text>
           </Pressable>
         }
       />
 
       <GlassCard style={styles.heroCard}>
-        <View style={styles.heroTop}>
+        <View style={[styles.heroTop, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
           <View style={[styles.liveDot, { backgroundColor: colors.success }]} />
-          <Text style={[styles.heroEyebrow, { color: colors.mutedForeground }]}>{translate('overview', profile.language)}</Text>
+          <Text style={[styles.heroEyebrow, { color: colors.mutedForeground }]}>{t('overview')}</Text>
         </View>
-        <Text style={[styles.heroName, { color: colors.foreground }]}>{profile.name}</Text>
-        <Text style={[styles.heroHint, { color: colors.mutedForeground }]}>{translate('startByAdding', profile.language)}</Text>
+        <Text style={[styles.heroName, { color: colors.foreground, textAlign: isRTL ? 'right' : 'left' }]}>{profile.name || t('storeNameDefault')}</Text>
+        <Text style={[styles.heroHint, { color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' }]}>{t('startByAdding')}</Text>
         <View style={[styles.heroLine, { backgroundColor: colors.border }]} />
-        <View style={styles.heroFoot}>
-          <Text style={[styles.heroFootValue, { color: colors.primary }]}>{formatMoney(0, profile.currency)}</Text>
-          <Text style={[styles.heroFootLabel, { color: colors.mutedForeground }]}>{translate('cashBalance', profile.language)}</Text>
+        <View style={[styles.heroFoot, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
+          <Text style={[styles.heroFootValue, { color: colors.primary }]}>{formatMoney(0, profile.currency, language)}</Text>
+          <Text style={[styles.heroFootLabel, { color: colors.mutedForeground }]}>{t('cashBalance')}</Text>
         </View>
       </GlassCard>
 
-      <SectionTitle title={translate('overview', profile.language)} action={translate('today', profile.language)} />
-      <View style={styles.metricRow}>
+      <SectionTitle title={t('overview')} action={t('today')} />
+      <View style={[styles.metricRow, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
         <AmountMetric {...metrics[0]} currency={profile.currency} onPress={() => router.push(metrics[0].path as never)} />
         <AmountMetric {...metrics[1]} currency={profile.currency} onPress={() => router.push(metrics[1].path as never)} />
       </View>
-      <View style={styles.metricRow}>
+      <View style={[styles.metricRow, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
         <AmountMetric {...metrics[2]} currency={profile.currency} onPress={() => router.push(metrics[2].path as never)} />
         <AmountMetric {...metrics[3]} currency={profile.currency} onPress={() => router.push(metrics[3].path as never)} />
       </View>
-      <View style={styles.metricRow}>
-        <MetricCard label={translate('customersCount', profile.language)} value="0" icon="people-outline" onPress={() => router.push('/customers')} />
-        <MetricCard label={translate('productsCount', profile.language)} value="0" icon="cube-outline" onPress={() => router.push('/inventory')} />
+      <View style={[styles.metricRow, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
+        <MetricCard label={t('customersCount')} value="0" icon="people-outline" onPress={() => router.push('/customers')} />
+        <MetricCard label={t('productsCount')} value="0" icon="cube-outline" onPress={() => router.push('/inventory')} />
       </View>
 
-      <SectionTitle title={translate('quickActions', profile.language)} />
-      <View style={styles.actions}>
-        <QuickAction label={translate('newSale', profile.language)} icon="add-circle-outline" onPress={() => router.push('/sales')} />
-        <QuickAction label={translate('newPurchase', profile.language)} icon="bag-add-outline" onPress={() => router.push('/purchases')} />
-        <QuickAction label={translate('newCustomer', profile.language)} icon="person-add-outline" onPress={() => router.push('/customers')} />
-        <QuickAction label={translate('expense', profile.language)} icon="remove-circle-outline" onPress={() => router.push('/cash')} />
-        <QuickAction wide label={translate('closeCash', profile.language)} icon="lock-closed-outline" onPress={() => router.push('/cash')} />
+      <SectionTitle title={t('quickActions')} />
+      <View style={[styles.actions, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
+        <QuickAction label={t('newSale')} icon="add-circle-outline" onPress={() => router.push('/sales')} />
+        <QuickAction label={t('newPurchase')} icon="bag-add-outline" onPress={() => router.push('/purchases')} />
+        <QuickAction label={t('newCustomer')} icon="person-add-outline" onPress={() => router.push('/customers')} />
+        <QuickAction label={t('expense')} icon="remove-circle-outline" onPress={() => router.push('/cash')} />
+        <QuickAction wide label={t('closeCash')} icon="lock-closed-outline" onPress={() => router.push('/cash')} />
       </View>
 
-      <SectionTitle title={translate('recentActivity', profile.language)} />
-      <GlassCard style={styles.emptyActivity}>
+      <SectionTitle title={t('recentActivity')} />
+      <GlassCard style={[styles.emptyActivity, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
         <Ionicons name="pulse-outline" size={22} color={colors.mutedForeground} />
         <View style={{ flex: 1 }}>
-          <Text style={[styles.emptyTitle, { color: colors.foreground }]}>{translate('noActivity', profile.language)}</Text>
-          <Text style={[styles.emptyHint, { color: colors.mutedForeground }]}>{translate('startByAdding', profile.language)}</Text>
+          <Text style={[styles.emptyTitle, { color: colors.foreground, textAlign: isRTL ? 'right' : 'left' }]}>{t('noActivity')}</Text>
+          <Text style={[styles.emptyHint, { color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' }]}>{t('startByAdding')}</Text>
         </View>
       </GlassCard>
       <View style={{ height: Math.max(insets.bottom, 8) }} />

@@ -7,62 +7,65 @@ import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
 import { useStore } from '@/context/StoreContext';
-import { translate } from '@/constants/i18n';
+import type { TranslationKey } from '@/constants/i18n';
+import { useI18n } from '@/hooks/useI18n';
 import { GlassCard } from '@/components/AppShell';
 
 export default function LoginScreen() {
   const colors = useColors();
-  const { profile, setAuthenticated } = useStore();
+  const { setAuthenticated } = useStore();
+  const { t, isRTL, direction } = useI18n();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [identity, setIdentity] = useState<string>('');
   const [password, setPassword] = useState<string>('');
-  const [error, setError] = useState<string>('');
+  const [errorKey, setErrorKey] = useState<TranslationKey | null>(null);
 
   const submit = async () => {
     if (!identity.trim() || !password.trim()) {
-      setError(translate('fieldRequired', profile.language));
+      setErrorKey('fieldRequired');
       return;
     }
+    setErrorKey(null);
     await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     await setAuthenticated(true);
     router.replace('/');
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top + 20, paddingBottom: Math.max(insets.bottom, 20) }]}>
+    <View style={[styles.container, { backgroundColor: colors.background, direction, paddingTop: insets.top + 20, paddingBottom: Math.max(insets.bottom, 20) }]}>
       <LinearGradient colors={[colors.glow, 'transparent', 'transparent']} style={StyleSheet.absoluteFill} />
       <View style={[styles.orb, { backgroundColor: colors.accent }]} />
       <View style={styles.brand}>
         <View style={[styles.brandMark, { backgroundColor: colors.accent, borderColor: colors.border }]}>
           <MaterialCommunityIcons name="storefront-outline" size={34} color={colors.primary} />
         </View>
-        <Text style={[styles.brandName, { color: colors.foreground }]}>{translate('appName', profile.language)}</Text>
-        <Text style={[styles.brandSubtitle, { color: colors.mutedForeground }]}>{translate('appSubtitle', profile.language)}</Text>
+        <Text style={[styles.brandName, { color: colors.foreground }]}>{t('appName')}</Text>
+        <Text style={[styles.brandSubtitle, { color: colors.mutedForeground }]}>{t('appSubtitle')}</Text>
       </View>
       <View style={styles.formWrap}>
-        <Text style={[styles.title, { color: colors.foreground }]}>{translate('welcomeBack', profile.language)}</Text>
-        <Text style={[styles.hint, { color: colors.mutedForeground }]}>{translate('loginHint', profile.language)}</Text>
+        <Text style={[styles.title, { color: colors.foreground, textAlign: isRTL ? 'right' : 'left' }]}>{t('welcomeBack')}</Text>
+        <Text style={[styles.hint, { color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' }]}>{t('loginHint')}</Text>
         <GlassCard style={styles.formCard}>
           <View style={styles.field}>
-            <Text style={[styles.label, { color: colors.mutedForeground }]}>{translate('phoneOrEmail', profile.language)}</Text>
-            <View style={[styles.inputWrap, { backgroundColor: colors.input, borderColor: colors.border }]}>
+            <Text style={[styles.label, { color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' }]}>{t('phoneOrEmail')}</Text>
+            <View style={[styles.inputWrap, { backgroundColor: colors.input, borderColor: colors.border, flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
               <Ionicons name="person-outline" size={18} color={colors.mutedForeground} />
               <TextInput
                 testID="login-identity"
                 value={identity}
                 onChangeText={setIdentity}
-                placeholder="example@store.com"
+                placeholder={t('identityPlaceholder')}
                 placeholderTextColor={colors.mutedForeground}
                 autoCapitalize="none"
                 keyboardType="email-address"
-                style={[styles.input, { color: colors.foreground }]}
+                style={[styles.input, { color: colors.foreground, textAlign: isRTL ? 'right' : 'left' }]}
               />
             </View>
           </View>
           <View style={styles.field}>
-            <Text style={[styles.label, { color: colors.mutedForeground }]}>{translate('password', profile.language)}</Text>
-            <View style={[styles.inputWrap, { backgroundColor: colors.input, borderColor: colors.border }]}>
+            <Text style={[styles.label, { color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' }]}>{t('password')}</Text>
+            <View style={[styles.inputWrap, { backgroundColor: colors.input, borderColor: colors.border, flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
               <Ionicons name="lock-closed-outline" size={18} color={colors.mutedForeground} />
               <TextInput
                 testID="login-password"
@@ -71,19 +74,19 @@ export default function LoginScreen() {
                 placeholder="••••••••"
                 placeholderTextColor={colors.mutedForeground}
                 secureTextEntry
-                style={[styles.input, { color: colors.foreground }]}
+                style={[styles.input, { color: colors.foreground, textAlign: isRTL ? 'right' : 'left' }]}
               />
             </View>
           </View>
-          {error ? <Text style={[styles.error, { color: colors.destructive }]}>{error}</Text> : null}
-          <Pressable testID="login-submit" onPress={() => void submit()} style={({ pressed }) => [styles.button, { backgroundColor: colors.primary }, pressed && styles.pressed]}>
-            <Text style={[styles.buttonText, { color: colors.primaryForeground }]}>{translate('login', profile.language)}</Text>
-            <Ionicons name="arrow-back" size={19} color={colors.primaryForeground} />
+          {errorKey ? <Text style={[styles.error, { color: colors.destructive, textAlign: isRTL ? 'right' : 'left' }]}>{t(errorKey)}</Text> : null}
+          <Pressable testID="login-submit" onPress={() => void submit()} style={({ pressed }) => [styles.button, { backgroundColor: colors.primary, flexDirection: isRTL ? 'row-reverse' : 'row' }, pressed && styles.pressed]}>
+            <Text style={[styles.buttonText, { color: colors.primaryForeground }]}>{t('login')}</Text>
+            <Ionicons name={isRTL ? 'arrow-back' : 'arrow-forward'} size={19} color={colors.primaryForeground} />
           </Pressable>
         </GlassCard>
-        <View style={styles.secureRow}>
+        <View style={[styles.secureRow, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
           <Ionicons name="shield-checkmark-outline" size={16} color={colors.success} />
-          <Text style={[styles.secureText, { color: colors.mutedForeground }]}>{translate('secureNote', profile.language)}</Text>
+          <Text style={[styles.secureText, { color: colors.mutedForeground }]}>{t('secureNote')}</Text>
         </View>
       </View>
     </View>

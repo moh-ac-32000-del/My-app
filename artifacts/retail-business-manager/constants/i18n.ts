@@ -64,11 +64,31 @@ const ar = {
   add: 'إضافة',
   close: 'إغلاق',
   storeNameDefault: 'متجري',
+  arabic: 'العربية',
+  english: 'الإنجليزية',
+  turkish: 'التركية',
+  somethingWentWrong: 'حدث خطأ ما',
+  reloadToContinue: 'يرجى إعادة تحميل التطبيق للمتابعة',
+  tryAgain: 'حاول مرة أخرى',
+  errorDetails: 'تفاصيل الخطأ',
+  viewErrorDetails: 'عرض تفاصيل الخطأ',
+  closeErrorDetails: 'إغلاق تفاصيل الخطأ',
+  notFoundTitle: 'غير موجود',
+  notFoundMessage: 'هذه الشاشة غير موجودة.',
+  goHome: 'العودة إلى الرئيسية',
+  identityPlaceholder: 'example@store.com',
+  currencyTRYName: 'الليرة التركية',
+  currencyUSDName: 'الدولار الأمريكي',
+  currencyEURName: 'اليورو',
+  currencyGBPName: 'الجنيه الإسترليني',
+  currencySARName: 'الريال السعودي',
+  currencyAEDName: 'الدرهم الإماراتي',
+  currencySYPName: 'الليرة السورية',
 };
 
 export type TranslationKey = keyof typeof ar;
 
-const en: Partial<Record<TranslationKey, string>> = {
+const en: Record<TranslationKey, string> = {
   appName: 'Store Manager',
   appSubtitle: 'Everything in one place',
   welcome: 'Welcome',
@@ -78,6 +98,7 @@ const en: Partial<Record<TranslationKey, string>> = {
   password: 'Password',
   login: 'Sign in',
   continueDemo: 'Enter the starter version',
+  secureNote: 'Your data is protected and can be synced to the cloud later',
   dashboard: 'Home',
   sales: 'Sales',
   purchases: 'Purchases',
@@ -131,15 +152,42 @@ const en: Partial<Record<TranslationKey, string>> = {
   add: 'Add',
   close: 'Close',
   storeNameDefault: 'My store',
+  arabic: 'Arabic',
+  english: 'English',
+  turkish: 'Turkish',
+  somethingWentWrong: 'Something went wrong',
+  reloadToContinue: 'Please reload the app to continue.',
+  tryAgain: 'Try again',
+  errorDetails: 'Error details',
+  viewErrorDetails: 'View error details',
+  closeErrorDetails: 'Close error details',
+  notFoundTitle: 'Not found',
+  notFoundMessage: 'This screen does not exist.',
+  goHome: 'Go to home screen',
+  identityPlaceholder: 'example@store.com',
+  currencyTRYName: 'Turkish lira',
+  currencyUSDName: 'US dollar',
+  currencyEURName: 'Euro',
+  currencyGBPName: 'British pound',
+  currencySARName: 'Saudi riyal',
+  currencyAEDName: 'UAE dirham',
+  currencySYPName: 'Syrian pound',
 };
 
-const tr: Partial<Record<TranslationKey, string>> = {
+const tr: Record<TranslationKey, string> = {
   appName: 'Mağaza Yönetimi',
   appSubtitle: 'Her şey tek yerde',
   welcome: 'Hoş geldiniz',
+  welcomeBack: 'Tekrar hoş geldiniz',
+  loginHint: 'Mağazanızı daha net yönetmek için giriş yapın',
+  phoneOrEmail: 'Telefon veya e-posta',
+  password: 'Şifre',
+  login: 'Giriş yap',
+  continueDemo: 'Başlangıç sürümüne gir',
+  secureNote: 'Verileriniz korunur ve daha sonra bulutla senkronize edilebilir',
   dashboard: 'Ana sayfa',
   sales: 'Satışlar',
-  purchases: 'Alımlar',
+  purchases: 'Satın almalar',
   customers: 'Müşteriler',
   cash: 'Kasa',
   inventory: 'Stok',
@@ -147,17 +195,91 @@ const tr: Partial<Record<TranslationKey, string>> = {
   settings: 'Ayarlar',
   today: 'Bugün',
   overview: 'Genel bakış',
+  cashBalance: 'Kasa bakiyesi',
+  todaySales: 'Bugünkü satışlar',
+  todayPurchases: 'Bugünkü alımlar',
+  totalDebts: 'Toplam borç',
+  customersCount: 'Müşteriler',
+  productsCount: 'Ürünler',
+  quickActions: 'Hızlı işlemler',
+  newSale: 'Yeni satış',
+  newPurchase: 'Yeni satın alma',
+  newCustomer: 'Yeni müşteri',
+  expense: 'Gider',
+  closeCash: 'Kasayı kapat',
+  recentActivity: 'Son işlemler',
+  noActivity: 'Henüz işlem yok',
+  startByAdding: 'İlk işleminizi ekleyerek etkinliği burada görün',
+  underDevelopment: 'Geliştirme aşamasında',
+  underDevelopmentHint: 'Bu modül bir sonraki aşamada etkinleştirilecek',
+  back: 'Geri',
   storeIdentity: 'İşletme bilgileri',
+  storeIdentityHint: 'Bu bilgiler uygulamada ve raporlarda görünür',
   storeName: 'Mağaza adı',
   storePhone: 'Telefon',
   storeAddress: 'Adres',
   currency: 'Para birimi',
   language: 'Dil',
+  accentColor: 'Arayüz rengi',
   saveChanges: 'Değişiklikleri kaydet',
+  saved: 'Değişiklikler kaydedildi',
+  brandPreview: 'Kimlik önizlemesi',
+  logo: 'Logo',
+  logoHint: 'Bulut depolama bağlandığında logo ekleyebilirsiniz',
+  businessType: 'İşletme türü',
+  businessTypeValue: 'Telekom ve elektronik mağazası',
+  preferences: 'Tercihler',
+  notifications: 'Bildirimler',
+  cloudReady: 'Bulut senkronizasyonuna hazır',
+  cloudReadyHint: 'Mağazaya özel veriler daha sonra Firebase ile bağlanabilir',
   logout: 'Çıkış yap',
+  noData: 'Veri yok',
+  fieldRequired: 'Bu alan gereklidir',
+  add: 'Ekle',
+  close: 'Kapat',
+  storeNameDefault: 'Mağazam',
+  arabic: 'Arapça',
+  english: 'İngilizce',
+  turkish: 'Türkçe',
+  somethingWentWrong: 'Bir şeyler yanlış gitti',
+  reloadToContinue: 'Devam etmek için lütfen uygulamayı yeniden yükleyin.',
+  tryAgain: 'Tekrar dene',
+  errorDetails: 'Hata ayrıntıları',
+  viewErrorDetails: 'Hata ayrıntılarını görüntüle',
+  closeErrorDetails: 'Hata ayrıntılarını kapat',
+  notFoundTitle: 'Bulunamadı',
+  notFoundMessage: 'Bu ekran mevcut değil.',
+  goHome: 'Ana sayfaya git',
+  identityPlaceholder: 'example@store.com',
+  currencyTRYName: 'Türk lirası',
+  currencyUSDName: 'ABD doları',
+  currencyEURName: 'Euro',
+  currencyGBPName: 'İngiliz sterlini',
+  currencySARName: 'Suudi Arabistan riyali',
+  currencyAEDName: 'BAE dirhemi',
+  currencySYPName: 'Suriye lirası',
 };
 
-const dictionaries: Record<Language, Partial<Record<TranslationKey, string>>> = { ar, en, tr };
+const dictionaries: Record<Language, Record<TranslationKey, string>> = { ar, en, tr };
+
+export const languageOptions: Array<{ code: Language; labelKey: TranslationKey }> = [
+  { code: 'ar', labelKey: 'arabic' },
+  { code: 'en', labelKey: 'english' },
+  { code: 'tr', labelKey: 'turkish' },
+];
+
+export function normalizeLanguage(value: unknown): Language {
+  return value === 'en' || value === 'tr' || value === 'ar' ? value : 'ar';
+}
+
+export function isRTL(language: Language): boolean {
+  return language === 'ar';
+}
+
+export function formatLocalizedDate(date: Date, language: Language): string {
+  const locale = language === 'ar' ? 'ar' : language === 'tr' ? 'tr-TR' : 'en-US';
+  return new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'long', year: 'numeric' }).format(date);
+}
 
 export function translate(key: TranslationKey, language: Language = 'ar'): string {
   return dictionaries[language][key] ?? ar[key];
