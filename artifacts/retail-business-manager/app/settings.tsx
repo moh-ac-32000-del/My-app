@@ -28,7 +28,7 @@ function SettingInput({ label, value, onChangeText, icon, multiline = false, pla
 export default function SettingsScreen() {
   const colors = useColors();
   const router = useRouter();
-  const { profile, saveProfile, resetLocalSession } = useStore();
+  const { profile, saveProfile, toggleQuickCurrency, resetLocalSession } = useStore();
   const { t, isRTL, language } = useI18n();
   const [name, setName] = useState<string>(profile.name);
   const [phone, setPhone] = useState<string>(profile.phone);
@@ -43,7 +43,7 @@ export default function SettingsScreen() {
       Alert.alert(t('storeName'), t('fieldRequired'));
       return;
     }
-    await saveProfile({ name: name.trim(), phone: phone.trim(), address: address.trim(), currency, accent });
+    await saveProfile({ name: name.trim(), phone: phone.trim(), address: address.trim(), currency, accent, quickCurrencies: profile.quickCurrencies });
     await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     Alert.alert(t('saved'));
   };
@@ -64,6 +64,11 @@ export default function SettingsScreen() {
   const selectLanguage = async (nextLanguage: Language) => {
     setIsLanguagePickerOpen(false);
     await saveProfile({ language: nextLanguage });
+    await Haptics.selectionAsync();
+  };
+
+  const selectQuickCurrency = async (code: CurrencyCode) => {
+    await toggleQuickCurrency(code);
     await Haptics.selectionAsync();
   };
 
@@ -127,6 +132,40 @@ export default function SettingsScreen() {
             })}
           </View>
         ) : null}
+      </GlassCard>
+
+      <SectionTitle title={t('quickCurrenciesTitle')} />
+      <GlassCard testID="quick-currencies-section" style={styles.card}>
+        <Text style={[styles.quickCurrenciesHint, { color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' }]}>
+          {t('quickCurrenciesHint')}
+        </Text>
+        <View style={styles.quickCurrenciesOptions}>
+          {CURRENCY_OPTIONS.map((option) => {
+            const selected = profile.quickCurrencies.includes(option.code);
+            return (
+              <Pressable
+                key={option.code}
+                testID={`quick-currency-${option.code}`}
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: selected }}
+                onPress={() => void selectQuickCurrency(option.code)}
+                style={({ pressed }) => [
+                  styles.quickCurrencyRow,
+                  { borderColor: selected ? colors.primary : colors.border, backgroundColor: selected ? colors.accent : colors.input, flexDirection: isRTL ? 'row-reverse' : 'row' },
+                  pressed && styles.pressed,
+                ]}
+              >
+                <View style={[styles.quickCurrencyMark, { backgroundColor: selected ? colors.primary : colors.glass, borderColor: selected ? colors.primary : colors.border }]}>
+                  {selected ? <Ionicons name="checkmark" size={16} color={colors.primaryForeground} /> : null}
+                </View>
+                <View style={[styles.quickCurrencyCopy, { alignItems: isRTL ? 'flex-end' : 'flex-start' }]}>
+                  <Text style={[styles.quickCurrencyCode, { color: colors.foreground, textAlign: isRTL ? 'right' : 'left' }]}>{option.code} · {option.symbol}</Text>
+                  <Text style={[styles.quickCurrencyName, { color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' }]}>{t(option.nameKey)}</Text>
+                </View>
+              </Pressable>
+            );
+          })}
+        </View>
       </GlassCard>
 
       <SectionTitle title={t('accentColor')} />
@@ -217,6 +256,13 @@ const styles = StyleSheet.create({
   currencySymbol: { minWidth: 26, fontSize: 17, fontFamily: 'Inter_700Bold', textAlign: 'center' },
   currencyOptions: { borderWidth: 1, borderRadius: 18, overflow: 'hidden', marginTop: -4, marginBottom: 14 },
   currencyOption: { minHeight: 58, flexDirection: 'row-reverse', alignItems: 'center', gap: 10, paddingHorizontal: 13, borderBottomWidth: 1 },
+  quickCurrenciesHint: { fontSize: 12, fontFamily: 'Inter_400Regular', lineHeight: 18, marginBottom: 12 },
+  quickCurrenciesOptions: { gap: 8 },
+  quickCurrencyRow: { minHeight: 57, borderWidth: 1, borderRadius: 16, alignItems: 'center', gap: 10, paddingHorizontal: 10 },
+  quickCurrencyMark: { width: 30, height: 30, borderRadius: 11, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  quickCurrencyCopy: { flex: 1 },
+  quickCurrencyCode: { fontSize: 13, fontFamily: 'Inter_700Bold' },
+  quickCurrencyName: { fontSize: 11, fontFamily: 'Inter_400Regular', marginTop: 3 },
   preferenceRow: { flexDirection: 'row-reverse', alignItems: 'center', gap: 11 },
   preferenceIcon: { width: 36, height: 36, borderRadius: 13, alignItems: 'center', justifyContent: 'center' },
   preferenceCopy: { flex: 1, alignItems: 'flex-end' },

@@ -1,0 +1,1 @@
+- [Animated overlay hit-testing](animated-overlay-hit-testing.md) — keep interactive overlay mounting separate from animation state on React Native Web.

@@ -76,7 +76,7 @@ export function AppShell({ children, scroll = true }: { children: ReactNode; scr
               <Pressable
                 key={item.path}
                 testID={`nav-${item.label}`}
-                onPress={() => router.push(item.path as never)}
+                  onPress={() => router.replace(item.path as never)}
                 style={({ pressed }) => [styles.navItem, pressed && styles.pressed]}
               >
                 <View style={[styles.navIcon, active && { backgroundColor: colors.accent }]}>
@@ -136,10 +136,10 @@ export function PageHeader({
   );
 }
 
-export function GlassCard({ children, style }: { children: ReactNode; style?: object }) {
+export function GlassCard({ children, style, testID }: { children: ReactNode; style?: object; testID?: string }) {
   const colors = useColors();
   return (
-    <View style={[styles.card, { backgroundColor: colors.glass, borderColor: colors.border }, style]}>
+    <View testID={testID} style={[styles.card, { backgroundColor: colors.glass, borderColor: colors.border }, style]}>
       {children}
     </View>
   );

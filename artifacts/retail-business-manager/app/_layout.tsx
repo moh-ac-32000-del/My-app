@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { View } from 'react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
@@ -11,9 +12,11 @@ import {
   Inter_700Bold,
   useFonts,
 } from '@expo-google-fonts/inter';
-import { Stack } from 'expo-router';
+import { Stack, usePathname } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StoreProvider } from '@/context/StoreContext';
+import { useStore } from '@/context/StoreContext';
+import { FloatingQuickActions } from '@/components/FloatingQuickActions';
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
@@ -21,7 +24,15 @@ SplashScreen.preventAutoHideAsync();
 const queryClient = new QueryClient();
 
 function RootLayoutNav() {
-  return <Stack screenOptions={{ headerShown: false, animation: 'fade' }} />;
+  const pathname = usePathname();
+  const { isAuthenticated, isReady } = useStore();
+  const showQuickActions = isReady && isAuthenticated && pathname !== '/login';
+  return (
+    <View style={{ flex: 1 }}>
+      <Stack screenOptions={{ headerShown: false, animation: 'fade' }} />
+      {showQuickActions ? <FloatingQuickActions /> : null}
+    </View>
+  );
 }
 
 export default function RootLayout() {

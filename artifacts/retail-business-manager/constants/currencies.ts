@@ -12,6 +12,8 @@ export interface CurrencyDefinition {
 
 export const DEFAULT_CURRENCY: CurrencyCode = 'SAR';
 
+const currencyCodes = new Set<CurrencyCode>(['TRY', 'USD', 'EUR', 'GBP', 'SAR', 'AED', 'SYP']);
+
 export const CURRENCY_OPTIONS: CurrencyDefinition[] = [
   { code: 'TRY', symbol: '₺', nameKey: 'currencyTRYName', placement: 'before' },
   { code: 'USD', symbol: '$', nameKey: 'currencyUSDName', placement: 'before' },
@@ -44,6 +46,20 @@ export function normalizeCurrency(value: unknown): CurrencyCode {
     '£': 'GBP',
   };
   return typeof value === 'string' ? legacyCurrencyMap[value] ?? DEFAULT_CURRENCY : DEFAULT_CURRENCY;
+}
+
+export function normalizeQuickCurrencies(value: unknown, fallback: CurrencyCode[] = [DEFAULT_CURRENCY]): CurrencyCode[] {
+  if (!Array.isArray(value)) {
+    return [...fallback];
+  }
+
+  return Array.from(
+    new Set(
+      value.filter((item): item is CurrencyCode =>
+        typeof item === 'string' && currencyCodes.has(item as CurrencyCode),
+      ),
+    ),
+  );
 }
 
 export function formatMoney(

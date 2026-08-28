@@ -11,6 +11,7 @@ export interface StoreProfile {
   phone: string;
   address: string;
   currency: CurrencyCode;
+  quickCurrencies: CurrencyCode[];
   language: Language;
   accent: AccentColor;
   logoUri?: string;

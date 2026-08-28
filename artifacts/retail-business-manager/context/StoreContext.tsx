@@ -1,8 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import React, { createContext, ReactNode, useContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, ReactNode, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { StoreProfile } from '@/types/business';
 import { isRTL, normalizeLanguage, translate, type Language, type TranslationKey } from '@/constants/i18n';
-import { DEFAULT_CURRENCY, normalizeCurrency } from '@/constants/currencies';
+import { DEFAULT_CURRENCY, normalizeCurrency, normalizeQuickCurrencies, type CurrencyCode } from '@/constants/currencies';
 import { normalizeAccent, type AccentColor } from '@/constants/colors';
 
 const PROFILE_KEY = '@retail-business-manager/store-profile';
@@ -15,6 +15,7 @@ const defaultProfile: StoreProfile = {
   phone: '',
   address: '',
   currency: DEFAULT_CURRENCY,
+  quickCurrencies: [DEFAULT_CURRENCY],
   language: 'ar',
   accent: 'blue',
 };
@@ -28,6 +29,7 @@ interface StoreContextValue {
   isAuthenticated: boolean;
   isReady: boolean;
   saveProfile: (updates: Partial<StoreProfile>) => Promise<void>;
+  toggleQuickCurrency: (code: CurrencyCode) => Promise<void>;
   setAuthenticated: (value: boolean) => Promise<void>;
   resetLocalSession: () => Promise<void>;
 }
@@ -38,6 +40,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<StoreProfile>(defaultProfile);
   const [isAuthenticated, setIsAuthenticatedState] = useState<boolean>(false);
   const [isReady, setIsReady] = useState<boolean>(false);
+  const profileRef = useRef<StoreProfile>(defaultProfile);
+  const profileWriteQueueRef = useRef<Promise<void>>(Promise.resolve());
 
   useEffect(() => {
     async function loadLocalState() {
@@ -49,16 +53,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         ]);
         if (storedProfile) {
           const savedProfile = JSON.parse(storedProfile) as Partial<StoreProfile>;
+          const normalizedCurrency = normalizeCurrency(savedProfile.currency);
           const savedLanguage = normalizeLanguage(savedProfile.language ?? storedLanguage);
           const savedName = ['متجري', 'My store', 'Mağazam'].includes(savedProfile.name ?? '') ? '' : savedProfile.name;
           const normalizedProfile: StoreProfile = {
             ...defaultProfile,
             ...savedProfile,
             name: savedName ?? defaultProfile.name,
-            currency: normalizeCurrency(savedProfile.currency),
+            currency: normalizedCurrency,
+            quickCurrencies: normalizeQuickCurrencies(savedProfile.quickCurrencies, [normalizedCurrency]),
             accent: normalizeAccent(savedProfile.accent),
             language: savedLanguage,
           };
+          profileRef.current = normalizedProfile;
           setProfile(normalizedProfile);
           await Promise.all([
             AsyncStorage.setItem(PROFILE_KEY, JSON.stringify(normalizedProfile)),
@@ -67,6 +74,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         } else {
           const savedLanguage = normalizeLanguage(storedLanguage);
           const initialProfile = { ...defaultProfile, language: savedLanguage };
+          profileRef.current = initialProfile;
           setProfile(initialProfile);
           await Promise.all([
             AsyncStorage.setItem(PROFILE_KEY, JSON.stringify(initialProfile)),
@@ -75,6 +83,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         }
         setIsAuthenticatedState(storedAuth === 'true');
       } catch {
+        profileRef.current = defaultProfile;
         setProfile(defaultProfile);
         setIsAuthenticatedState(false);
       } finally {
@@ -85,13 +94,30 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const saveProfile = async (updates: Partial<StoreProfile>) => {
+    const currentProfile = profileRef.current;
     const nextProfile: StoreProfile = {
-      ...profile,
+      ...currentProfile,
       ...updates,
-      language: normalizeLanguage(updates.language ?? profile.language),
+      currency: normalizeCurrency(updates.currency ?? currentProfile.currency),
+      quickCurrencies: updates.quickCurrencies === undefined
+        ? currentProfile.quickCurrencies
+        : normalizeQuickCurrencies(updates.quickCurrencies, []),
+      language: normalizeLanguage(updates.language ?? currentProfile.language),
     };
+    profileRef.current = nextProfile;
     setProfile(nextProfile);
-    await AsyncStorage.setItem(PROFILE_KEY, JSON.stringify(nextProfile));
+    profileWriteQueueRef.current = profileWriteQueueRef.current
+      .catch(() => undefined)
+      .then(() => AsyncStorage.setItem(PROFILE_KEY, JSON.stringify(nextProfile)));
+    await profileWriteQueueRef.current;
+  };
+
+  const toggleQuickCurrency = async (code: CurrencyCode) => {
+    const currentCurrencies = profileRef.current.quickCurrencies;
+    const nextCurrencies = currentCurrencies.includes(code)
+      ? currentCurrencies.filter((item) => item !== code)
+      : [...currentCurrencies, code];
+    await saveProfile({ quickCurrencies: nextCurrencies });
   };
 
   const setAuthenticated = async (value: boolean) => {
@@ -116,6 +142,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       isAuthenticated,
       isReady,
       saveProfile,
+      toggleQuickCurrency,
       setAuthenticated,
       resetLocalSession,
     }),
