@@ -20,7 +20,8 @@ export default function DashboardScreen() {
   const { t, isRTL, language } = useI18n();
   const insets = useSafeAreaInsets();
   const balances = useMemo(() => calculateUsedCurrencyBalances(transactions), [transactions]);
-  const recentTransactions = transactions.slice(0, 3);
+  const recentTransactions = transactions;
+  const currencyCardWidth = balances.length === 1 ? '100%' : '48%';
 
   useEffect(() => {
     if (isReady && !isAuthenticated) {
@@ -50,14 +51,15 @@ export default function DashboardScreen() {
       <SectionTitle title={t('cashBalance')} />
       <View style={[styles.metricRow, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
         {balances.map(({ currency, amount }) => (
-          <AmountMetric
-            key={currency}
-            label={`${t('cashBalance')} ${currency}`}
-            value={amount}
-            icon="wallet-outline"
-            currency={currency}
-            onPress={() => router.push('/cash')}
-          />
+          <View key={currency} style={[styles.metricCell, { width: currencyCardWidth }]}>
+            <AmountMetric
+              label={`${t('cashBalance')} ${currency}`}
+              value={amount}
+              icon="wallet-outline"
+              currency={currency}
+              onPress={() => router.push('/cash')}
+            />
+          </View>
         ))}
       </View>
 
@@ -117,7 +119,8 @@ const styles = StyleSheet.create({
   profileButton: { width: 42, height: 42, borderRadius: 15, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   profileInitial: { fontSize: 18, fontFamily: 'Inter_700Bold' },
   pressed: { opacity: 0.7 },
-  metricRow: { flexDirection: 'row-reverse', gap: 9, marginBottom: 9 },
+  metricRow: { flexDirection: 'row-reverse', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: 9, marginBottom: 9 },
+  metricCell: { minWidth: 0 },
   emptyActivity: { marginBottom: 18 },
   emptyActivityRow: { alignItems: 'center', gap: 13 },
   emptyTitle: { fontSize: 14, fontFamily: 'Inter_600SemiBold', textAlign: 'right' },

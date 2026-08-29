@@ -85,6 +85,12 @@ describe('cash transactions', () => {
       createCashTransaction('store-1', createDraft({ amount: 200 }), '2026-08-29T11:00:00.000Z'),
       createCashTransaction('store-1', createDraft({ amount: 300 }), '2026-08-29T12:00:00.000Z'),
       createCashTransaction('store-1', createDraft({ amount: 400 }), '2026-08-29T13:00:00.000Z'),
+      createCashTransaction('store-1', createDraft({ amount: 500 }), '2026-08-29T14:00:00.000Z'),
+      createCashTransaction('store-1', createDraft({ amount: 600 }), '2026-08-29T15:00:00.000Z'),
+      createCashTransaction('store-1', createDraft({ amount: 700 }), '2026-08-29T16:00:00.000Z'),
+      createCashTransaction('store-1', createDraft({ amount: 800 }), '2026-08-29T17:00:00.000Z'),
+      createCashTransaction('store-1', createDraft({ amount: 900 }), '2026-08-29T18:00:00.000Z'),
+      createCashTransaction('store-1', createDraft({ amount: 1000 }), '2026-08-29T19:00:00.000Z'),
     ];
     const otherStoreTransaction = createCashTransaction('store-2', createDraft(), '2026-08-29T14:00:00.000Z');
 
@@ -93,7 +99,7 @@ describe('cash transactions', () => {
 
     const loaded = await loadTransactions('store-1');
 
-    expect(loaded).toHaveLength(4);
+    expect(loaded).toHaveLength(10);
     expect(loaded.map((transaction) => transaction.id)).toEqual(
       [...transactions].reverse().map((transaction) => transaction.id),
     );
@@ -219,6 +225,17 @@ describe('cash transactions', () => {
       { currency: 'TRY', amount: 500 },
       { currency: 'USD', amount: 300 },
       { currency: 'EUR', amount: 200 },
+    ]);
+  });
+
+  it('keeps a zero-balance currency visible when it has transactions', () => {
+    const transactions: Transaction[] = [
+      createCashTransaction('store-1', createDraft({ currency: 'USD', amount: 500 }), timestamp),
+      createCashTransaction('store-1', createDraft({ type: 'cash_out', currency: 'USD', amount: 500 }), timestamp),
+    ];
+
+    expect(calculateUsedCurrencyBalances(transactions)).toEqual([
+      { currency: 'USD', amount: 0 },
     ]);
   });
 
