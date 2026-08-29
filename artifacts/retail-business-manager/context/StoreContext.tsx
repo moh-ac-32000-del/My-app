@@ -1,13 +1,17 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, ReactNode, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { StoreProfile } from '@/types/business';
 import { isRTL, normalizeLanguage, translate, type Language, type TranslationKey } from '@/constants/i18n';
 import { DEFAULT_CURRENCY, normalizeCurrency, normalizeQuickCurrencies, type CurrencyCode } from '@/constants/currencies';
 import { normalizeAccent, type AccentColor } from '@/constants/colors';
-
-const PROFILE_KEY = '@retail-business-manager/store-profile';
-const AUTH_KEY = '@retail-business-manager/authenticated';
-const LEGACY_LANGUAGE_KEY = '@retail-business-manager/language';
+import {
+  clearLegacyLanguage,
+  loadAuthenticatedState,
+  loadLegacyLanguage,
+  loadStoreProfile,
+  normalizeStoredStoreProfile,
+  saveAuthenticatedState,
+  saveStoreProfile,
+} from '@/services/storage';
 
 const defaultProfile: StoreProfile = {
   id: 'local-store',
@@ -47,41 +51,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     async function loadLocalState() {
       try {
         const [storedProfile, storedAuth, storedLanguage] = await Promise.all([
-          AsyncStorage.getItem(PROFILE_KEY),
-          AsyncStorage.getItem(AUTH_KEY),
-          AsyncStorage.getItem(LEGACY_LANGUAGE_KEY),
+          loadStoreProfile(),
+          loadAuthenticatedState(),
+          loadLegacyLanguage(),
         ]);
-        if (storedProfile) {
-          const savedProfile = JSON.parse(storedProfile) as Partial<StoreProfile>;
-          const normalizedCurrency = normalizeCurrency(savedProfile.currency);
-          const savedLanguage = normalizeLanguage(savedProfile.language ?? storedLanguage);
-          const savedName = ['متجري', 'My store', 'Mağazam'].includes(savedProfile.name ?? '') ? '' : savedProfile.name;
-          const normalizedProfile: StoreProfile = {
-            ...defaultProfile,
-            ...savedProfile,
-            name: savedName ?? defaultProfile.name,
-            currency: normalizedCurrency,
-            quickCurrencies: normalizeQuickCurrencies(savedProfile.quickCurrencies, [normalizedCurrency]),
-            accent: normalizeAccent(savedProfile.accent),
-            language: savedLanguage,
-          };
-          profileRef.current = normalizedProfile;
-          setProfile(normalizedProfile);
-          await Promise.all([
-            AsyncStorage.setItem(PROFILE_KEY, JSON.stringify(normalizedProfile)),
-            AsyncStorage.removeItem(LEGACY_LANGUAGE_KEY),
-          ]);
-        } else {
-          const savedLanguage = normalizeLanguage(storedLanguage);
-          const initialProfile = { ...defaultProfile, language: savedLanguage };
-          profileRef.current = initialProfile;
-          setProfile(initialProfile);
-          await Promise.all([
-            AsyncStorage.setItem(PROFILE_KEY, JSON.stringify(initialProfile)),
-            AsyncStorage.removeItem(LEGACY_LANGUAGE_KEY),
-          ]);
-        }
-        setIsAuthenticatedState(storedAuth === 'true');
+        const normalizedProfile = normalizeStoredStoreProfile(storedProfile, defaultProfile, storedLanguage);
+        profileRef.current = normalizedProfile;
+        setProfile(normalizedProfile);
+        await Promise.all([saveStoreProfile(normalizedProfile), clearLegacyLanguage()]);
+        setIsAuthenticatedState(storedAuth);
       } catch {
         profileRef.current = defaultProfile;
         setProfile(defaultProfile);
@@ -108,7 +86,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setProfile(nextProfile);
     profileWriteQueueRef.current = profileWriteQueueRef.current
       .catch(() => undefined)
-      .then(() => AsyncStorage.setItem(PROFILE_KEY, JSON.stringify(nextProfile)));
+      .then(() => saveStoreProfile(nextProfile));
     await profileWriteQueueRef.current;
   };
 
@@ -122,12 +100,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const setAuthenticated = async (value: boolean) => {
     setIsAuthenticatedState(value);
-    await AsyncStorage.setItem(AUTH_KEY, String(value));
+    await saveAuthenticatedState(value);
   };
 
   const resetLocalSession = async () => {
     setIsAuthenticatedState(false);
-    await AsyncStorage.setItem(AUTH_KEY, 'false');
+    await saveAuthenticatedState(false);
   };
 
   const language = profile.language;

@@ -1,1 +1,2 @@
 - [Animated overlay hit-testing](animated-overlay-hit-testing.md) — keep interactive overlay mounting separate from animation state on React Native Web.
+- [Local persistence guardrails](local-persistence-guardrails.md) — keep AsyncStorage isolation minimal and add schema versions only for demonstrated migrations.

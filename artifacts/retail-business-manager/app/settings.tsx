@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
@@ -28,17 +28,33 @@ function SettingInput({ label, value, onChangeText, icon, multiline = false, pla
 export default function SettingsScreen() {
   const colors = useColors();
   const router = useRouter();
-  const { profile, saveProfile, toggleQuickCurrency, resetLocalSession } = useStore();
+  const { profile, saveProfile, toggleQuickCurrency, resetLocalSession, isReady } = useStore();
   const { t, isRTL, language } = useI18n();
-  const [name, setName] = useState<string>(profile.name);
-  const [phone, setPhone] = useState<string>(profile.phone);
-  const [address, setAddress] = useState<string>(profile.address);
+  const [name, setName] = useState<string>('');
+  const [phone, setPhone] = useState<string>('');
+  const [address, setAddress] = useState<string>('');
   const [currency, setCurrency] = useState<CurrencyCode>(profile.currency);
   const [accent, setAccent] = useState<AccentColor>(profile.accent);
+  const draftInitializedRef = useRef<boolean>(false);
   const [isCurrencyPickerOpen, setIsCurrencyPickerOpen] = useState<boolean>(false);
   const [isLanguagePickerOpen, setIsLanguagePickerOpen] = useState<boolean>(false);
 
+  useEffect(() => {
+    if (!isReady || draftInitializedRef.current) {
+      return;
+    }
+    setName(profile.name);
+    setPhone(profile.phone);
+    setAddress(profile.address);
+    setCurrency(profile.currency);
+    setAccent(profile.accent);
+    draftInitializedRef.current = true;
+  }, [isReady, profile]);
+
   const save = async () => {
+    if (!isReady || !draftInitializedRef.current) {
+      return;
+    }
     if (!name.trim()) {
       Alert.alert(t('storeName'), t('fieldRequired'));
       return;

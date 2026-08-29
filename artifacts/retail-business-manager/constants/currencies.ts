@@ -32,7 +32,7 @@ export function getCurrency(code: CurrencyCode): CurrencyDefinition {
   return currencyMap[code] ?? currencyMap[DEFAULT_CURRENCY];
 }
 
-export function normalizeCurrency(value: unknown): CurrencyCode {
+export function normalizeCurrency(value: unknown, fallback: CurrencyCode = DEFAULT_CURRENCY): CurrencyCode {
   if (typeof value === 'string' && value in currencyMap) {
     return value as CurrencyCode;
   }
@@ -45,7 +45,7 @@ export function normalizeCurrency(value: unknown): CurrencyCode {
     '€': 'EUR',
     '£': 'GBP',
   };
-  return typeof value === 'string' ? legacyCurrencyMap[value] ?? DEFAULT_CURRENCY : DEFAULT_CURRENCY;
+  return typeof value === 'string' ? legacyCurrencyMap[value] ?? fallback : fallback;
 }
 
 export function normalizeQuickCurrencies(value: unknown, fallback: CurrencyCode[] = [DEFAULT_CURRENCY]): CurrencyCode[] {
