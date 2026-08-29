@@ -280,6 +280,19 @@ export function buildDailyJournalEvents(
   return events.sort((first, second) => Date.parse(second.occurredAt) - Date.parse(first.occurredAt));
 }
 
+export async function loadDailyJournalEvents(
+  storeId: string,
+  now: Date = new Date(),
+): Promise<DailyJournalEvent[]> {
+  const [transactions, debts, payments, customers] = await Promise.all([
+    loadTransactions(storeId),
+    loadDebts(storeId),
+    loadPayments(storeId),
+    loadCustomers(storeId),
+  ]);
+  return buildDailyJournalEvents(storeId, transactions, debts, payments, customers, now);
+}
+
 export function parseLocalizedAmountInput(value: string, language: Language): number | null {
   const input = value.trim().replace(/[\s\u00A0\u202F]/g, '');
   if (!/^\d+(?:[.,]\d+)*$/.test(input)) {

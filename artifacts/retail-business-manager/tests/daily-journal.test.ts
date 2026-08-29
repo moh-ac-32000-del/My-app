@@ -7,6 +7,7 @@ import {
   buildDailyJournalEvents,
   createDebt,
   loadCustomers,
+  loadDailyJournalEvents,
   loadDebts,
   loadPayments,
   loadTransactions,
@@ -196,14 +197,7 @@ describe('daily journal events', () => {
     const debtsAfterSave = await loadDebts('store-a');
     expect(debtsAfterSave).toContainEqual(createdDebt);
 
-    const journalAfterCredit = buildDailyJournalEvents(
-      'store-a',
-      await loadTransactions('store-a'),
-      debtsAfterSave,
-      await loadPayments('store-a'),
-      await loadCustomers('store-a'),
-      now,
-    );
+    const journalAfterCredit = await loadDailyJournalEvents('store-a', now);
     expect(journalAfterCredit).toContainEqual(expect.objectContaining({
       type: 'debt',
       customerId: 'customer-123',
@@ -219,15 +213,12 @@ describe('daily journal events', () => {
     const persistedDebts = await loadDebts('store-a');
     const persistedPayments = await loadPayments('store-a');
     const persistedCustomers = await loadCustomers('store-a');
-    const journalAfterSettlement = buildDailyJournalEvents(
-      'store-a',
-      persistedTransactions,
-      persistedDebts,
-      persistedPayments,
-      persistedCustomers,
-      now,
-    );
+    const journalAfterSettlement = await loadDailyJournalEvents('store-a', now);
 
+    expect(persistedDebts).toHaveLength(1);
+    expect(persistedPayments).toHaveLength(1);
+    expect(persistedCustomers).toContainEqual(mohammed);
+    expect(persistedTransactions).toHaveLength(1);
     expect(journalAfterSettlement).toContainEqual(expect.objectContaining({
       type: 'settlement',
       customerId: 'customer-123',

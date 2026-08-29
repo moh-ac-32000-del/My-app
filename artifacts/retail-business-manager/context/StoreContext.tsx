@@ -1,5 +1,5 @@
 import React, { createContext, ReactNode, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import type { CashTransactionDraft, StoreProfile, Transaction } from '@/types/business';
+import type { CashTransactionDraft, Debt, StoreProfile, Transaction } from '@/types/business';
 import { isRTL, normalizeLanguage, translate, type Language, type TranslationKey } from '@/constants/i18n';
 import { DEFAULT_CURRENCY, normalizeCurrency, normalizeQuickCurrencies, type CurrencyCode } from '@/constants/currencies';
 import { normalizeAccent, type AccentColor } from '@/constants/colors';
@@ -12,7 +12,10 @@ import {
   saveAuthenticatedState,
   saveStoreProfile,
   createCashTransaction,
+  createDebt,
+  loadDebts,
   loadTransactions,
+  saveDebts,
   saveTransactions,
   settleCustomerDebt as persistCustomerSettlement,
   type SettlementDraft,
@@ -40,7 +43,9 @@ interface StoreContextValue {
   isAuthenticated: boolean;
   isReady: boolean;
   transactions: Transaction[];
+  journalRevision: number;
   addTransaction: (draft: CashTransactionDraft) => Promise<Transaction>;
+  addCustomerDebt: (customerId: string, draft: { amount: number; currency: CurrencyCode }) => Promise<Debt>;
   settleCustomerDebt: (customerId: string, draft: SettlementDraft) => Promise<SettlementResult>;
   saveProfile: (updates: Partial<StoreProfile>) => Promise<void>;
   toggleQuickCurrency: (code: CurrencyCode) => Promise<void>;
@@ -55,6 +60,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [isAuthenticated, setIsAuthenticatedState] = useState<boolean>(false);
   const [isReady, setIsReady] = useState<boolean>(false);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [journalRevision, setJournalRevision] = useState<number>(0);
   const profileRef = useRef<StoreProfile>(defaultProfile);
   const transactionsRef = useRef<Transaction[]>([]);
   const transactionLoadPromiseRef = useRef<Promise<void>>(Promise.resolve());
@@ -141,7 +147,20 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     await saveTransactions(profileRef.current.id, nextTransactions);
     transactionsRef.current = nextTransactions;
     setTransactions(nextTransactions);
+    setJournalRevision((current) => current + 1);
     return transaction;
+  };
+
+  const addCustomerDebt = async (
+    customerId: string,
+    draft: { amount: number; currency: CurrencyCode },
+  ): Promise<Debt> => {
+    const storeId = profileRef.current.id;
+    const debt = createDebt(storeId, customerId, draft);
+    const currentDebts = await loadDebts(storeId);
+    await saveDebts(storeId, [...currentDebts, debt]);
+    setJournalRevision((current) => current + 1);
+    return debt;
   };
 
   const settleCustomerDebt = async (customerId: string, draft: SettlementDraft): Promise<SettlementResult> => {
@@ -150,6 +169,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const nextTransactions = await loadTransactions(profileRef.current.id);
     transactionsRef.current = nextTransactions;
     setTransactions(nextTransactions);
+    setJournalRevision((current) => current + 1);
     return result;
   };
 
@@ -175,14 +195,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       isAuthenticated,
       isReady,
       transactions,
+      journalRevision,
       addTransaction,
+      addCustomerDebt,
       settleCustomerDebt,
       saveProfile,
       toggleQuickCurrency,
       setAuthenticated,
       resetLocalSession,
     }),
-    [profile, language, rtl, isAuthenticated, isReady, transactions],
+    [profile, language, rtl, isAuthenticated, isReady, transactions, journalRevision],
   );
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;

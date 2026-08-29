@@ -8,11 +8,11 @@ import { formatLocalizedDateTime } from '@/constants/i18n';
 import { useStore } from '@/context/StoreContext';
 import { useColors } from '@/hooks/useColors';
 import { useI18n } from '@/hooks/useI18n';
-import { buildDailyJournalEvents, loadCustomers, loadDebts, loadPayments, loadTransactions, type DailyJournalEvent } from '@/services/storage';
+import { loadDailyJournalEvents, type DailyJournalEvent } from '@/services/storage';
 
 export default function CashScreen() {
   const colors = useColors();
-  const { profile, isReady } = useStore();
+  const { profile, isReady, journalRevision } = useStore();
   const { t, isRTL, language } = useI18n();
   const [events, setEvents] = useState<DailyJournalEvent[]>([]);
 
@@ -22,20 +22,15 @@ export default function CashScreen() {
         return undefined;
       }
       let active = true;
-      void Promise.all([
-        loadTransactions(profile.id),
-        loadDebts(profile.id),
-        loadPayments(profile.id),
-        loadCustomers(profile.id),
-      ]).then(([transactions, debts, payments, customers]) => {
+      void loadDailyJournalEvents(profile.id).then((loadedEvents) => {
         if (active) {
-          setEvents(buildDailyJournalEvents(profile.id, transactions, debts, payments, customers));
+          setEvents(loadedEvents);
         }
       });
       return () => {
         active = false;
       };
-    }, [isReady, profile.id]),
+    }, [isReady, journalRevision, profile.id]),
   );
 
   const getEventTitle = (event: DailyJournalEvent): string => {

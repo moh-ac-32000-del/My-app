@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -11,19 +11,19 @@ import { formatLocalizedDate, formatLocalizedDateTime } from '@/constants/i18n';
 import { useStore } from '@/context/StoreContext';
 import { useColors } from '@/hooks/useColors';
 import { useI18n } from '@/hooks/useI18n';
-import { calculateVisibleCurrencyBalances } from '@/services/storage';
+import { calculateVisibleCurrencyBalances, loadDailyJournalEvents, type DailyJournalEvent } from '@/services/storage';
 
 export default function DashboardScreen() {
   const colors = useColors();
   const router = useRouter();
-  const { profile, isReady, isAuthenticated, transactions } = useStore();
+  const { profile, isReady, isAuthenticated, transactions, journalRevision } = useStore();
   const { t, isRTL, language } = useI18n();
   const insets = useSafeAreaInsets();
   const balances = useMemo(
     () => calculateVisibleCurrencyBalances(transactions, profile.visibleCurrencies),
     [transactions, profile.visibleCurrencies],
   );
-  const recentTransactions = transactions;
+  const [journalEvents, setJournalEvents] = useState<DailyJournalEvent[]>([]);
   const currencyCardWidth = balances.length === 1 ? '100%' : '48%';
 
   useEffect(() => {
@@ -31,6 +31,30 @@ export default function DashboardScreen() {
       router.replace('/login');
     }
   }, [isReady, isAuthenticated, router]);
+
+  useEffect(() => {
+    if (!isReady) {
+      return;
+    }
+    let active = true;
+    void loadDailyJournalEvents(profile.id).then((events) => {
+      if (active) {
+        setJournalEvents(events);
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, [isReady, journalRevision, profile.id]);
+
+  const getJournalTitle = (event: DailyJournalEvent): string => {
+    if (event.type === 'cash_in') return t('cashIn');
+    if (event.type === 'cash_out') return t('cashOut');
+    const customerName = event.customerName ?? t('unknownCustomer');
+    return event.type === 'debt'
+      ? `${t('quickActionCredit')} — ${customerName}`
+      : `${t('settlementFrom')} ${customerName}`;
+  };
 
   if (!isReady) return <SplashView />;
   if (!isAuthenticated) return <SplashView />;
@@ -67,7 +91,7 @@ export default function DashboardScreen() {
 
       <SectionTitle title={t('recentActivity')} />
       <GlassCard style={styles.emptyActivity}>
-        {recentTransactions.length === 0 ? (
+        {journalEvents.length === 0 ? (
           <View style={[styles.emptyActivityRow, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
             <Ionicons name="pulse-outline" size={22} color={colors.mutedForeground} />
             <View style={{ flex: 1 }}>
@@ -77,33 +101,29 @@ export default function DashboardScreen() {
           </View>
         ) : (
           <View>
-            {recentTransactions.map((transaction, index) => {
-              const isCashIn = transaction.type === 'cash_in';
+            {journalEvents.map((event, index) => {
+              const isCashIn = event.type === 'cash_in';
+              const isCashOut = event.type === 'cash_out';
               return (
                 <View
-                  key={transaction.id}
+                  key={event.id}
                   style={[
                     styles.activityRow,
                     { flexDirection: isRTL ? 'row-reverse' : 'row', borderBottomColor: colors.border },
-                    index === recentTransactions.length - 1 && styles.lastActivityRow,
+                    index === journalEvents.length - 1 && styles.lastActivityRow,
                   ]}
                 >
                   <Ionicons
-                    name={isCashIn ? 'arrow-down-circle-outline' : 'arrow-up-circle-outline'}
+                    name={isCashIn ? 'arrow-down-circle-outline' : isCashOut ? 'arrow-up-circle-outline' : event.type === 'debt' ? 'time-outline' : 'checkmark-done-circle-outline'}
                     size={21}
-                    color={isCashIn ? colors.primary : colors.destructive}
+                    color={isCashOut ? colors.destructive : colors.primary}
                   />
                   <View style={styles.activityContent}>
                     <Text style={[styles.activityTitle, { color: colors.foreground, textAlign: isRTL ? 'right' : 'left' }]}>
-                      {t(isCashIn ? 'cashIn' : 'cashOut')} — {formatMoney(transaction.amount, transaction.currency, language)}
+                      {getJournalTitle(event)} — {formatMoney(event.amount, event.currency, language)}
                     </Text>
-                    {transaction.note ? (
-                      <Text numberOfLines={1} style={[styles.activityNote, { color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' }]}>
-                        {transaction.note}
-                      </Text>
-                    ) : null}
                     <Text style={[styles.activityDate, { color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' }]}>
-                      {formatLocalizedDateTime(new Date(transaction.createdAt), language)}
+                      {formatLocalizedDateTime(new Date(event.occurredAt), language)}
                     </Text>
                   </View>
                 </View>

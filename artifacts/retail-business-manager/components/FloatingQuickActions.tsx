@@ -18,7 +18,7 @@ import { KeyboardAwareScrollViewCompat } from '@/components/KeyboardAwareScrollV
 import { CURRENCY_OPTIONS, getCurrency, type CurrencyCode } from '@/constants/currencies';
 import type { TranslationKey } from '@/constants/i18n';
 import { useStore } from '@/context/StoreContext';
-import { calculateDebtTotals, createDebt, filterDebtsByCustomer, loadCustomers, loadDebts, parseLocalizedAmountInput, saveDebts } from '@/services/storage';
+import { calculateDebtTotals, filterDebtsByCustomer, loadCustomers, loadDebts, parseLocalizedAmountInput } from '@/services/storage';
 import type { CashTransactionDraft, Customer } from '@/types/business';
 import { useColors } from '@/hooks/useColors';
 import { useI18n } from '@/hooks/useI18n';
@@ -759,7 +759,7 @@ function CustomerSettlementSheet({ onClose }: { onClose: () => void }) {
 
 export function FloatingQuickActions() {
   const colors = useColors();
-  const { addTransaction, profile } = useStore();
+  const { addCustomerDebt, addTransaction } = useStore();
   const { t, isRTL } = useI18n();
   const insets = useSafeAreaInsets();
   const [isMenuOpen, setIsMenuOpen] = useState<boolean>(false);
@@ -807,10 +807,7 @@ export function FloatingQuickActions() {
   };
 
   const saveCredit = async (customerId: string, amount: number, currency: CurrencyCode) => {
-    const debt = createDebt(profile.id, customerId, { amount, currency });
-    const currentDebts = await loadDebts(profile.id);
-    await saveDebts(profile.id, [...currentDebts, debt]);
-    return debt;
+    return addCustomerDebt(customerId, { amount, currency });
   };
 
   const menuAnimatedStyle = {
