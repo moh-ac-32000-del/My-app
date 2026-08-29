@@ -26,7 +26,7 @@ const queryClient = new QueryClient();
 function RootLayoutNav() {
   const pathname = usePathname();
   const { isAuthenticated, isReady } = useStore();
-  const showQuickActions = isReady && isAuthenticated && pathname !== '/login';
+  const showQuickActions = isReady && isAuthenticated && pathname === '/';
   return (
     <View style={{ flex: 1 }}>
       <Stack screenOptions={{ headerShown: false, animation: 'fade' }} />

@@ -11,7 +11,6 @@ import {
 } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import { KeyboardAwareScrollViewCompat } from '@/components/KeyboardAwareScrollViewCompat';
@@ -26,7 +25,7 @@ type CashAction = 'cash-in' | 'cash-out';
 type NoticeAction = 'credit' | 'settlement';
 
 const menuItems: Array<{
-  id: 'cash-in' | 'cash-out' | 'credit' | 'settlement' | 'currencies';
+  id: 'cash-in' | 'cash-out' | 'credit' | 'settlement';
   labelKey: TranslationKey;
   icon: IconName;
 }> = [
@@ -34,7 +33,6 @@ const menuItems: Array<{
   { id: 'cash-out', labelKey: 'quickActionCashOut', icon: 'arrow-up-circle-outline' },
   { id: 'credit', labelKey: 'quickActionCredit', icon: 'time-outline' },
   { id: 'settlement', labelKey: 'quickActionSettlement', icon: 'checkmark-done-circle-outline' },
-  { id: 'currencies', labelKey: 'quickActionCurrencies', icon: 'cash-outline' },
 ];
 
 function MenuItem({
@@ -251,95 +249,6 @@ function CashPreviewSheet({
   );
 }
 
-function QuickCurrenciesSheet({ onClose }: { onClose: () => void }) {
-  const colors = useColors();
-  const router = useRouter();
-  const { profile, saveProfile } = useStore();
-  const { t, isRTL } = useI18n();
-  const quickCurrencies = useMemo(
-    () => CURRENCY_OPTIONS.filter((option) => profile.quickCurrencies.includes(option.code)),
-    [profile.quickCurrencies],
-  );
-
-  const chooseCurrency = async (code: CurrencyCode) => {
-    await saveProfile({ currency: code });
-    await Haptics.selectionAsync();
-  };
-
-  return (
-    <View style={[styles.sheet, styles.currencySheet, { backgroundColor: colors.glassStrong, borderColor: colors.border }]}>
-      <BlurView intensity={65} tint="dark" style={StyleSheet.absoluteFill} />
-      <View style={styles.sheetContent}>
-        <View style={styles.sheetHandleWrap}>
-          <View style={[styles.sheetHandle, { backgroundColor: colors.border }]} />
-        </View>
-        <SheetHeader
-          title={t('quickCurrenciesTitle')}
-          subtitle={t('quickCurrencyPickerHint')}
-          icon="cash-outline"
-          onClose={onClose}
-        />
-        <Text style={[styles.sheetHint, { color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' }]}>
-          {t('currencyChoiceHint')}
-        </Text>
-
-        {quickCurrencies.length > 0 ? (
-          <View style={styles.quickCurrencyList}>
-            {quickCurrencies.map((option) => {
-              const selected = option.code === profile.currency;
-              return (
-                <Pressable
-                  key={option.code}
-                  testID={`quick-currency-option-${option.code}`}
-                  accessibilityRole="button"
-                  onPress={() => void chooseCurrency(option.code)}
-                  style={({ pressed }) => [
-                    styles.quickCurrencyOption,
-                    { borderColor: selected ? colors.primary : colors.border, backgroundColor: selected ? colors.accent : colors.input, flexDirection: isRTL ? 'row-reverse' : 'row' },
-                    pressed && styles.pressed,
-                  ]}
-                >
-                  <View style={[styles.quickCurrencySymbol, { backgroundColor: colors.glass }]}>
-                    <Text style={[styles.quickCurrencySymbolText, { color: colors.primary }]}>{option.symbol}</Text>
-                  </View>
-                  <View style={[styles.quickCurrencyCopy, { alignItems: isRTL ? 'flex-end' : 'flex-start' }]}>
-                    <Text style={[styles.quickCurrencyCode, { color: colors.foreground, textAlign: isRTL ? 'right' : 'left' }]}>{option.code}</Text>
-                    <Text style={[styles.quickCurrencyName, { color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' }]}>{t(option.nameKey)}</Text>
-                  </View>
-                  {selected ? (
-                    <View style={[styles.currentBadge, { backgroundColor: colors.primary }]}>
-                      <Text style={[styles.currentBadgeText, { color: colors.primaryForeground }]}>{t('currentCurrencyBadge')}</Text>
-                    </View>
-                  ) : null}
-                </Pressable>
-              );
-            })}
-          </View>
-        ) : (
-          <View style={[styles.emptyQuickCurrencies, { backgroundColor: colors.input, borderColor: colors.border }]}>
-            <Ionicons name="cash-outline" size={26} color={colors.mutedForeground} />
-            <Text style={[styles.emptyQuickTitle, { color: colors.foreground, textAlign: 'center' }]}>{t('quickCurrenciesEmpty')}</Text>
-            <Text style={[styles.emptyQuickHint, { color: colors.mutedForeground, textAlign: 'center' }]}>{t('quickCurrenciesEmptyHint')}</Text>
-          </View>
-        )}
-
-        <Pressable
-          testID="manage-quick-currencies"
-          accessibilityRole="button"
-          onPress={() => {
-            onClose();
-            router.push('/settings');
-          }}
-          style={({ pressed }) => [styles.manageButton, { borderColor: colors.border, flexDirection: isRTL ? 'row-reverse' : 'row' }, pressed && styles.pressed]}
-        >
-          <Ionicons name="settings-outline" size={17} color={colors.primary} />
-          <Text style={[styles.manageButtonText, { color: colors.primary }]}>{t('manageQuickCurrencies')}</Text>
-        </Pressable>
-      </View>
-    </View>
-  );
-}
-
 function NoticeSheet({
   action,
   onClose,
@@ -380,13 +289,17 @@ function NoticeSheet({
 export function FloatingQuickActions() {
   const colors = useColors();
   const { t, isRTL } = useI18n();
+  const { profile, saveProfile } = useStore();
   const insets = useSafeAreaInsets();
   const [isMenuOpen, setIsMenuOpen] = useState<boolean>(false);
   const [isMenuMounted, setIsMenuMounted] = useState<boolean>(false);
   const [cashAction, setCashAction] = useState<CashAction | null>(null);
   const [noticeAction, setNoticeAction] = useState<NoticeAction | null>(null);
-  const [isCurrencySheetOpen, setIsCurrencySheetOpen] = useState<boolean>(false);
   const menuProgress = useRef<Animated.Value>(new Animated.Value(0)).current;
+  const quickCurrencies = useMemo(
+    () => CURRENCY_OPTIONS.filter((option) => profile.quickCurrencies.includes(option.code)),
+    [profile.quickCurrencies],
+  );
 
   useEffect(() => {
     const animation = Animated.timing(menuProgress, {
@@ -406,7 +319,6 @@ export function FloatingQuickActions() {
   const openMenu = () => {
     setCashAction(null);
     setNoticeAction(null);
-    setIsCurrencySheetOpen(false);
     if (!isMenuOpen) {
       setIsMenuMounted(true);
     }
@@ -422,7 +334,11 @@ export function FloatingQuickActions() {
   const closeSheet = () => {
     setCashAction(null);
     setNoticeAction(null);
-    setIsCurrencySheetOpen(false);
+  };
+
+  const chooseCurrency = async (code: CurrencyCode) => {
+    await saveProfile({ currency: code });
+    await Haptics.selectionAsync();
   };
 
   const menuAnimatedStyle = {
@@ -431,7 +347,7 @@ export function FloatingQuickActions() {
   const fabAnimatedStyle = {
     transform: [{ rotate: menuProgress.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '45deg'] }) }],
   };
-  const hasSheet = Boolean(cashAction || noticeAction || isCurrencySheetOpen);
+  const hasSheet = Boolean(cashAction || noticeAction);
 
   return (
     <View pointerEvents="box-none" style={[StyleSheet.absoluteFill, styles.floatingLayer]}>
@@ -464,26 +380,59 @@ export function FloatingQuickActions() {
               <Text style={[styles.menuTitle, { color: colors.foreground, textAlign: isRTL ? 'right' : 'left' }]}>{t('quickActions')}</Text>
               <Text style={[styles.menuHint, { color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' }]}>{t('quickActionsMenuHint')}</Text>
             </View>
-            {menuItems.map((item) => (
-              <MenuItem
-                key={item.id}
-                testID={`quick-action-${item.id}`}
-                label={t(item.labelKey)}
-                icon={item.icon}
-                isRTL={isRTL}
-                onPress={() => {
-                  if (item.id === 'cash-in' || item.id === 'cash-out') {
-                    openCashSheet(item.id);
-                  } else if (item.id === 'credit' || item.id === 'settlement') {
-                    setIsMenuOpen(false);
-                    setNoticeAction(item.id);
-                  } else {
-                    setIsMenuOpen(false);
-                    setIsCurrencySheetOpen(true);
-                  }
-                }}
-              />
-            ))}
+            <View style={[styles.menuGrid, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
+              {menuItems.map((item) => (
+                <MenuItem
+                  key={item.id}
+                  testID={`quick-action-${item.id}`}
+                  label={t(item.labelKey)}
+                  icon={item.icon}
+                  isRTL={isRTL}
+                  onPress={() => {
+                    if (item.id === 'cash-in' || item.id === 'cash-out') {
+                      openCashSheet(item.id);
+                    } else {
+                      setIsMenuOpen(false);
+                      setNoticeAction(item.id);
+                    }
+                  }}
+                />
+              ))}
+            </View>
+            <View style={[styles.quickCurrencySection, { borderTopColor: colors.border }]}>
+              <Text style={[styles.quickCurrencySectionTitle, { color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' }]}>
+                {t('quickCurrenciesTitle')}
+              </Text>
+              {quickCurrencies.length > 0 ? (
+                <View style={[styles.quickCurrencyGrid, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
+                  {quickCurrencies.map((option) => {
+                    const selected = option.code === profile.currency;
+                    return (
+                      <Pressable
+                        key={option.code}
+                        testID={`quick-currency-option-${option.code}`}
+                        accessibilityRole="button"
+                        accessibilityLabel={`${option.code} ${t(option.nameKey)}`}
+                        onPress={() => void chooseCurrency(option.code)}
+                        style={({ pressed }) => [
+                          styles.quickCurrencyOption,
+                          { borderColor: selected ? colors.primary : colors.border, backgroundColor: selected ? colors.accent : colors.input, flexDirection: isRTL ? 'row-reverse' : 'row' },
+                          pressed && styles.pressed,
+                        ]}
+                      >
+                        <Text style={[styles.quickCurrencySymbolText, { color: colors.primary }]}>{option.symbol}</Text>
+                        <Text style={[styles.quickCurrencyCode, { color: colors.foreground }]}>{option.code}</Text>
+                        {selected ? <Ionicons name="checkmark-circle" size={15} color={colors.primary} /> : null}
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              ) : (
+                <Text style={[styles.emptyQuickHint, { color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' }]}>
+                  {t('quickCurrenciesEmptyHint')}
+                </Text>
+              )}
+            </View>
           </View>
         </Animated.View>
       ) : null}
@@ -517,7 +466,6 @@ export function FloatingQuickActions() {
         <View style={[styles.modalRoot, { paddingTop: insets.top, paddingBottom: Math.max(insets.bottom, 14) }]}>
           <Pressable testID="quick-sheet-backdrop" onPress={closeSheet} style={[styles.modalBackdrop, { backgroundColor: colors.overlay }]} />
           {cashAction ? <CashPreviewSheet action={cashAction} onClose={closeSheet} /> : null}
-          {isCurrencySheetOpen ? <QuickCurrenciesSheet onClose={closeSheet} /> : null}
           {noticeAction ? <NoticeSheet action={noticeAction} onClose={closeSheet} /> : null}
         </View>
       </Modal>
@@ -549,8 +497,10 @@ const styles = StyleSheet.create({
   menuHeader: { paddingHorizontal: 7, paddingBottom: 9 },
   menuTitle: { fontSize: 16, fontFamily: 'Inter_700Bold' },
   menuHint: { fontSize: 11, fontFamily: 'Inter_400Regular', marginTop: 3 },
+  menuGrid: { flexDirection: 'row', flexWrap: 'wrap' },
   menuItem: {
-    minHeight: 51,
+    width: '50%',
+    minHeight: 57,
     borderBottomWidth: 1,
   },
   menuItemContent: { flex: 1, alignItems: 'center', gap: 10, paddingHorizontal: 7 },
@@ -589,7 +539,6 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 12 },
     elevation: 20,
   },
-  currencySheet: { maxHeight: '76%' },
   noticeSheet: { maxHeight: '54%' },
   sheetContent: { padding: 16, paddingTop: 10 },
   sheetHandleWrap: { alignItems: 'center', marginBottom: 12 },
@@ -619,21 +568,13 @@ const styles = StyleSheet.create({
   primaryButton: { flex: 1, minHeight: 49, borderRadius: 16, alignItems: 'center', justifyContent: 'center', gap: 7, flexDirection: 'row' },
   primaryButtonText: { fontSize: 13, fontFamily: 'Inter_700Bold' },
   fullButton: { width: '100%', flex: 0, marginTop: 18 },
-  sheetHint: { fontSize: 12, fontFamily: 'Inter_400Regular', lineHeight: 18, marginBottom: 14 },
-  quickCurrencyList: { gap: 9 },
-  quickCurrencyOption: { minHeight: 59, borderWidth: 1, borderRadius: 17, alignItems: 'center', gap: 10, paddingHorizontal: 10 },
-  quickCurrencySymbol: { width: 36, height: 36, borderRadius: 13, alignItems: 'center', justifyContent: 'center' },
+  quickCurrencySection: { borderTopWidth: 1, paddingTop: 11, marginTop: 4 },
+  quickCurrencySectionTitle: { fontSize: 11, fontFamily: 'Inter_600SemiBold', marginBottom: 8, paddingHorizontal: 7 },
+  quickCurrencyGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 7, paddingHorizontal: 2 },
+  quickCurrencyOption: { flexGrow: 1, minWidth: 82, minHeight: 40, borderWidth: 1, borderRadius: 13, alignItems: 'center', justifyContent: 'center', gap: 5, paddingHorizontal: 8 },
   quickCurrencySymbolText: { fontSize: 14, fontFamily: 'Inter_700Bold' },
-  quickCurrencyCopy: { flex: 1 },
-  quickCurrencyCode: { fontSize: 13, fontFamily: 'Inter_700Bold' },
-  quickCurrencyName: { fontSize: 11, fontFamily: 'Inter_400Regular', marginTop: 3 },
-  currentBadge: { borderRadius: 9, paddingHorizontal: 7, paddingVertical: 5 },
-  currentBadgeText: { fontSize: 10, fontFamily: 'Inter_700Bold' },
-  emptyQuickCurrencies: { alignItems: 'center', borderWidth: 1, borderRadius: 18, padding: 22 },
-  emptyQuickTitle: { fontSize: 14, fontFamily: 'Inter_700Bold', marginTop: 9 },
+  quickCurrencyCode: { fontSize: 12, fontFamily: 'Inter_700Bold' },
   emptyQuickHint: { fontSize: 11, fontFamily: 'Inter_400Regular', lineHeight: 17, marginTop: 4 },
-  manageButton: { minHeight: 47, borderWidth: 1, borderRadius: 15, alignItems: 'center', justifyContent: 'center', gap: 7, marginTop: 15 },
-  manageButtonText: { fontSize: 12, fontFamily: 'Inter_700Bold' },
   noticeCard: { alignItems: 'center', borderWidth: 1, borderRadius: 20, padding: 24 },
   noticeTitle: { fontSize: 15, fontFamily: 'Inter_700Bold', marginTop: 10 },
   noticeHint: { fontSize: 12, fontFamily: 'Inter_400Regular', lineHeight: 18, marginTop: 6 },
