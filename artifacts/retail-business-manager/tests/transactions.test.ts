@@ -17,6 +17,7 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
 
 import {
   calculateCurrencyNetTotals,
+  calculateUsedCurrencyBalances,
   createCashTransaction,
   loadTransactions,
   saveTransactions,
@@ -76,6 +77,27 @@ describe('cash transactions', () => {
     await saveTransactions('store-1', [older, newer]);
 
     await expect(loadTransactions('store-1')).resolves.toEqual([newer, older]);
+  });
+
+  it('loads every current-store transaction, including transactions beyond the first three', async () => {
+    const transactions = [
+      createCashTransaction('store-1', createDraft({ amount: 100 }), '2026-08-29T10:00:00.000Z'),
+      createCashTransaction('store-1', createDraft({ amount: 200 }), '2026-08-29T11:00:00.000Z'),
+      createCashTransaction('store-1', createDraft({ amount: 300 }), '2026-08-29T12:00:00.000Z'),
+      createCashTransaction('store-1', createDraft({ amount: 400 }), '2026-08-29T13:00:00.000Z'),
+    ];
+    const otherStoreTransaction = createCashTransaction('store-2', createDraft(), '2026-08-29T14:00:00.000Z');
+
+    await saveTransactions('store-1', transactions);
+    await saveTransactions('store-2', [otherStoreTransaction]);
+
+    const loaded = await loadTransactions('store-1');
+
+    expect(loaded).toHaveLength(4);
+    expect(loaded.map((transaction) => transaction.id)).toEqual(
+      [...transactions].reverse().map((transaction) => transaction.id),
+    );
+    expect(loaded).not.toContainEqual(otherStoreTransaction);
   });
 
   it('keeps transaction IDs stable after a storage reload', async () => {
@@ -158,6 +180,46 @@ describe('cash transactions', () => {
     expect(totals.TRY).toBe(5000);
     expect(totals.USD).toBe(100);
     expect(totals.EUR).toBe(-20);
+  });
+
+  it.each([
+    [['TRY'], ['TRY']],
+    [['USD'], ['USD']],
+    [['EUR'], ['EUR']],
+    [['TRY', 'USD'], ['TRY', 'USD']],
+    [['TRY', 'USD', 'EUR'], ['TRY', 'USD', 'EUR']],
+  ])('returns only currencies used by transactions: %j', (currencyCodes, expectedCodes) => {
+    const transactions: Transaction[] = currencyCodes.map((currency, index) =>
+      createCashTransaction('store-1', createDraft({
+        currency: currency as CashTransactionDraft['currency'],
+        amount: index + 1,
+      }), timestamp),
+    );
+
+    expect(calculateUsedCurrencyBalances(transactions).map(({ currency }) => currency)).toEqual(expectedCodes);
+  });
+
+  it('does not show EUR when there is no EUR transaction', () => {
+    const transactions: Transaction[] = [
+      createCashTransaction('store-1', createDraft({ currency: 'TRY', amount: 100 }), timestamp),
+      createCashTransaction('store-1', createDraft({ currency: 'USD', amount: 50 }), timestamp),
+    ];
+
+    expect(calculateUsedCurrencyBalances(transactions).map(({ currency }) => currency)).not.toContain('EUR');
+  });
+
+  it('keeps EUR balance independent from TRY and USD balances', () => {
+    const transactions: Transaction[] = [
+      createCashTransaction('store-1', createDraft({ currency: 'TRY', amount: 500 }), timestamp),
+      createCashTransaction('store-1', createDraft({ currency: 'USD', amount: 300 }), timestamp),
+      createCashTransaction('store-1', createDraft({ currency: 'EUR', amount: 200 }), timestamp),
+    ];
+
+    expect(calculateUsedCurrencyBalances(transactions)).toEqual([
+      { currency: 'TRY', amount: 500 },
+      { currency: 'USD', amount: 300 },
+      { currency: 'EUR', amount: 200 },
+    ]);
   });
 
   it('returns an empty list instead of crashing on corrupted JSON', async () => {

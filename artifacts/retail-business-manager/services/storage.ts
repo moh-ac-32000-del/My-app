@@ -121,6 +121,17 @@ export function calculateCurrencyNetTotals(transactions: Transaction[]): Record<
   return totals;
 }
 
+export function calculateUsedCurrencyBalances(
+  transactions: Transaction[],
+): Array<{ currency: CurrencyCode; amount: number }> {
+  const totals = calculateCurrencyNetTotals(transactions);
+  const usedCurrencies = new Set(transactions.map((transaction) => transaction.currency));
+
+  return CURRENCY_OPTIONS
+    .filter(({ code }) => usedCurrencies.has(code))
+    .map(({ code }) => ({ currency: code, amount: totals[code] }));
+}
+
 export async function loadTransactions(storeId: string): Promise<Transaction[]> {
   try {
     const transactions = await loadAllTransactions();

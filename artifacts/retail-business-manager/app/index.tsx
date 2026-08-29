@@ -11,7 +11,7 @@ import { formatLocalizedDate, formatLocalizedDateTime } from '@/constants/i18n';
 import { useStore } from '@/context/StoreContext';
 import { useColors } from '@/hooks/useColors';
 import { useI18n } from '@/hooks/useI18n';
-import { calculateCurrencyNetTotals } from '@/services/storage';
+import { calculateUsedCurrencyBalances } from '@/services/storage';
 
 export default function DashboardScreen() {
   const colors = useColors();
@@ -19,7 +19,7 @@ export default function DashboardScreen() {
   const { profile, isReady, isAuthenticated, transactions } = useStore();
   const { t, isRTL, language } = useI18n();
   const insets = useSafeAreaInsets();
-  const balances = useMemo(() => calculateCurrencyNetTotals(transactions), [transactions]);
+  const balances = useMemo(() => calculateUsedCurrencyBalances(transactions), [transactions]);
   const recentTransactions = transactions.slice(0, 3);
 
   useEffect(() => {
@@ -49,20 +49,16 @@ export default function DashboardScreen() {
 
       <SectionTitle title={t('cashBalance')} />
       <View style={[styles.metricRow, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
-        <AmountMetric
-          label={`${t('cashBalance')} TRY`}
-          value={balances.TRY}
-          icon="wallet-outline"
-          currency="TRY"
-          onPress={() => router.push('/cash')}
-        />
-        <AmountMetric
-          label={`${t('cashBalance')} USD`}
-          value={balances.USD}
-          icon="wallet-outline"
-          currency="USD"
-          onPress={() => router.push('/cash')}
-        />
+        {balances.map(({ currency, amount }) => (
+          <AmountMetric
+            key={currency}
+            label={`${t('cashBalance')} ${currency}`}
+            value={amount}
+            icon="wallet-outline"
+            currency={currency}
+            onPress={() => router.push('/cash')}
+          />
+        ))}
       </View>
 
       <SectionTitle title={t('recentActivity')} />
