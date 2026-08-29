@@ -120,6 +120,58 @@ function SheetHeader({
   );
 }
 
+function QuickCurrencyPicker() {
+  const colors = useColors();
+  const { profile, saveProfile } = useStore();
+  const { t, isRTL } = useI18n();
+  const quickCurrencies = useMemo(
+    () => CURRENCY_OPTIONS.filter((option) => profile.quickCurrencies.includes(option.code)),
+    [profile.quickCurrencies],
+  );
+
+  const chooseCurrency = async (code: CurrencyCode) => {
+    await saveProfile({ currency: code });
+    await Haptics.selectionAsync();
+  };
+
+  return (
+    <View testID="quick-currency-picker" style={styles.quickCurrencyPicker}>
+      <Text style={[styles.inputLabel, { color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' }]}>
+        {t('currency')}
+      </Text>
+      {quickCurrencies.length > 0 ? (
+        <View style={[styles.quickCurrencyGrid, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
+          {quickCurrencies.map((option) => {
+            const selected = option.code === profile.currency;
+            return (
+              <Pressable
+                key={option.code}
+                testID={`quick-currency-option-${option.code}`}
+                accessibilityRole="button"
+                accessibilityLabel={`${option.code} ${t(option.nameKey)}`}
+                onPress={() => void chooseCurrency(option.code)}
+                style={({ pressed }) => [
+                  styles.quickCurrencyOption,
+                  { borderColor: selected ? colors.primary : colors.border, backgroundColor: selected ? colors.accent : colors.input, flexDirection: isRTL ? 'row-reverse' : 'row' },
+                  pressed && styles.pressed,
+                ]}
+              >
+                <Text style={[styles.quickCurrencySymbolText, { color: colors.primary }]}>{option.symbol}</Text>
+                <Text style={[styles.quickCurrencyCode, { color: colors.foreground }]}>{option.code}</Text>
+                {selected ? <Ionicons name="checkmark-circle" size={15} color={colors.primary} /> : null}
+              </Pressable>
+            );
+          })}
+        </View>
+      ) : (
+        <Text style={[styles.emptyQuickHint, { color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' }]}>
+          {t('quickCurrenciesEmptyHint')}
+        </Text>
+      )}
+    </View>
+  );
+}
+
 function CashPreviewSheet({
   action,
   onClose,
@@ -173,6 +225,8 @@ function CashPreviewSheet({
             {t('previewOnlyHint')}
           </Text>
         </View>
+
+        <QuickCurrencyPicker />
 
         <Text style={[styles.inputLabel, { color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' }]}>
           {t('amount')}
@@ -267,6 +321,7 @@ function NoticeSheet({
           <View style={[styles.sheetHandle, { backgroundColor: colors.border }]} />
         </View>
         <SheetHeader title={t(titleKey)} subtitle={t('cashPreviewHint')} icon="time-outline" onClose={onClose} />
+        <QuickCurrencyPicker />
         <View style={[styles.noticeCard, { backgroundColor: colors.accent, borderColor: colors.border }]}>
           <Ionicons name="sparkles-outline" size={28} color={colors.primary} />
           <Text style={[styles.noticeTitle, { color: colors.foreground, textAlign: 'center' }]}>{t('underDevelopment')}</Text>
@@ -289,17 +344,12 @@ function NoticeSheet({
 export function FloatingQuickActions() {
   const colors = useColors();
   const { t, isRTL } = useI18n();
-  const { profile, saveProfile } = useStore();
   const insets = useSafeAreaInsets();
   const [isMenuOpen, setIsMenuOpen] = useState<boolean>(false);
   const [isMenuMounted, setIsMenuMounted] = useState<boolean>(false);
   const [cashAction, setCashAction] = useState<CashAction | null>(null);
   const [noticeAction, setNoticeAction] = useState<NoticeAction | null>(null);
   const menuProgress = useRef<Animated.Value>(new Animated.Value(0)).current;
-  const quickCurrencies = useMemo(
-    () => CURRENCY_OPTIONS.filter((option) => profile.quickCurrencies.includes(option.code)),
-    [profile.quickCurrencies],
-  );
 
   useEffect(() => {
     const animation = Animated.timing(menuProgress, {
@@ -334,11 +384,6 @@ export function FloatingQuickActions() {
   const closeSheet = () => {
     setCashAction(null);
     setNoticeAction(null);
-  };
-
-  const chooseCurrency = async (code: CurrencyCode) => {
-    await saveProfile({ currency: code });
-    await Haptics.selectionAsync();
   };
 
   const menuAnimatedStyle = {
@@ -398,40 +443,6 @@ export function FloatingQuickActions() {
                   }}
                 />
               ))}
-            </View>
-            <View style={[styles.quickCurrencySection, { borderTopColor: colors.border }]}>
-              <Text style={[styles.quickCurrencySectionTitle, { color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' }]}>
-                {t('quickCurrenciesTitle')}
-              </Text>
-              {quickCurrencies.length > 0 ? (
-                <View style={[styles.quickCurrencyGrid, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
-                  {quickCurrencies.map((option) => {
-                    const selected = option.code === profile.currency;
-                    return (
-                      <Pressable
-                        key={option.code}
-                        testID={`quick-currency-option-${option.code}`}
-                        accessibilityRole="button"
-                        accessibilityLabel={`${option.code} ${t(option.nameKey)}`}
-                        onPress={() => void chooseCurrency(option.code)}
-                        style={({ pressed }) => [
-                          styles.quickCurrencyOption,
-                          { borderColor: selected ? colors.primary : colors.border, backgroundColor: selected ? colors.accent : colors.input, flexDirection: isRTL ? 'row-reverse' : 'row' },
-                          pressed && styles.pressed,
-                        ]}
-                      >
-                        <Text style={[styles.quickCurrencySymbolText, { color: colors.primary }]}>{option.symbol}</Text>
-                        <Text style={[styles.quickCurrencyCode, { color: colors.foreground }]}>{option.code}</Text>
-                        {selected ? <Ionicons name="checkmark-circle" size={15} color={colors.primary} /> : null}
-                      </Pressable>
-                    );
-                  })}
-                </View>
-              ) : (
-                <Text style={[styles.emptyQuickHint, { color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' }]}>
-                  {t('quickCurrenciesEmptyHint')}
-                </Text>
-              )}
             </View>
           </View>
         </Animated.View>
@@ -568,8 +579,7 @@ const styles = StyleSheet.create({
   primaryButton: { flex: 1, minHeight: 49, borderRadius: 16, alignItems: 'center', justifyContent: 'center', gap: 7, flexDirection: 'row' },
   primaryButtonText: { fontSize: 13, fontFamily: 'Inter_700Bold' },
   fullButton: { width: '100%', flex: 0, marginTop: 18 },
-  quickCurrencySection: { borderTopWidth: 1, paddingTop: 11, marginTop: 4 },
-  quickCurrencySectionTitle: { fontSize: 11, fontFamily: 'Inter_600SemiBold', marginBottom: 8, paddingHorizontal: 7 },
+  quickCurrencyPicker: { marginBottom: 17 },
   quickCurrencyGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 7, paddingHorizontal: 2 },
   quickCurrencyOption: { flexGrow: 1, minWidth: 82, minHeight: 40, borderWidth: 1, borderRadius: 13, alignItems: 'center', justifyContent: 'center', gap: 5, paddingHorizontal: 8 },
   quickCurrencySymbolText: { fontSize: 14, fontFamily: 'Inter_700Bold' },
