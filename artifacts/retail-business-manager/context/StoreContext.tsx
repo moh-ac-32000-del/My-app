@@ -14,6 +14,9 @@ import {
   createCashTransaction,
   loadTransactions,
   saveTransactions,
+  settleCustomerDebt as persistCustomerSettlement,
+  type SettlementDraft,
+  type SettlementResult,
 } from '@/services/storage';
 
 const defaultProfile: StoreProfile = {
@@ -38,6 +41,7 @@ interface StoreContextValue {
   isReady: boolean;
   transactions: Transaction[];
   addTransaction: (draft: CashTransactionDraft) => Promise<Transaction>;
+  settleCustomerDebt: (customerId: string, draft: SettlementDraft) => Promise<SettlementResult>;
   saveProfile: (updates: Partial<StoreProfile>) => Promise<void>;
   toggleQuickCurrency: (code: CurrencyCode) => Promise<void>;
   setAuthenticated: (value: boolean) => Promise<void>;
@@ -140,6 +144,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return transaction;
   };
 
+  const settleCustomerDebt = async (customerId: string, draft: SettlementDraft): Promise<SettlementResult> => {
+    await transactionLoadPromiseRef.current;
+    const result = await persistCustomerSettlement(profileRef.current.id, customerId, draft);
+    const nextTransactions = await loadTransactions(profileRef.current.id);
+    transactionsRef.current = nextTransactions;
+    setTransactions(nextTransactions);
+    return result;
+  };
+
   const setAuthenticated = async (value: boolean) => {
     setIsAuthenticatedState(value);
     await saveAuthenticatedState(value);
@@ -163,6 +176,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       isReady,
       transactions,
       addTransaction,
+      settleCustomerDebt,
       saveProfile,
       toggleQuickCurrency,
       setAuthenticated,

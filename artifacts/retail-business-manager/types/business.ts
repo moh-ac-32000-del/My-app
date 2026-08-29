@@ -85,6 +85,8 @@ export interface Debt extends BusinessEntity {
   customerId: string;
   currency: CurrencyCode;
   amount: number;
+  originalAmount?: number;
+  settledAt?: string;
 }
 
 export type ReminderStatus = 'pending' | 'completed' | 'dismissed';

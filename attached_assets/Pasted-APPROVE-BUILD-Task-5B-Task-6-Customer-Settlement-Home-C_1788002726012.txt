@@ -1,0 +1,469 @@
+APPROVE & BUILD — Task #5B / Task #6
+
+Customer Settlement + Home Credit Flow
+
+اعتمد هذه المهمة وابدأ التنفيذ الآن في Build mode.
+
+نفّذ المسودة الحالية لـ Task #6 كما هي، مع الالتزام الصارم بالقيود التالية.
+
+⚠️ قاعدة Credits — الأهم
+
+ممنوع استخدام Expo نهائيًا في هذه المهمة.
+
+لا تستخدم:
+
+- Expo
+- Expo Web
+- Metro
+- Browser
+- Browser Automation
+- Playwright
+- Screenshots
+- Visual Testing
+- E2E
+- إعادة تشغيل المعاينة
+
+أنا سأقوم بالاختبار اليدوي بنفسي.
+
+المسموح فقط:
+
+- TypeScript
+- Unit Tests
+- "git diff --check"
+
+لا تستخدم أي Credits للاختبار البصري أو تشغيل التطبيق.
+
+---
+
+قبل تعديل أي ملف
+
+افحص الكود الفعلي الحالي أولًا، خصوصًا:
+
+- "types/business.ts"
+- "services/storage.ts"
+- "context/StoreContext.tsx"
+- "app/customer/[id].tsx"
+- "app/index.tsx"
+- "components/FloatingQuickActions.tsx"
+- "constants/currencies.ts"
+- "constants/i18n.ts"
+- اختبارات Customers
+- اختبارات Transactions
+- اختبارات Debts
+
+اعتمد على التنفيذ الموجود فعليًا من Task #4 وTask #5.
+
+لا تعِد بناء أي شيء موجود بالفعل.
+
+---
+
+1. تفعيل «آجل» من الصفحة الرئيسية
+
+زر آجل الموجود في FAB يجب أن يعمل بدل:
+
+"هذه الميزة قيد التطوير"
+
+عند الضغط:
+
+افتح الـModal/Dialog الحالي.
+
+يحتوي على:
+
+- اختيار العميل
+- المبلغ
+- العملة
+- حفظ
+- إلغاء
+
+عند الحفظ:
+
+أنشئ Debt حقيقي للعميل المختار.
+
+لا تنشئ Cash Transaction.
+
+---
+
+2. السداد من صفحة العميل
+
+داخل Customer Details أضف:
+
+سداد
+
+استخدم نفس أسلوب الـModal الحالي.
+
+يعرض العملات التي يوجد عليها دين فقط.
+
+مثال:
+
+TRY — المتبقي 50,000
+USD — المتبقي 650
+
+بعد اختيار العملة، يدخل المستخدم مبلغ السداد.
+
+---
+
+3. قواعد السداد
+
+إذا كان الدين:
+
+"50,000 TRY"
+
+والسداد:
+
+"20,000 TRY"
+
+النتيجة:
+
+"30,000 TRY"
+
+إذا تم السداد كاملًا:
+
+"0 TRY"
+
+لا تسمح أبدًا بأن يصبح الدين سالبًا.
+
+ارفض:
+
+- 0
+- السالب
+- قيمة فارغة
+- قيمة غير رقمية
+- مبلغ أكبر من المتبقي
+
+---
+
+4. السداد والعملات
+
+كل عملة مستقلة تمامًا.
+
+مثال:
+
+TRY = 50,000
+USD = 650
+
+سداد:
+
+20,000 TRY
+
+النتيجة:
+
+TRY = 30,000
+USD = 650
+
+ممنوع تحويل العملات أو جمعها.
+
+---
+
+5. سجل الدفعات
+
+أنشئ/استخدم نموذج Payment الموجود إن وجد.
+
+كل دفعة يجب أن تحفظ:
+
+- id
+- storeId
+- customerId
+- currency
+- amount
+- createdAt
+
+اعرض سجل الدفعات داخل صفحة العميل.
+
+الأحدث أولًا.
+
+مثال:
+
+سداد
+20,000 TRY
+29/08/2026 — 15:20
+
+---
+
+6. العلاقة مع اليومية والصندوق
+
+هذه أهم قاعدة مالية في المهمة:
+
+الآجل
+
+عند:
+
+"20,000 TRY آجل"
+
+يحدث فقط:
+
+Debt +20,000 TRY
+
+ولا يحدث:
+
+- Cash In
+- Cash Out
+- زيادة صندوق TRY
+- ظهور في Daily Journal
+
+السداد
+
+عند:
+
+"20,000 TRY سداد"
+
+يحدث في نفس العملية:
+
+1. تخفيض دين العميل بمقدار 20,000 TRY.
+2. إنشاء "cash_in" بقيمة 20,000 TRY.
+3. ظهور العملية في Daily Journal.
+4. زيادة صندوق TRY بمقدار 20,000 TRY.
+5. حفظ Payment في سجل الدفعات.
+
+يجب تنفيذ هذه الخطوات بشكل متناسق بحيث لا يتم تسجيل Cash In مرتين ولا تخفيض الدين مرتين.
+
+---
+
+7. Atomicity / منع العمليات المزدوجة
+
+إذا فشل حفظ إحدى خطوات السداد:
+
+لا تعرض للمستخدم أن السداد نجح.
+
+ولا تسمح بإنشاء دفعة مكررة عند الضغط على زر الحفظ أكثر من مرة.
+
+استخدم آلية بسيطة تمنع Double Submit داخل الواجهة.
+
+لا تنشئ نظام معاملات معقدًا جديدًا.
+
+---
+
+8. Store Isolation
+
+احترم "storeId" الموجود.
+
+يجب ألا يرى متجر:
+
+- ديون متجر آخر.
+- دفعات متجر آخر.
+- معاملات متجر آخر.
+
+ولا يؤدي الحفظ إلى حذف بيانات متجر آخر.
+
+---
+
+9. Customer Isolation
+
+كل Debt وPayment مرتبط بـ"customerId".
+
+لا تعتمد على اسم العميل.
+
+دين محمد لا يظهر عند أحمد.
+
+---
+
+10. التخزين
+
+استخدم:
+
+"services/storage.ts"
+
+الحالية.
+
+ممنوع إنشاء Storage Service جديدة.
+
+لا تغيّر مفاتيح التخزين الموجودة.
+
+لا تكسر:
+
+- StoreProfile
+- Customers
+- Transactions
+- Visible Currency Boxes
+- Quick Currencies
+- Settings
+
+---
+
+11. Decimal Input
+
+حافظ على الإصلاح الموجود في Task #5A.
+
+يجب أن يقبل:
+
+"1.5"
+
+و:
+
+"1,5"
+
+دون تحويل "1,5" إلى "15".
+
+---
+
+12. WhatsApp
+
+نظام مشاركة كشف الحساب الموجود بالفعل يعمل بشكل جيد.
+
+لا تعِد بناءه.
+
+حدّث بيانات الكشف فقط إذا كان ذلك ضروريًا لكي يعكس الدين المتبقي بعد السداد.
+
+مثال:
+
+العميل محمد
+
+TRY: 30,000
+USD: 650
+
+---
+
+13. التصميم
+
+لا تعِد تصميم:
+
+- FAB
+- Dashboard
+- Customer Details
+- AppShell
+- Glass UI
+- Buttons
+- Modals
+- Theme
+- Navigation
+
+استخدم المكونات الحالية.
+
+نفّذ أقل تغيير ممكن.
+
+---
+
+14. اللغات
+
+كل النصوص الجديدة يجب إضافتها إلى:
+
+"constants/i18n.ts"
+
+مع:
+
+- العربية RTL
+- English LTR
+- Turkish LTR
+
+---
+
+15. الاختبارات المطلوبة
+
+أضف Unit Tests مركزة لـ:
+
+Home Credit
+
+- اختيار العميل.
+- إنشاء Debt.
+- حفظ customerId.
+- حفظ storeId.
+
+Settlement
+
+- سداد جزئي.
+- سداد كامل.
+- رفض السداد الأكبر من الدين.
+- رفض صفر.
+- رفض السالب.
+- رفض القيمة غير الصالحة.
+
+Debt Calculation
+
+50,000 TRY
+سداد 20,000 TRY
+= 30,000 TRY.
+
+Currency Isolation
+
+TRY لا يؤثر على USD.
+
+Payment History
+
+الدفعات الأحدث أولًا.
+
+Cash Integration
+
+السداد ينشئ Cash In واحدًا فقط.
+
+الآجل لا ينشئ Cash Transaction.
+
+Persistence
+
+Save / Load / Reload.
+
+Store Isolation
+
+لا تختلط بيانات المتاجر.
+
+Corrupted Data
+
+JSON تالف لا يسبب Crash ولا يحذف البيانات الصحيحة.
+
+Duplicate Submit
+
+لا ينتج عن الضغط المتكرر دفعتان لنفس عملية السداد.
+
+---
+
+16. ممنوع توسيع النطاق
+
+لا تضف:
+
+- Firebase
+- Backend
+- Authentication
+- Archive
+- Closing Cash
+- Sales
+- Purchases
+- Inventory
+- Products
+- Suppliers
+- Reports جديدة
+- Exchange Rates
+- Currency Conversion
+- Notifications
+- Permissions
+
+ولا تبدأ Task جديدة.
+
+---
+
+17. التحقق النهائي
+
+شغّل فقط:
+
+1. TypeScript
+2. Unit Tests
+3. "git diff --check"
+
+لا تستخدم Expo تحت أي ظرف.
+
+بعد نجاح الفحوص، توقف.
+
+---
+
+18. التقرير النهائي
+
+أرسل:
+
+Files Changed
+
+What Was Implemented
+
+Settlement Tests
+
+Debt Tests
+
+Cash Integration Tests
+
+Existing Tests
+
+Expo Usage
+
+يجب أن تكون:
+
+Not used
+
+Remaining Issues
+
+ثم توقف ولا تبدأ أي مهمة لاحقة.
