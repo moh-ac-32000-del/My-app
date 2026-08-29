@@ -1,17 +1,18 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppShell, GlassCard, PageHeader, SectionTitle } from '@/components/AppShell';
 import { AmountMetric } from '@/components/MetricCard';
+import { DailyClosingAction } from '@/components/DailyClosingAction';
 import { SplashView } from '@/components/SplashView';
 import { formatMoney } from '@/constants/currencies';
 import { formatLocalizedDate, formatLocalizedDateTime } from '@/constants/i18n';
 import { useStore } from '@/context/StoreContext';
 import { useColors } from '@/hooks/useColors';
 import { useI18n } from '@/hooks/useI18n';
-import { calculateVisibleCurrencyBalances, closeDailyArchive, loadDailyJournalEvents, type DailyJournalEvent } from '@/services/storage';
+import { calculateVisibleCurrencyBalances, loadDailyJournalEvents, type DailyJournalEvent } from '@/services/storage';
 
 export default function DashboardScreen() {
   const colors = useColors();
@@ -24,7 +25,6 @@ export default function DashboardScreen() {
     [transactions, profile.visibleCurrencies],
   );
   const [journalEvents, setJournalEvents] = useState<DailyJournalEvent[]>([]);
-  const [isClosingDay, setIsClosingDay] = useState<boolean>(false);
   const currencyCardWidth = balances.length === 1 ? '100%' : '48%';
 
   useEffect(() => {
@@ -55,28 +55,6 @@ export default function DashboardScreen() {
     return event.type === 'debt'
       ? `${t('quickActionCredit')} — ${customerName}`
       : `${t('settlementFrom')} ${customerName}`;
-  };
-
-  const closeDay = async () => {
-    if (isClosingDay) {
-      return;
-    }
-    setIsClosingDay(true);
-    try {
-      const result = await closeDailyArchive(profile.id);
-      Alert.alert(result.created ? t('archiveCreated') : t('archiveAlreadyClosed'));
-    } catch {
-      Alert.alert(t('somethingWentWrong'), t('archiveSaveError'));
-    } finally {
-      setIsClosingDay(false);
-    }
-  };
-
-  const confirmCloseDay = () => {
-    Alert.alert(t('closeDay'), t('closeDayConfirm'), [
-      { text: t('cancel'), style: 'cancel' },
-      { text: t('confirm'), onPress: () => void closeDay() },
-    ]);
   };
 
   if (!isReady) return <SplashView />;
@@ -113,22 +91,7 @@ export default function DashboardScreen() {
       </View>
 
       <SectionTitle title={t('recentActivity')} />
-      <Pressable
-        testID="dashboard-close-day-button"
-        accessibilityRole="button"
-        disabled={isClosingDay}
-        onPress={confirmCloseDay}
-        style={({ pressed }) => [
-          styles.closeDayButton,
-          { backgroundColor: colors.primary, flexDirection: isRTL ? 'row-reverse' : 'row' },
-          pressed && styles.pressed,
-        ]}
-      >
-        {isClosingDay
-          ? <ActivityIndicator size="small" color={colors.primaryForeground} />
-          : <Ionicons name="lock-closed-outline" size={17} color={colors.primaryForeground} />}
-        <Text style={[styles.closeDayText, { color: colors.primaryForeground }]}>{t('closeDay')}</Text>
-      </Pressable>
+      <DailyClosingAction storeId={profile.id} testID="dashboard-close-day-button" />
       <GlassCard style={styles.emptyActivity}>
         {journalEvents.length === 0 ? (
           <View style={[styles.emptyActivityRow, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
@@ -192,6 +155,4 @@ const styles = StyleSheet.create({
   activityTitle: { fontSize: 13, fontFamily: 'Inter_600SemiBold' },
   activityNote: { fontSize: 11, fontFamily: 'Inter_400Regular', marginTop: 3 },
   activityDate: { fontSize: 10, fontFamily: 'Inter_400Regular', marginTop: 4 },
-  closeDayButton: { minHeight: 45, borderRadius: 16, alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 11 },
-  closeDayText: { fontSize: 13, fontFamily: 'Inter_700Bold' },
 });
