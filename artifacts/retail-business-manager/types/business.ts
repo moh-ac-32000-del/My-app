@@ -81,16 +81,10 @@ export interface Payment extends BusinessEntity {
   note?: string;
 }
 
-export type DebtStatus = 'open' | 'partially-paid' | 'paid' | 'cancelled';
-
 export interface Debt extends BusinessEntity {
   customerId: string;
-  transactionId?: string;
-  originalAmount: MoneyValue;
-  remainingAmount: MoneyValue;
-  status: DebtStatus;
-  dueAt?: string;
-  note?: string;
+  currency: CurrencyCode;
+  amount: number;
 }
 
 export type ReminderStatus = 'pending' | 'completed' | 'dismissed';

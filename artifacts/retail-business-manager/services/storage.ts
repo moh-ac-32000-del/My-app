@@ -1,16 +1,18 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { normalizeAccent } from '@/constants/colors';
-import { normalizeLanguage } from '@/constants/i18n';
+import { normalizeLanguage, type Language } from '@/constants/i18n';
 import { CURRENCY_OPTIONS, isCurrencyCode, normalizeCurrency, normalizeQuickCurrencies, type CurrencyCode } from '@/constants/currencies';
-import type { CashTransactionDraft, Customer, StoreProfile, Transaction } from '@/types/business';
+import type { CashTransactionDraft, Customer, Debt, StoreProfile, Transaction } from '@/types/business';
 
 const PROFILE_KEY = '@retail-business-manager/store-profile';
 const AUTH_KEY = '@retail-business-manager/authenticated';
 const LEGACY_LANGUAGE_KEY = '@retail-business-manager/language';
 const CUSTOMERS_KEY = '@retail-business-manager/customers';
 const TRANSACTIONS_KEY = '@retail-business-manager/transactions';
+const DEBTS_KEY = '@retail-business-manager/debts';
 
 let transactionSequence = 0;
+let debtSequence = 0;
 
 export async function loadStoreProfile(): Promise<unknown | null> {
   const storedProfile = await AsyncStorage.getItem(PROFILE_KEY);
@@ -167,6 +169,137 @@ export async function saveTransactions(storeId: string, transactions: Transactio
   await AsyncStorage.setItem(TRANSACTIONS_KEY, JSON.stringify([...otherStoreTransactions, ...transactions]));
 }
 
+export function createDebtId(): string {
+  debtSequence += 1;
+  return `debt_${Date.now().toString(36)}_${debtSequence.toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+}
+
+export function parseLocalizedAmountInput(value: string, language: Language): number | null {
+  const input = value.trim().replace(/[\s\u00A0\u202F]/g, '');
+  if (!/^\d+(?:[.,]\d+)*$/.test(input)) {
+    return null;
+  }
+
+  const commaCount = (input.match(/,/g) ?? []).length;
+  const dotCount = (input.match(/\./g) ?? []).length;
+  let normalized = input;
+
+  if (commaCount > 0 && dotCount > 0) {
+    const decimalSeparator = input.lastIndexOf(',') > input.lastIndexOf('.') ? ',' : '.';
+    const groupingSeparator = decimalSeparator === ',' ? '.' : ',';
+    normalized = input.split(groupingSeparator).join('').replace(decimalSeparator, '.');
+  } else {
+    const separator = commaCount > 0 ? ',' : dotCount > 0 ? '.' : null;
+    if (separator) {
+      const parts = input.split(separator);
+      if (parts.length > 2) {
+        const validGrouping = parts.slice(1).every((part) => part.length === 3);
+        if (!validGrouping) {
+          return null;
+        }
+        normalized = parts.join('');
+      } else {
+        const localeDecimalSeparator = language === 'tr' ? ',' : '.';
+        const fractionalPart = parts[1];
+        const looksLikeGrouping = separator !== localeDecimalSeparator && fractionalPart.length === 3;
+        normalized = looksLikeGrouping ? parts.join('') : parts.join('.');
+      }
+    }
+  }
+
+  const amount = Number(normalized);
+  return Number.isFinite(amount) && amount > 0 ? amount : null;
+}
+
+export function validateDebtInput(input: {
+  id: unknown;
+  storeId: unknown;
+  customerId: unknown;
+  currency: unknown;
+  amount: unknown;
+  createdAt: unknown;
+  updatedAt: unknown;
+}): string | null {
+  if (typeof input.id !== 'string' || input.id.trim().length === 0) {
+    return 'debtIdRequired';
+  }
+  if (typeof input.storeId !== 'string' || input.storeId.trim().length === 0) {
+    return 'storeIdRequired';
+  }
+  if (typeof input.customerId !== 'string' || input.customerId.trim().length === 0) {
+    return 'customerIdRequired';
+  }
+  if (typeof input.amount !== 'number' || !Number.isFinite(input.amount) || input.amount <= 0) {
+    return 'amountInvalid';
+  }
+  if (!isCurrencyCode(input.currency)) {
+    return 'currencyInvalid';
+  }
+  if (!isValidDateString(input.createdAt) || !isValidDateString(input.updatedAt)) {
+    return 'timestampInvalid';
+  }
+  return null;
+}
+
+export function createDebt(
+  storeId: string,
+  customerId: string,
+  draft: { amount: number; currency: CurrencyCode },
+  now: string = new Date().toISOString(),
+): Debt {
+  const debt: Debt = {
+    id: createDebtId(),
+    storeId: storeId.trim(),
+    customerId: customerId.trim(),
+    currency: draft.currency,
+    amount: draft.amount,
+    createdAt: now,
+    updatedAt: now,
+  };
+  const validation = validateDebtInput(debt);
+  if (validation) {
+    throw new Error(validation);
+  }
+  return debt;
+}
+
+export function calculateDebtTotals(debts: Debt[]): Record<CurrencyCode, number> {
+  const totals = Object.fromEntries(CURRENCY_OPTIONS.map(({ code }) => [code, 0])) as Record<CurrencyCode, number>;
+  for (const debt of debts) {
+    totals[debt.currency] += debt.amount;
+  }
+  return totals;
+}
+
+export function filterDebtsByCustomer(debts: Debt[], customerId: string): Debt[] {
+  return debts.filter((debt) => debt.customerId === customerId);
+}
+
+export async function loadDebts(storeId: string): Promise<Debt[]> {
+  try {
+    const debts = await loadAllDebts();
+    return debts
+      .filter((debt) => debt.storeId === storeId)
+      .sort((first, second) => Date.parse(second.createdAt) - Date.parse(first.createdAt));
+  } catch {
+    return [];
+  }
+}
+
+export async function saveDebts(storeId: string, debts: Debt[]): Promise<void> {
+  if (debts.some((debt) => debt.storeId !== storeId || !isStoredDebt(debt))) {
+    throw new Error('All debts must be valid and belong to the active store');
+  }
+
+  const stored = await readStoredDebts();
+  if (stored.isCorrupted) {
+    throw new Error('Stored debt data is corrupted');
+  }
+
+  const otherStoreDebts = stored.debts.filter((debt) => debt.storeId !== storeId);
+  await AsyncStorage.setItem(DEBTS_KEY, JSON.stringify([...otherStoreDebts, ...debts]));
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -207,6 +340,10 @@ async function loadAllTransactions(): Promise<Transaction[]> {
   return (await readStoredTransactions()).transactions;
 }
 
+async function loadAllDebts(): Promise<Debt[]> {
+  return (await readStoredDebts()).debts;
+}
+
 async function readStoredTransactions(): Promise<{ transactions: Transaction[]; isCorrupted: boolean }> {
   const storedTransactions = await AsyncStorage.getItem(TRANSACTIONS_KEY);
   if (!storedTransactions) {
@@ -234,6 +371,10 @@ async function readStoredTransactions(): Promise<{ transactions: Transaction[]; 
 
 function isStoredTransaction(value: unknown): value is Transaction {
   return normalizeStoredTransaction(value) !== null;
+}
+
+function isStoredDebt(value: unknown): value is Debt {
+  return normalizeStoredDebt(value) !== null;
 }
 
 function normalizeStoredTransaction(value: unknown): Transaction | null {
@@ -273,6 +414,61 @@ function normalizeStoredTransaction(value: unknown): Transaction | null {
     ...(note ? { note } : {}),
     createdAt,
     updatedAt,
+  };
+}
+
+async function readStoredDebts(): Promise<{ debts: Debt[]; isCorrupted: boolean }> {
+  const storedDebts = await AsyncStorage.getItem(DEBTS_KEY);
+  if (!storedDebts) {
+    return { debts: [], isCorrupted: false };
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(storedDebts) as unknown;
+  } catch {
+    return { debts: [], isCorrupted: true };
+  }
+
+  if (!Array.isArray(parsed)) {
+    return { debts: [], isCorrupted: true };
+  }
+
+  return {
+    debts: parsed
+      .map(normalizeStoredDebt)
+      .filter((debt): debt is Debt => debt !== null),
+    isCorrupted: false,
+  };
+}
+
+function normalizeStoredDebt(value: unknown): Debt | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const debt = {
+    id: readOptionalString(value, 'id'),
+    storeId: readOptionalString(value, 'storeId'),
+    customerId: readOptionalString(value, 'customerId'),
+    currency: value.currency,
+    amount: value.amount,
+    createdAt: value.createdAt,
+    updatedAt: value.updatedAt,
+  };
+
+  if (validateDebtInput(debt)) {
+    return null;
+  }
+
+  return {
+    id: debt.id as string,
+    storeId: debt.storeId as string,
+    customerId: debt.customerId as string,
+    currency: debt.currency as CurrencyCode,
+    amount: debt.amount as number,
+    createdAt: debt.createdAt as string,
+    updatedAt: debt.updatedAt as string,
   };
 }
 
