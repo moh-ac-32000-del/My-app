@@ -1,11 +1,11 @@
 import React, { useCallback, useState } from 'react';
-import { ActivityIndicator, Alert, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Linking, Modal, Pressable, Share, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppShell, EmptyState, GlassCard, PageHeader, SectionTitle } from '@/components/AppShell';
 import { CustomerFormModal, type CustomerDraft } from '@/components/CustomerFormModal';
-import { formatLocalizedDate } from '@/constants/i18n';
+import { formatLocalizedDate, type Language, type TranslationKey } from '@/constants/i18n';
 import { useColors } from '@/hooks/useColors';
 import { useI18n } from '@/hooks/useI18n';
 import { useStore } from '@/context/StoreContext';
@@ -26,6 +26,27 @@ function DetailRow({ icon, label, value }: { icon: React.ComponentProps<typeof I
       </View>
     </View>
   );
+}
+
+function buildCustomerStatement(
+  customer: Customer,
+  language: Language,
+  t: (key: TranslationKey) => string,
+): string {
+  const lines = [
+    '━━━━━━━━━━━━━━',
+    `📋 ${t('customerStatementTitle')}`,
+    '',
+    `👤 ${t('statementCustomer')}: ${customer.name}`,
+    customer.phone ? `📞 ${t('statementPhone')}: ${customer.phone}` : null,
+    `💰 ${t('statementDebt')}: ${t('statementNoDebtData')}`,
+    `📅 ${t('statementDate')}: ${formatLocalizedDate(new Date(), language)}`,
+    '',
+    '━━━━━━━━━━━━━━',
+    t('statementRegards') + ' 🌷',
+    '━━━━━━━━━━━━━━',
+  ];
+  return lines.filter((line): line is string => line !== null).join('\n');
 }
 
 export default function CustomerDetailsScreen() {
@@ -105,6 +126,23 @@ export default function CustomerDetailsScreen() {
     }
   };
 
+  const shareCustomerStatement = async () => {
+    if (!customer) {
+      return;
+    }
+
+    const message = buildCustomerStatement(customer, language, t);
+    try {
+      await Linking.openURL(`whatsapp://send?text=${encodeURIComponent(message)}`);
+    } catch {
+      try {
+        await Share.share({ message });
+      } catch {
+        Alert.alert(t('somethingWentWrong'), t('shareStatementError'));
+      }
+    }
+  };
+
   if (!isReady || isLoading) {
     return (
       <AppShell>
@@ -143,6 +181,23 @@ export default function CustomerDetailsScreen() {
         <DetailRow icon="document-text-outline" label={t('customerNotes')} value={customer.notes || t('customerNoNotes')} />
         <DetailRow icon="calendar-outline" label={t('customerCreatedAt')} value={formatLocalizedDate(new Date(customer.createdAt), language)} />
       </GlassCard>
+
+      <Pressable
+        testID="share-customer-statement"
+        accessibilityRole="button"
+        onPress={() => void shareCustomerStatement()}
+        style={({ pressed }) => [styles.shareButton, { backgroundColor: colors.primary, flexDirection: isRTL ? 'row-reverse' : 'row' }, pressed && styles.pressed]}
+      >
+        <Ionicons name="logo-whatsapp" size={19} color={colors.primaryForeground} />
+        <Text style={[styles.shareText, { color: colors.primaryForeground }]}>{t('shareCustomerStatement')}</Text>
+      </Pressable>
+
+      <SectionTitle title={t('paymentHistory')} />
+      <EmptyState
+        icon="card-outline"
+        title={t('paymentHistoryEmpty')}
+        hint={t('paymentHistoryEmptyHint')}
+      />
 
       <View style={[styles.actions, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
         <Pressable testID="edit-customer-button" onPress={() => setIsEditVisible(true)} style={({ pressed }) => [styles.editButton, { backgroundColor: colors.primary }, pressed && styles.pressed]}>
@@ -202,6 +257,8 @@ const styles = StyleSheet.create({
   detailCopy: { flex: 1, gap: 4 },
   detailLabel: { fontSize: 11, fontFamily: 'Inter_500Medium' },
   detailValue: { fontSize: 14, fontFamily: 'Inter_600SemiBold' },
+  shareButton: { minHeight: 51, borderRadius: 16, alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 20 },
+  shareText: { fontSize: 13, fontFamily: 'Inter_700Bold' },
   actions: { gap: 10, marginBottom: 8 },
   editButton: { flex: 1, minHeight: 51, borderRadius: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7 },
   deleteButton: { flex: 1, minHeight: 51, borderRadius: 16, borderWidth: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7 },
