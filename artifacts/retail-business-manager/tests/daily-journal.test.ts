@@ -1,17 +1,33 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Customer, Debt, Payment, Transaction } from '@/types/business';
+
+const storageValues = vi.hoisted(() => new Map<string, string>());
+
+import {
+  buildDailyJournalEvents,
+  createDebt,
+  loadCustomers,
+  loadDebts,
+  loadPayments,
+  loadTransactions,
+  saveCustomers,
+  saveDebts,
+  settleCustomerDebt,
+} from '@/services/storage';
+
+const now = new Date('2026-08-29T20:00:00.000Z');
 
 vi.mock('@react-native-async-storage/async-storage', () => ({
   default: {
-    getItem: async () => null,
-    setItem: async () => undefined,
-    removeItem: async () => undefined,
+    getItem: async (key: string) => storageValues.get(key) ?? null,
+    setItem: async (key: string, value: string) => {
+      storageValues.set(key, value);
+    },
+    removeItem: async (key: string) => {
+      storageValues.delete(key);
+    },
   },
 }));
-
-import { buildDailyJournalEvents } from '@/services/storage';
-
-const now = new Date('2026-08-29T20:00:00.000Z');
 
 function customer(overrides: Partial<Customer> = {}): Customer {
   return {
@@ -68,6 +84,10 @@ function payment(overrides: Partial<Payment> = {}): Payment {
 }
 
 describe('daily journal events', () => {
+  beforeEach(() => {
+    storageValues.clear();
+  });
+
   it('combines cash in, cash out, debt, and settlement in newest-first order with customer names', () => {
     const events = buildDailyJournalEvents(
       'store-a',
@@ -136,5 +156,88 @@ describe('daily journal events', () => {
     );
 
     expect(buildDailyJournalEvents('store-a', transactions, [], [], [], now)).toHaveLength(30);
+  });
+
+  it('keeps normal cash-in and cash-out events while ignoring unrelated payment links', () => {
+    const events = buildDailyJournalEvents(
+      'store-a',
+      [
+        transaction({ id: 'normal-in' }),
+        transaction({ id: 'normal-out', type: 'cash_out', createdAt: '2026-08-29T11:00:00.000Z' }),
+      ],
+      [],
+      [
+        payment({
+          id: 'outgoing-payment',
+          customerId: undefined,
+          transactionId: 'normal-in',
+          direction: 'out',
+        }),
+      ],
+      [],
+      now,
+    );
+
+    expect(events.map(({ type }) => type)).toEqual(['cash_out', 'cash_in']);
+  });
+
+  it('persists a customer debt and settlement as journal events without duplicating settlement cash-in', async () => {
+    const mohammed = customer({
+      id: 'customer-123',
+      name: 'محمد',
+    });
+    const creditTime = '2026-08-29T14:25:00.000Z';
+    const settlementTime = '2026-08-29T15:30:00.000Z';
+    const createdDebt = createDebt('store-a', mohammed.id, { amount: 5000, currency: 'TRY' }, creditTime);
+
+    await saveCustomers('store-a', [mohammed]);
+    await saveDebts('store-a', [createdDebt]);
+
+    const debtsAfterSave = await loadDebts('store-a');
+    expect(debtsAfterSave).toContainEqual(createdDebt);
+
+    const journalAfterCredit = buildDailyJournalEvents(
+      'store-a',
+      await loadTransactions('store-a'),
+      debtsAfterSave,
+      await loadPayments('store-a'),
+      await loadCustomers('store-a'),
+      now,
+    );
+    expect(journalAfterCredit).toContainEqual(expect.objectContaining({
+      type: 'debt',
+      customerId: 'customer-123',
+      customerName: 'محمد',
+      amount: 5000,
+      currency: 'TRY',
+      occurredAt: creditTime,
+    }));
+
+    await settleCustomerDebt('store-a', mohammed.id, { amount: 2000, currency: 'TRY' }, settlementTime);
+
+    const persistedTransactions = await loadTransactions('store-a');
+    const persistedDebts = await loadDebts('store-a');
+    const persistedPayments = await loadPayments('store-a');
+    const persistedCustomers = await loadCustomers('store-a');
+    const journalAfterSettlement = buildDailyJournalEvents(
+      'store-a',
+      persistedTransactions,
+      persistedDebts,
+      persistedPayments,
+      persistedCustomers,
+      now,
+    );
+
+    expect(journalAfterSettlement).toContainEqual(expect.objectContaining({
+      type: 'settlement',
+      customerId: 'customer-123',
+      customerName: 'محمد',
+      amount: 2000,
+      currency: 'TRY',
+      occurredAt: settlementTime,
+    }));
+    expect(journalAfterSettlement.filter(({ type, amount, currency }) =>
+      type === 'cash_in' && amount === 2000 && currency === 'TRY')).toHaveLength(0);
+    expect(journalAfterSettlement.filter(({ type }) => type === 'settlement')).toHaveLength(1);
   });
 });

@@ -213,7 +213,7 @@ export function buildDailyJournalEvents(
 ): DailyJournalEvent[] {
   const settlementTransactionIds = new Set(
     payments
-      .filter((payment) => payment.storeId === storeId && payment.transactionId)
+      .filter((payment) => payment.storeId === storeId && payment.direction === 'in' && payment.customerId && payment.transactionId)
       .map((payment) => payment.transactionId as string),
   );
   const customerNames = new Map(
