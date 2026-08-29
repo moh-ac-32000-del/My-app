@@ -1,7 +1,8 @@
 import React, { useCallback, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppShell, EmptyState, GlassCard, PageHeader, SectionTitle } from '@/components/AppShell';
 import { CustomerFormModal, type CustomerDraft } from '@/components/CustomerFormModal';
 import { formatLocalizedDate } from '@/constants/i18n';
@@ -30,6 +31,7 @@ function DetailRow({ icon, label, value }: { icon: React.ComponentProps<typeof I
 export default function CustomerDetailsScreen() {
   const colors = useColors();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { profile, isReady } = useStore();
   const { t, language, isRTL } = useI18n();
@@ -37,6 +39,8 @@ export default function CustomerDetailsScreen() {
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isEditVisible, setIsEditVisible] = useState<boolean>(false);
+  const [isDeleteDialogVisible, setIsDeleteDialogVisible] = useState<boolean>(false);
+  const [isDeleting, setIsDeleting] = useState<boolean>(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -82,29 +86,23 @@ export default function CustomerDetailsScreen() {
     }
   };
 
-  const deleteCustomer = () => {
-    if (!customer) {
+  const confirmDelete = async () => {
+    if (!customer || isDeleting) {
       return;
     }
-    Alert.alert(t('deleteCustomer'), t('deleteCustomerConfirm'), [
-      { text: t('cancel'), style: 'cancel' },
-      {
-        text: t('deleteCustomer'),
-        style: 'destructive',
-        onPress: () => {
-          void (async () => {
-            try {
-              const customers = await loadCustomers(profile.id);
-              await saveCustomers(profile.id, customers.filter((item) => item.id !== customer.id));
-              Alert.alert(t('customerDeleted'));
-              router.back();
-            } catch {
-              Alert.alert(t('somethingWentWrong'), t('reloadToContinue'));
-            }
-          })();
-        },
-      },
-    ]);
+
+    setIsDeleting(true);
+    try {
+      const customers = await loadCustomers(profile.id);
+      await saveCustomers(profile.id, customers.filter((item) => item.id !== customer.id));
+      setIsDeleteDialogVisible(false);
+      Alert.alert(t('customerDeleted'));
+      router.back();
+    } catch {
+      Alert.alert(t('somethingWentWrong'), t('reloadToContinue'));
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   if (!isReady || isLoading) {
@@ -151,13 +149,43 @@ export default function CustomerDetailsScreen() {
           <Ionicons name="create-outline" size={18} color={colors.primaryForeground} />
           <Text style={[styles.editText, { color: colors.primaryForeground }]}>{t('editCustomer')}</Text>
         </Pressable>
-        <Pressable testID="delete-customer-button" onPress={deleteCustomer} style={({ pressed }) => [styles.deleteButton, { borderColor: colors.destructive }, pressed && styles.pressed]}>
+        <Pressable testID="delete-customer-button" onPress={() => setIsDeleteDialogVisible(true)} style={({ pressed }) => [styles.deleteButton, { borderColor: colors.destructive }, pressed && styles.pressed]}>
           <Ionicons name="trash-outline" size={18} color={colors.destructive} />
           <Text style={[styles.deleteText, { color: colors.destructive }]}>{t('deleteCustomer')}</Text>
         </Pressable>
       </View>
 
       <CustomerFormModal visible={isEditVisible} initialCustomer={customer} onClose={() => setIsEditVisible(false)} onSave={(draft) => void updateCustomer(draft)} />
+
+      <Modal
+        visible={isDeleteDialogVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          if (!isDeleting) {
+            setIsDeleteDialogVisible(false);
+          }
+        }}
+      >
+        <View style={[styles.deleteBackdrop, { backgroundColor: colors.overlay }]}>
+          <View style={[styles.deleteDialog, { backgroundColor: colors.glassStrong, borderColor: colors.border, marginBottom: Math.max(insets.bottom, 16) }]}>
+            <View style={[styles.deleteIcon, { backgroundColor: colors.accent }]}>
+              <Ionicons name="trash-outline" size={23} color={colors.destructive} />
+            </View>
+            <Text style={[styles.deleteTitle, { color: colors.foreground }]}>{t('deleteCustomer')}</Text>
+            <Text style={[styles.deleteHint, { color: colors.mutedForeground }]}>{t('deleteCustomerConfirm')}</Text>
+            <View style={[styles.deleteActions, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
+              <Pressable testID="cancel-delete-customer" disabled={isDeleting} onPress={() => setIsDeleteDialogVisible(false)} style={({ pressed }) => [styles.deleteCancelButton, { borderColor: colors.border, backgroundColor: colors.input }, pressed && styles.pressed]}>
+                <Text style={[styles.deleteCancelText, { color: colors.foreground }]}>{t('cancel')}</Text>
+              </Pressable>
+              <Pressable testID="confirm-delete-customer" disabled={isDeleting} onPress={() => void confirmDelete()} style={({ pressed }) => [styles.deleteConfirmButton, { backgroundColor: colors.destructive }, pressed && styles.pressed]}>
+                {isDeleting ? <ActivityIndicator size="small" color={colors.destructiveForeground} /> : <Ionicons name="trash-outline" size={17} color={colors.destructiveForeground} />}
+                <Text style={[styles.deleteConfirmText, { color: colors.destructiveForeground }]}>{t('deleteCustomer')}</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </AppShell>
   );
 }
@@ -179,5 +207,15 @@ const styles = StyleSheet.create({
   deleteButton: { flex: 1, minHeight: 51, borderRadius: 16, borderWidth: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7 },
   editText: { fontSize: 13, fontFamily: 'Inter_700Bold' },
   deleteText: { fontSize: 13, fontFamily: 'Inter_700Bold' },
+  deleteBackdrop: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 18 },
+  deleteDialog: { width: '100%', maxWidth: 390, borderRadius: 24, borderWidth: 1, padding: 22, alignItems: 'center' },
+  deleteIcon: { width: 52, height: 52, borderRadius: 18, alignItems: 'center', justifyContent: 'center', marginBottom: 14 },
+  deleteTitle: { fontSize: 18, fontFamily: 'Inter_700Bold', textAlign: 'center' },
+  deleteHint: { fontSize: 13, fontFamily: 'Inter_400Regular', lineHeight: 21, textAlign: 'center', marginTop: 7 },
+  deleteActions: { width: '100%', gap: 10, marginTop: 20 },
+  deleteCancelButton: { flex: 1, minHeight: 48, borderRadius: 15, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  deleteConfirmButton: { flex: 1, minHeight: 48, borderRadius: 15, flexDirection: 'row', gap: 7, alignItems: 'center', justifyContent: 'center' },
+  deleteCancelText: { fontSize: 13, fontFamily: 'Inter_600SemiBold' },
+  deleteConfirmText: { fontSize: 13, fontFamily: 'Inter_700Bold' },
   pressed: { opacity: 0.72, transform: [{ scale: 0.985 }] },
 });
