@@ -16,6 +16,7 @@ export default function CashScreen() {
   const { profile, isReady, journalRevision } = useStore();
   const { t, isRTL, language } = useI18n();
   const [events, setEvents] = useState<DailyJournalEvent[]>([]);
+  const [journalRefreshKey, setJournalRefreshKey] = useState(0);
 
   useFocusEffect(
     useCallback(() => {
@@ -31,7 +32,7 @@ export default function CashScreen() {
       return () => {
         active = false;
       };
-    }, [isReady, journalRevision, profile.id]),
+    }, [isReady, journalRevision, journalRefreshKey, profile.id]),
   );
 
   const getEventTitle = (event: DailyJournalEvent): string => {
@@ -65,7 +66,12 @@ export default function CashScreen() {
         subtitle={t('dailyJournalHint')}
         showBack
         action={
-          <DailyClosingAction storeId={profile.id} compact testID="close-day-button" />
+          <DailyClosingAction
+            storeId={profile.id}
+            compact
+            testID="close-day-button"
+            onClosed={() => setJournalRefreshKey((value) => value + 1)}
+          />
         }
       />
 

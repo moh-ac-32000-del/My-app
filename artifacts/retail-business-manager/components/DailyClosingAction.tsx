@@ -5,16 +5,18 @@ import { useColors } from '@/hooks/useColors';
 import { useI18n } from '@/hooks/useI18n';
 import { runDailyClosing } from '@/services/dailyClosing';
 
-type ClosingStatus = 'created' | 'alreadyClosed' | 'error' | null;
+type ClosingStatus = 'created' | 'error' | null;
 
 export function DailyClosingAction({
   storeId,
   compact = false,
   testID,
+  onClosed,
 }: {
   storeId: string;
   compact?: boolean;
   testID: string;
+  onClosed?: () => void;
 }) {
   const colors = useColors();
   const { t, isRTL } = useI18n();
@@ -30,6 +32,7 @@ export function DailyClosingAction({
     setIsClosing(true);
     try {
       setStatus(await runDailyClosing(storeId));
+      onClosed?.();
     } catch (error) {
       console.error('Daily archive closing failed', error);
       setStatus('error');
@@ -41,9 +44,7 @@ export function DailyClosingAction({
   const statusTitle = status === 'error' ? t('somethingWentWrong') : t('closeDay');
   const statusMessage = status === 'created'
     ? t('archiveCreated')
-    : status === 'alreadyClosed'
-      ? t('archiveAlreadyClosed')
-      : t('archiveSaveError');
+    : t('archiveSaveError');
 
   return (
     <>

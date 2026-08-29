@@ -81,7 +81,7 @@ export default function ArchiveScreen() {
               return (
                 <Pressable
                   key={archive.id}
-                  testID={`archive-day-${archive.date}`}
+                  testID={`archive-day-${archive.date}-${archive.closingNumber}`}
                   accessibilityRole="button"
                   onPress={() => setSelectedArchiveId(archive.id)}
                   style={({ pressed }) => [
@@ -99,7 +99,7 @@ export default function ArchiveScreen() {
                   </View>
                   <View style={[styles.archiveDayCopy, { alignItems: isRTL ? 'flex-end' : 'flex-start' }]}>
                     <Text style={[styles.archiveDate, { color: colors.foreground }]}>
-                      {formatLocalizedDate(parseArchiveDate(archive.date), language)}
+                      {formatLocalizedDate(parseArchiveDate(archive.date), language)} — {t('close')} #{archive.closingNumber}
                     </Text>
                     <Text style={[styles.archiveClosedAt, { color: colors.mutedForeground }]}>
                       {t('archiveClosedAt')}: {formatLocalizedDateTime(new Date(archive.closedAt), language)}

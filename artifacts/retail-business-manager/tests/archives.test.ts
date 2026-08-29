@@ -17,12 +17,17 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
 }));
 
 import {
+  calculateVisibleCurrencyBalances,
   closeDailyArchive,
   createCashTransaction,
   createDebt,
   createPayment,
   getLocalDateKey,
   loadDailyArchives,
+  loadDailyJournalEvents,
+  loadDebts,
+  loadPayments,
+  loadTransactions,
   saveCustomers,
   saveDebts,
   savePayments,
@@ -95,6 +100,7 @@ describe('daily archives', () => {
       storeId,
       date: getLocalDateKey(closedAt),
       closedAt: closedAt.toISOString(),
+      closingNumber: 1,
     });
     expect(result.archive.snapshot.map(({ type }) => type)).toEqual([
       'settlement',
@@ -162,15 +168,156 @@ describe('daily archives', () => {
     expect(archivesB.every(({ storeId }) => storeId === 'store-b')).toBe(true);
   });
 
-  it('prevents duplicate closing for the same store and local date', async () => {
+  it('archives only new events across repeated same-day closings without changing cash boxes or the midnight boundary', async () => {
     const storeId = 'store-a';
-    const first = await closeDailyArchive(storeId, new Date('2026-08-29T17:00:00.000Z'));
-    const second = await closeDailyArchive(storeId, new Date('2026-08-29T20:00:00.000Z'));
+    const mohammed = customer(storeId, 'customer-mohammed', 'محمد');
+    const at = (day: number, hour: number, minute = 0) => new Date(2026, 7, day, hour, minute);
+    const priorUsd = createCashTransaction(storeId, {
+      type: 'cash_in',
+      amount: 250,
+      currency: 'USD',
+    }, at(28, 12).toISOString());
+    const priorEur = createCashTransaction(storeId, {
+      type: 'cash_in',
+      amount: 400,
+      currency: 'EUR',
+    }, at(28, 12, 5).toISOString());
+    const firstCashIn = createCashTransaction(storeId, {
+      type: 'cash_in',
+      amount: 1000,
+      currency: 'TRY',
+    }, at(29, 10).toISOString());
+    const firstCashOut = createCashTransaction(storeId, {
+      type: 'cash_out',
+      amount: 200,
+      currency: 'TRY',
+    }, at(29, 11).toISOString());
 
-    expect(first.created).toBe(true);
-    expect(second.created).toBe(false);
-    expect(second.archive.id).toBe(first.archive.id);
-    expect(await loadDailyArchives(storeId)).toHaveLength(1);
+    await saveCustomers(storeId, [mohammed]);
+    await saveTransactions(storeId, [priorUsd, priorEur, firstCashIn, firstCashOut]);
+    const balancesBeforeFirstClose = calculateVisibleCurrencyBalances(
+      await loadTransactions(storeId),
+      ['TRY', 'USD', 'EUR'],
+    );
+    const sourceBeforeFirstClose = await loadTransactions(storeId);
+
+    const firstClose = await closeDailyArchive(storeId, at(29, 14));
+
+    expect(firstClose.archive).toMatchObject({
+      date: getLocalDateKey(at(29, 14)),
+      closingNumber: 1,
+    });
+    expect(firstClose.archive.snapshot.map(({ sourceId }) => sourceId).sort()).toEqual(
+      [firstCashIn.id, firstCashOut.id].sort(),
+    );
+    expect(await loadDailyJournalEvents(storeId, at(29, 14, 1))).toEqual([]);
+    expect(await loadTransactions(storeId)).toEqual(sourceBeforeFirstClose);
+    expect(calculateVisibleCurrencyBalances(await loadTransactions(storeId), ['TRY', 'USD', 'EUR']))
+      .toEqual(balancesBeforeFirstClose);
+    expect(balancesBeforeFirstClose).toEqual([
+      { currency: 'TRY', amount: 800 },
+      { currency: 'USD', amount: 250 },
+      { currency: 'EUR', amount: 400 },
+    ]);
+
+    const laterCashIn = createCashTransaction(storeId, {
+      type: 'cash_in',
+      amount: 500,
+      currency: 'TRY',
+    }, at(29, 16).toISOString());
+    const laterDebt = createDebt(storeId, mohammed.id, {
+      amount: 300,
+      currency: 'TRY',
+    }, at(29, 16, 30).toISOString());
+    await saveTransactions(storeId, [priorUsd, priorEur, firstCashIn, firstCashOut, laterCashIn]);
+    await saveDebts(storeId, [laterDebt]);
+
+    const journalAfterFirstClose = await loadDailyJournalEvents(storeId, at(29, 17));
+    expect(journalAfterFirstClose.map(({ type }) => type)).toEqual(['debt', 'cash_in']);
+    expect(journalAfterFirstClose.map(({ sourceId }) => sourceId).sort()).toEqual(
+      [laterCashIn.id, laterDebt.id].sort(),
+    );
+    expect(firstClose.archive.snapshot.some(({ sourceId }) => sourceId === laterCashIn.id)).toBe(false);
+    const firstSnapshot = JSON.parse(JSON.stringify(firstClose.archive.snapshot)) as unknown;
+    const transactionsBeforeSecondClose = await loadTransactions(storeId);
+    const debtsBeforeSecondClose = await loadDebts(storeId);
+
+    const secondClose = await closeDailyArchive(storeId, at(29, 18));
+
+    expect(secondClose.archive.closingNumber).toBe(2);
+    expect(secondClose.archive.id).not.toBe(firstClose.archive.id);
+    expect(secondClose.archive.snapshot.map(({ sourceId }) => sourceId).sort()).toEqual(
+      [laterCashIn.id, laterDebt.id].sort(),
+    );
+    expect(await loadDailyJournalEvents(storeId, at(29, 18, 1))).toEqual([]);
+    expect(await loadTransactions(storeId)).toEqual(transactionsBeforeSecondClose);
+    expect(await loadDebts(storeId)).toEqual(debtsBeforeSecondClose);
+
+    const settlementCashIn = createCashTransaction(storeId, {
+      type: 'cash_in',
+      amount: 100,
+      currency: 'TRY',
+    }, at(29, 20).toISOString());
+    const settlement = createPayment(storeId, mohammed.id, {
+      amount: 100,
+      currency: 'TRY',
+      transactionId: settlementCashIn.id,
+    }, at(29, 20).toISOString());
+    await saveTransactions(storeId, [
+      priorUsd,
+      priorEur,
+      firstCashIn,
+      firstCashOut,
+      laterCashIn,
+      settlementCashIn,
+    ]);
+    await savePayments(storeId, [settlement]);
+    expect((await loadDailyJournalEvents(storeId, at(29, 21))).map(({ type }) => type))
+      .toEqual(['settlement']);
+    const balancesBeforeThirdClose = calculateVisibleCurrencyBalances(
+      await loadTransactions(storeId),
+      ['TRY', 'USD', 'EUR'],
+    );
+    const paymentsBeforeThirdClose = await loadPayments(storeId);
+
+    const thirdClose = await closeDailyArchive(storeId, at(29, 22));
+    const sameDayArchives = (await loadDailyArchives(storeId))
+      .filter(({ date }) => date === getLocalDateKey(at(29, 22)));
+
+    expect(sameDayArchives.map(({ closingNumber }) => closingNumber)).toEqual([1, 2, 3]);
+    expect(thirdClose.archive.snapshot).toHaveLength(1);
+    expect(thirdClose.archive.snapshot[0]).toMatchObject({
+      type: 'settlement',
+      sourceId: settlement.id,
+      customerName: 'محمد',
+      amount: 100,
+      currency: 'TRY',
+    });
+    expect(sameDayArchives[0]?.snapshot).toEqual(firstSnapshot);
+    expect(await loadPayments(storeId)).toEqual(paymentsBeforeThirdClose);
+    expect(calculateVisibleCurrencyBalances(await loadTransactions(storeId), ['TRY', 'USD', 'EUR']))
+      .toEqual(balancesBeforeThirdClose);
+
+    const nextDayCashIn = createCashTransaction(storeId, {
+      type: 'cash_in',
+      amount: 700,
+      currency: 'TRY',
+    }, at(30, 0).toISOString());
+    await saveTransactions(storeId, [
+      priorUsd,
+      priorEur,
+      firstCashIn,
+      firstCashOut,
+      laterCashIn,
+      settlementCashIn,
+      nextDayCashIn,
+    ]);
+    const nextDayJournal = await loadDailyJournalEvents(storeId, at(30, 0, 1));
+    expect(nextDayJournal).toHaveLength(1);
+    expect(nextDayJournal[0]?.sourceId).toBe(nextDayCashIn.id);
+    expect(getLocalDateKey(new Date(nextDayJournal[0]?.occurredAt ?? ''))).toBe(getLocalDateKey(at(30, 0)));
+    expect(sameDayArchives.flatMap(({ snapshot }) => snapshot)
+      .some(({ sourceId }) => sourceId === nextDayCashIn.id)).toBe(false);
   });
 
   it('skips corrupted archive JSON without crashing or altering valid archives', async () => {
@@ -178,8 +325,8 @@ describe('daily archives', () => {
     await closeDailyArchive(storeId, new Date('2026-08-29T17:00:00.000Z'));
     await closeDailyArchive(storeId, new Date('2026-08-30T17:00:00.000Z'));
     const archiveKeys = Array.from(storageValues.keys()).filter((key) => key.includes('daily-archive'));
-    const corruptedKey = archiveKeys.find((key) => key.endsWith('2026-08-29'));
-    const validKey = archiveKeys.find((key) => key.endsWith('2026-08-30'));
+    const corruptedKey = archiveKeys.find((key) => key.includes(':2026-08-29:'));
+    const validKey = archiveKeys.find((key) => key.includes(':2026-08-30:'));
     expect(corruptedKey).toBeDefined();
     expect(validKey).toBeDefined();
     const validRawBefore = storageValues.get(validKey as string);

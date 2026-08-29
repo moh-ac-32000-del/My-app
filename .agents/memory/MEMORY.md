@@ -1,4 +1,4 @@
 - [Animated overlay hit-testing](animated-overlay-hit-testing.md) — keep interactive overlay mounting separate from animation state on React Native Web.
 - [Local persistence guardrails](local-persistence-guardrails.md) — keep AsyncStorage isolation minimal and add schema versions only for demonstrated migrations.
-- [Daily archive isolation](daily-archive-isolation.md) — persist each closed store-day independently so one corrupt snapshot cannot hide valid archives.
+- [Cash-closing archive isolation](daily-archive-isolation.md) — each closing is an immutable batch; filter the journal by archived event IDs, never by date alone.
 - [React Native Web alerts](react-native-web-alerts.md) — do not use Alert.alert for critical web confirmations; the installed implementation is a no-op.

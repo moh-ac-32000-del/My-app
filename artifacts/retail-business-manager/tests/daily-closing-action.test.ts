@@ -7,6 +7,7 @@ const archive = {
   storeId: 'store-a',
   date: '2026-08-29',
   closedAt: '2026-08-29T17:00:00.000Z',
+  closingNumber: 1,
   snapshot: [],
 };
 
@@ -20,11 +21,7 @@ describe('daily closing action path', () => {
     expect(closeArchive).toHaveBeenCalledWith('store-a');
   });
 
-  it('returns the duplicate state and propagates storage failures for visible UI handling', async () => {
-    const duplicateClose = vi.fn<(storeId: string) => Promise<DailyArchiveCloseResult>>()
-      .mockResolvedValue({ archive, created: false });
-    await expect(runDailyClosing('store-a', duplicateClose)).resolves.toBe('alreadyClosed');
-
+  it('propagates storage failures for visible UI handling', async () => {
     const failure = new Error('storage unavailable');
     const failedClose = vi.fn<(storeId: string) => Promise<DailyArchiveCloseResult>>()
       .mockRejectedValue(failure);

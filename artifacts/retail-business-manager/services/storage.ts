@@ -289,13 +289,20 @@ export async function loadDailyJournalEvents(
   storeId: string,
   now: Date = new Date(),
 ): Promise<DailyJournalEvent[]> {
-  const [transactions, debts, payments, customers] = await Promise.all([
+  const [transactions, debts, payments, customers, archives] = await Promise.all([
     loadTransactions(storeId),
     loadDebts(storeId),
     loadPayments(storeId),
     loadCustomers(storeId),
+    loadDailyArchives(storeId),
   ]);
-  return buildDailyJournalEvents(storeId, transactions, debts, payments, customers, now);
+  const archivedEventIds = new Set(
+    archives
+      .filter((archive) => archive.date === getLocalDateKey(now))
+      .flatMap((archive) => archive.snapshot.map((event) => event.id)),
+  );
+  return buildDailyJournalEvents(storeId, transactions, debts, payments, customers, now)
+    .filter((event) => !archivedEventIds.has(event.id));
 }
 
 export interface DailyArchiveCloseResult {
@@ -315,6 +322,7 @@ export function createDailyArchive(
   date: string,
   snapshot: DailyJournalEvent[],
   closedAt: string,
+  closingNumber = 1,
 ): DailyArchive {
   if (typeof storeId !== 'string' || storeId.trim().length === 0) {
     throw new Error('storeIdRequired');
@@ -325,12 +333,16 @@ export function createDailyArchive(
   if (!isValidDateString(closedAt)) {
     throw new Error('closedAtInvalid');
   }
+  if (!Number.isInteger(closingNumber) || closingNumber < 1) {
+    throw new Error('closingNumberInvalid');
+  }
 
   return {
-    id: `archive:${encodeURIComponent(storeId.trim())}:${date}`,
+    id: `archive:${encodeURIComponent(storeId.trim())}:${date}:${closingNumber}`,
     storeId: storeId.trim(),
     date,
     closedAt,
+    closingNumber,
     snapshot: snapshot.map((event) => ({ ...event })),
   };
 }
@@ -351,18 +363,15 @@ async function closeDailyArchiveNow(
   now: Date,
 ): Promise<DailyArchiveCloseResult> {
   const date = getLocalDateKey(now);
-  const key = getDailyArchiveStorageKey(storeId, date);
-  const existingRaw = await AsyncStorage.getItem(key);
-  if (existingRaw !== null) {
-    const existing = parseStoredDailyArchive(existingRaw);
-    if (!existing) {
-      throw new Error('archiveDataCorrupted');
-    }
-    return { archive: existing, created: false };
-  }
-
   const snapshot = await loadDailyJournalEvents(storeId, now);
-  const archive = createDailyArchive(storeId, date, snapshot, now.toISOString());
+  const existingArchives = await loadDailyArchives(storeId);
+  const sameDayArchives = existingArchives.filter((archive) => archive.date === date);
+  const closingNumber = sameDayArchives.reduce(
+    (highest, archive) => Math.max(highest, archive.closingNumber),
+    0,
+  ) + 1;
+  const archive = createDailyArchive(storeId, date, snapshot, now.toISOString(), closingNumber);
+  const key = getDailyArchiveStorageKey(storeId, date, closingNumber);
   await AsyncStorage.setItem(key, JSON.stringify(archive));
   return { archive, created: true };
 }
@@ -384,7 +393,10 @@ export async function loadDailyArchives(storeId: string): Promise<DailyArchive[]
       .filter((archive): archive is DailyArchive => archive !== null && archive.storeId === storeId.trim())
       .sort((first, second) => {
         const dateOrder = second.date.localeCompare(first.date);
-        return dateOrder !== 0 ? dateOrder : Date.parse(second.closedAt) - Date.parse(first.closedAt);
+        if (dateOrder !== 0) {
+          return dateOrder;
+        }
+        return first.closingNumber - second.closingNumber;
       });
   } catch {
     return [];
@@ -392,16 +404,12 @@ export async function loadDailyArchives(storeId: string): Promise<DailyArchive[]
 }
 
 export async function loadDailyArchive(storeId: string, date: string): Promise<DailyArchive | null> {
-  try {
-    const raw = await AsyncStorage.getItem(getDailyArchiveStorageKey(storeId, date));
-    return raw === null ? null : parseStoredDailyArchive(raw);
-  } catch {
-    return null;
-  }
+  const archives = await loadDailyArchives(storeId);
+  return archives.find((archive) => archive.date === date) ?? null;
 }
 
-function getDailyArchiveStorageKey(storeId: string, date: string): string {
-  return `${ARCHIVE_KEY_PREFIX}${encodeURIComponent(storeId.trim())}:${date}`;
+function getDailyArchiveStorageKey(storeId: string, date: string, closingNumber: number): string {
+  return `${ARCHIVE_KEY_PREFIX}${encodeURIComponent(storeId.trim())}:${date}:${String(closingNumber).padStart(6, '0')}`;
 }
 
 function isValidArchiveDate(value: string): boolean {
@@ -422,6 +430,10 @@ function parseStoredDailyArchive(raw: string): DailyArchive | null {
     if (!isValidArchiveDate(parsed.date) || !isValidDateString(parsed.closedAt)) {
       return null;
     }
+    const closingNumber = parsed.closingNumber === undefined ? 1 : parsed.closingNumber;
+    if (typeof closingNumber !== 'number' || !Number.isInteger(closingNumber) || closingNumber < 1) {
+      return null;
+    }
     const snapshot = parsed.snapshot.filter(isDailyJournalEvent);
     if (snapshot.length !== parsed.snapshot.length) {
       return null;
@@ -431,6 +443,7 @@ function parseStoredDailyArchive(raw: string): DailyArchive | null {
       storeId: parsed.storeId,
       date: parsed.date,
       closedAt: parsed.closedAt,
+      closingNumber,
       snapshot: snapshot.map((event) => ({ ...event })),
     };
   } catch {

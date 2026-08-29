@@ -86,6 +86,7 @@ export interface DailyArchive {
   storeId: string;
   date: string;
   closedAt: string;
+  closingNumber: number;
   snapshot: import('@/services/storage').DailyJournalEvent[];
 }
 

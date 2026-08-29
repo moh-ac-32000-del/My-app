@@ -25,6 +25,7 @@ export default function DashboardScreen() {
     [transactions, profile.visibleCurrencies],
   );
   const [journalEvents, setJournalEvents] = useState<DailyJournalEvent[]>([]);
+  const [journalRefreshKey, setJournalRefreshKey] = useState(0);
   const currencyCardWidth = balances.length === 1 ? '100%' : '48%';
 
   useEffect(() => {
@@ -46,7 +47,7 @@ export default function DashboardScreen() {
     return () => {
       active = false;
     };
-  }, [isReady, journalRevision, profile.id]);
+  }, [isReady, journalRevision, journalRefreshKey, profile.id]);
 
   const getJournalTitle = (event: DailyJournalEvent): string => {
     if (event.type === 'cash_in') return t('cashIn');
@@ -91,7 +92,11 @@ export default function DashboardScreen() {
       </View>
 
       <SectionTitle title={t('recentActivity')} />
-      <DailyClosingAction storeId={profile.id} testID="dashboard-close-day-button" />
+      <DailyClosingAction
+        storeId={profile.id}
+        testID="dashboard-close-day-button"
+        onClosed={() => setJournalRefreshKey((value) => value + 1)}
+      />
       <GlassCard style={styles.emptyActivity}>
         {journalEvents.length === 0 ? (
           <View style={[styles.emptyActivityRow, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>

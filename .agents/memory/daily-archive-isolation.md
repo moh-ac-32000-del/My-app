@@ -1,10 +1,10 @@
 ---
-name: Daily archive isolation
-description: Persistence rule for immutable daily-closing snapshots and corruption containment.
+name: Cash-closing archive isolation
+description: Persistence rules for repeatable immutable cash-closing snapshots and journal filtering.
 ---
 
-Persist each closed store-day as an independent immutable snapshot, keyed by store and local calendar date. Never move or delete the source transactions, debts, or payments when closing a day.
+Persist every cash closing as an independent immutable snapshot with its store, local calendar date, and same-day closing number. Never move or delete the source transactions, debts, or payments.
 
-**Why:** A shared archive array makes one malformed JSON value capable of hiding every valid historical day, while per-day records allow corrupted entries to be skipped without affecting intact archives.
+**Why:** Cash closing is an archive boundary, not an end-of-day boundary. A store can close repeatedly on the same date, and later same-day events must remain visible without re-archiving earlier events.
 
-**How to apply:** New archive features should read snapshots independently, keep duplicate prevention scoped to store plus local date, and treat source business records as separate live data.
+**How to apply:** Give each closing a separate record, exclude current-journal events only when their event IDs already exist in a snapshot for that local date, and never derive cash balances from archive state.
