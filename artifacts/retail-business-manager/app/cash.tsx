@@ -1,56 +1,96 @@
-import React from 'react';
+import React, { useCallback, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from 'expo-router';
 import { AppShell, EmptyState, GlassCard, PageHeader } from '@/components/AppShell';
 import { formatMoney } from '@/constants/currencies';
 import { formatLocalizedDateTime } from '@/constants/i18n';
 import { useStore } from '@/context/StoreContext';
 import { useColors } from '@/hooks/useColors';
 import { useI18n } from '@/hooks/useI18n';
+import { buildDailyJournalEvents, loadCustomers, loadDebts, loadPayments, loadTransactions, type DailyJournalEvent } from '@/services/storage';
 
 export default function CashScreen() {
   const colors = useColors();
-  const { transactions } = useStore();
+  const { profile, isReady } = useStore();
   const { t, isRTL, language } = useI18n();
+  const [events, setEvents] = useState<DailyJournalEvent[]>([]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!isReady) {
+        return undefined;
+      }
+      let active = true;
+      void Promise.all([
+        loadTransactions(profile.id),
+        loadDebts(profile.id),
+        loadPayments(profile.id),
+        loadCustomers(profile.id),
+      ]).then(([transactions, debts, payments, customers]) => {
+        if (active) {
+          setEvents(buildDailyJournalEvents(profile.id, transactions, debts, payments, customers));
+        }
+      });
+      return () => {
+        active = false;
+      };
+    }, [isReady, profile.id]),
+  );
+
+  const getEventTitle = (event: DailyJournalEvent): string => {
+    if (event.type === 'cash_in') {
+      return t('cashIn');
+    }
+    if (event.type === 'cash_out') {
+      return t('cashOut');
+    }
+    const customerName = event.customerName ?? t('unknownCustomer');
+    return event.type === 'debt'
+      ? `${t('quickActionCredit')} — ${customerName}`
+      : `${t('settlementFrom')} ${customerName}`;
+  };
+
+  const getEventIcon = (event: DailyJournalEvent): React.ComponentProps<typeof Ionicons>['name'] => {
+    if (event.type === 'cash_in') return 'arrow-down-circle-outline';
+    if (event.type === 'cash_out') return 'arrow-up-circle-outline';
+    return event.type === 'debt' ? 'time-outline' : 'checkmark-done-circle-outline';
+  };
+
+  const getEventColor = (event: DailyJournalEvent) => {
+    if (event.type === 'cash_out') return colors.destructive;
+    return colors.primary;
+  };
 
   return (
     <AppShell>
       <PageHeader title={t('dailyJournal')} subtitle={t('dailyJournalHint')} showBack />
 
-      {transactions.length === 0 ? (
+      {events.length === 0 ? (
         <EmptyState
           icon="receipt-outline"
-          title={t('noTransactions')}
-          hint={t('noTransactionsHint')}
+          title={t('noJournalEvents')}
+          hint={t('noJournalEventsHint')}
         />
       ) : (
         <View style={styles.list}>
-          {transactions.map((transaction) => {
-            const isCashIn = transaction.type === 'cash_in';
+          {events.map((event) => {
+            const eventColor = getEventColor(event);
             return (
-              <GlassCard key={transaction.id} testID={`journal-transaction-${transaction.id}`} style={styles.transactionCard}>
+              <GlassCard key={event.id} testID={`journal-event-${event.id}`} style={styles.transactionCard}>
                 <View style={[styles.transactionHeader, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
                   <View style={[styles.transactionIcon, { backgroundColor: colors.accent }]}>
-                    <Ionicons
-                      name={isCashIn ? 'arrow-down-circle-outline' : 'arrow-up-circle-outline'}
-                      size={21}
-                      color={isCashIn ? colors.primary : colors.destructive}
-                    />
+                    <Ionicons name={getEventIcon(event)} size={21} color={eventColor} />
                   </View>
                   <View style={[styles.transactionContent, { alignItems: isRTL ? 'flex-end' : 'flex-start' }]}>
                     <Text style={[styles.transactionTitle, { color: colors.foreground, textAlign: isRTL ? 'right' : 'left' }]}>
-                      {t(isCashIn ? 'cashIn' : 'cashOut')} — {formatMoney(transaction.amount, transaction.currency, language)}
+                      {getEventTitle(event)} — {formatMoney(event.amount, event.currency, language)}
                     </Text>
-                    <Text style={[styles.currencyCode, { color: colors.primary }]}>{transaction.currency}</Text>
+                    <Text style={[styles.currencyCode, { color: colors.primary }]}>{event.currency}</Text>
                   </View>
                 </View>
-                {transaction.note ? (
-                  <Text style={[styles.note, { color: colors.foreground, textAlign: isRTL ? 'right' : 'left' }]}>
-                    {transaction.note}
-                  </Text>
-                ) : null}
                 <Text style={[styles.date, { color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' }]}>
-                  {formatLocalizedDateTime(new Date(transaction.createdAt), language)}
+                  {formatLocalizedDateTime(new Date(event.occurredAt), language)}
                 </Text>
               </GlassCard>
             );

@@ -189,6 +189,97 @@ export interface SettlementResult {
   payment: Payment;
 }
 
+export type DailyJournalEventType = 'cash_in' | 'cash_out' | 'debt' | 'settlement';
+
+export interface DailyJournalEvent {
+  id: string;
+  storeId: string;
+  type: DailyJournalEventType;
+  amount: number;
+  currency: CurrencyCode;
+  customerId?: string;
+  customerName?: string;
+  occurredAt: string;
+  sourceId: string;
+}
+
+export function buildDailyJournalEvents(
+  storeId: string,
+  transactions: Transaction[],
+  debts: Debt[],
+  payments: Payment[],
+  customers: Customer[],
+  now: Date = new Date(),
+): DailyJournalEvent[] {
+  const settlementTransactionIds = new Set(
+    payments
+      .filter((payment) => payment.storeId === storeId && payment.transactionId)
+      .map((payment) => payment.transactionId as string),
+  );
+  const customerNames = new Map(
+    customers
+      .filter((customer) => customer.storeId === storeId)
+      .map((customer) => [customer.id, customer.name]),
+  );
+  const events: DailyJournalEvent[] = [];
+
+  for (const transaction of transactions) {
+    if (transaction.storeId !== storeId || settlementTransactionIds.has(transaction.id) || !isSameLocalDay(transaction.createdAt, now)) {
+      continue;
+    }
+    events.push({
+      id: `transaction:${transaction.id}`,
+      storeId,
+      type: transaction.type,
+      amount: transaction.amount,
+      currency: transaction.currency,
+      occurredAt: transaction.createdAt,
+      sourceId: transaction.id,
+    });
+  }
+
+  for (const debt of debts) {
+    if (debt.storeId !== storeId || !isSameLocalDay(debt.createdAt, now)) {
+      continue;
+    }
+    events.push({
+      id: `debt:${debt.id}`,
+      storeId,
+      type: 'debt',
+      amount: debt.originalAmount ?? debt.amount,
+      currency: debt.currency,
+      customerId: debt.customerId,
+      customerName: customerNames.get(debt.customerId),
+      occurredAt: debt.createdAt,
+      sourceId: debt.id,
+    });
+  }
+
+  for (const payment of payments) {
+    if (
+      payment.storeId !== storeId
+      || payment.direction !== 'in'
+      || !payment.customerId
+      || !isSameLocalDay(payment.paidAt, now)
+    ) {
+      continue;
+    }
+    events.push({
+      id: `settlement:${payment.id}`,
+      storeId,
+      type: 'settlement',
+      amount: payment.amount.amount,
+      currency: payment.amount.currency,
+      customerId: payment.customerId,
+      customerName: customerNames.get(payment.customerId),
+      occurredAt: payment.paidAt,
+      sourceId: payment.id,
+    });
+  }
+
+  return events.sort((first, second) => Date.parse(second.occurredAt) - Date.parse(first.occurredAt));
+}
+
 export function parseLocalizedAmountInput(value: string, language: Language): number | null {
   const input = value.trim().replace(/[\s\u00A0\u202F]/g, '');
   if (!/^\d+(?:[.,]\d+)*$/.test(input)) {
@@ -568,6 +659,13 @@ function readOptionalString(record: Record<string, unknown>, key: string): strin
 
 function isValidDateString(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0 && Number.isFinite(Date.parse(value));
+}
+
+function isSameLocalDay(value: string, now: Date): boolean {
+  const date = new Date(value);
+  return date.getFullYear() === now.getFullYear()
+    && date.getMonth() === now.getMonth()
+    && date.getDate() === now.getDate();
 }
 
 async function loadAllCustomers(): Promise<Customer[]> {

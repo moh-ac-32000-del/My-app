@@ -18,14 +18,13 @@ import { KeyboardAwareScrollViewCompat } from '@/components/KeyboardAwareScrollV
 import { CURRENCY_OPTIONS, getCurrency, type CurrencyCode } from '@/constants/currencies';
 import type { TranslationKey } from '@/constants/i18n';
 import { useStore } from '@/context/StoreContext';
-import { createDebt, loadCustomers, loadDebts, parseLocalizedAmountInput, saveDebts } from '@/services/storage';
+import { calculateDebtTotals, createDebt, filterDebtsByCustomer, loadCustomers, loadDebts, parseLocalizedAmountInput, saveDebts } from '@/services/storage';
 import type { CashTransactionDraft, Customer } from '@/types/business';
 import { useColors } from '@/hooks/useColors';
 import { useI18n } from '@/hooks/useI18n';
 
 type IconName = React.ComponentProps<typeof Ionicons>['name'];
 type CashAction = 'cash-in' | 'cash-out';
-type NoticeAction = 'settlement';
 
 const menuItems: Array<{
   id: 'cash-in' | 'cash-out' | 'credit' | 'settlement';
@@ -523,40 +522,237 @@ function CustomerCreditSheet({
   );
 }
 
-function NoticeSheet({
-  action,
-  onClose,
-}: {
-  action: NoticeAction;
-  onClose: () => void;
-}) {
+function CustomerSettlementSheet({ onClose }: { onClose: () => void }) {
   const colors = useColors();
-  const { profile } = useStore();
-  const { t, isRTL } = useI18n();
+  const { profile, settleCustomerDebt } = useStore();
+  const { t, language, isRTL } = useI18n();
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [debts, setDebts] = useState<Awaited<ReturnType<typeof loadDebts>>>([]);
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string>('');
+  const [selectedCurrency, setSelectedCurrency] = useState<CurrencyCode>(profile.currency);
+  const [amount, setAmount] = useState<string>('');
+  const [validation, setValidation] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState<boolean>(false);
+  const saveInFlightRef = useRef<boolean>(false);
+  const customersWithDebt = useMemo(
+    () => customers.filter((customer) => {
+      const totals = calculateDebtTotals(filterDebtsByCustomer(debts, customer.id));
+      return CURRENCY_OPTIONS.some(({ code }) => totals[code] > 0);
+    }),
+    [customers, debts],
+  );
+  const selectedDebtTotals = useMemo(
+    () => calculateDebtTotals(filterDebtsByCustomer(debts, selectedCustomerId)),
+    [debts, selectedCustomerId],
+  );
+  const debtCurrencies = useMemo(
+    () => CURRENCY_OPTIONS.filter(({ code }) => selectedDebtTotals[code] > 0),
+    [selectedDebtTotals],
+  );
+
+  useEffect(() => {
+    let active = true;
+    void Promise.all([loadCustomers(profile.id), loadDebts(profile.id)]).then(([loadedCustomers, loadedDebts]) => {
+      if (!active) {
+        return;
+      }
+      setCustomers(loadedCustomers);
+      setDebts(loadedDebts);
+      const firstCustomer = loadedCustomers.find((customer) => {
+        const totals = calculateDebtTotals(filterDebtsByCustomer(loadedDebts, customer.id));
+        return CURRENCY_OPTIONS.some(({ code }) => totals[code] > 0);
+      });
+      setSelectedCustomerId(firstCustomer?.id ?? '');
+      if (firstCustomer) {
+        const totals = calculateDebtTotals(filterDebtsByCustomer(loadedDebts, firstCustomer.id));
+        setSelectedCurrency(CURRENCY_OPTIONS.find(({ code }) => totals[code] > 0)?.code ?? profile.currency);
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, [profile.currency, profile.id]);
+
+  const chooseCustomer = (customerId: string) => {
+    setSelectedCustomerId(customerId);
+    const totals = calculateDebtTotals(filterDebtsByCustomer(debts, customerId));
+    setSelectedCurrency(CURRENCY_OPTIONS.find(({ code }) => totals[code] > 0)?.code ?? profile.currency);
+    setValidation(null);
+  };
+
+  const confirmSettlement = async () => {
+    if (isSaving || saveInFlightRef.current) {
+      return;
+    }
+    if (!selectedCustomerId) {
+      setValidation(t('noOutstandingDebts'));
+      return;
+    }
+    if (!amount.trim()) {
+      setValidation(t('settlementAmountRequired'));
+      return;
+    }
+    const parsedAmount = parseLocalizedAmountInput(amount, language);
+    if (parsedAmount === null) {
+      setValidation(t('settlementAmountInvalid'));
+      return;
+    }
+    if (parsedAmount > selectedDebtTotals[selectedCurrency]) {
+      setValidation(t('settlementExceedsDebt'));
+      return;
+    }
+
+    saveInFlightRef.current = true;
+    setIsSaving(true);
+    try {
+      await settleCustomerDebt(selectedCustomerId, {
+        amount: parsedAmount,
+        currency: selectedCurrency,
+      });
+      onClose();
+    } catch (error) {
+      setValidation(
+        error instanceof Error && error.message === 'settlementExceedsDebt'
+          ? t('settlementExceedsDebt')
+          : t('settlementSaveError'),
+      );
+    } finally {
+      saveInFlightRef.current = false;
+      setIsSaving(false);
+    }
+  };
+
   return (
-    <View style={[styles.sheet, styles.noticeSheet, { backgroundColor: colors.glassStrong, borderColor: colors.border }]}>
+    <View style={[styles.sheet, { backgroundColor: colors.glassStrong, borderColor: colors.border }]}>
       <BlurView intensity={65} tint="dark" style={StyleSheet.absoluteFill} />
-      <View style={styles.sheetContent}>
-        <View style={styles.sheetHandleWrap}>
-          <View style={[styles.sheetHandle, { backgroundColor: colors.border }]} />
+      <KeyboardAwareScrollViewCompat
+        contentContainerStyle={styles.sheetContent}
+        keyboardShouldPersistTaps="handled"
+        bottomOffset={24}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={[styles.sheetHandle, { backgroundColor: colors.border }]} />
+        <SheetHeader title={t('quickActionSettlement')} subtitle={t('settlementFormHint')} icon="checkmark-done-circle-outline" onClose={onClose} />
+
+        <Text style={[styles.inputLabel, { color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' }]}>
+          {t('selectCustomer')}
+        </Text>
+        {customersWithDebt.length > 0 ? (
+          <View style={styles.customerOptions}>
+            {customersWithDebt.map((customer) => {
+              const selected = customer.id === selectedCustomerId;
+              return (
+                <Pressable
+                  key={customer.id}
+                  testID={`settlement-customer-${customer.id}`}
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected }}
+                  onPress={() => chooseCustomer(customer.id)}
+                  style={({ pressed }) => [
+                    styles.customerOption,
+                    {
+                      backgroundColor: selected ? colors.accent : colors.input,
+                      borderColor: selected ? colors.primary : colors.border,
+                      flexDirection: isRTL ? 'row-reverse' : 'row',
+                    },
+                    pressed && styles.pressed,
+                  ]}
+                >
+                  <View style={[styles.customerOptionMark, { backgroundColor: selected ? colors.primary : colors.glass, borderColor: selected ? colors.primary : colors.border }]}>
+                    {selected ? <Ionicons name="checkmark" size={15} color={colors.primaryForeground} /> : null}
+                  </View>
+                  <Text style={[styles.customerOptionText, { color: colors.foreground, textAlign: isRTL ? 'right' : 'left' }]}>{customer.name}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        ) : (
+          <Text style={[styles.emptyQuickHint, { color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' }]}>
+            {t('noOutstandingDebts')}
+          </Text>
+        )}
+
+        <Text style={[styles.inputLabel, { color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' }]}>
+          {t('settlementCurrency')}
+        </Text>
+        <View style={styles.creditCurrencyOptions}>
+          {debtCurrencies.map((option) => {
+            const selected = option.code === selectedCurrency;
+            return (
+              <Pressable
+                key={option.code}
+                testID={`fab-settlement-currency-${option.code}`}
+                accessibilityRole="radio"
+                accessibilityState={{ selected }}
+                onPress={() => {
+                  setSelectedCurrency(option.code);
+                  setValidation(null);
+                }}
+                style={({ pressed }) => [
+                  styles.creditCurrencyOption,
+                  {
+                    backgroundColor: selected ? colors.accent : colors.input,
+                    borderColor: selected ? colors.primary : colors.border,
+                    flexDirection: isRTL ? 'row-reverse' : 'row',
+                  },
+                  pressed && styles.pressed,
+                ]}
+              >
+                <Text style={[styles.creditCurrencyText, { color: colors.foreground }]}>
+                  {option.code} · {t('remainingDebt')} {selectedDebtTotals[option.code]}
+                </Text>
+                {selected ? <Ionicons name="checkmark-circle" size={17} color={colors.primary} /> : null}
+              </Pressable>
+            );
+          })}
         </View>
-        <SheetHeader title={t('quickActionSettlement')} subtitle={t('cashPreviewHint')} icon="time-outline" onClose={onClose} />
-        <QuickCurrencyPicker selectedCurrency={profile.currency} />
-        <View style={[styles.noticeCard, { backgroundColor: colors.accent, borderColor: colors.border }]}>
-          <Ionicons name="sparkles-outline" size={28} color={colors.primary} />
-          <Text style={[styles.noticeTitle, { color: colors.foreground, textAlign: 'center' }]}>{t('underDevelopment')}</Text>
-          <Text style={[styles.noticeHint, { color: colors.mutedForeground, textAlign: 'center' }]}>{t('actionUnavailableHint')}</Text>
+
+        <Text style={[styles.inputLabel, { color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' }]}>
+          {t('amount')}
+        </Text>
+        <View style={[styles.amountRow, { backgroundColor: colors.input, borderColor: validation ? colors.destructive : colors.border, flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
+          <TextInput
+            testID="fab-settlement-amount"
+            value={amount}
+            onChangeText={(value) => {
+              setAmount(value);
+              if (validation) setValidation(null);
+            }}
+            placeholder="0"
+            placeholderTextColor={colors.mutedForeground}
+            keyboardType="decimal-pad"
+            inputMode="decimal"
+            style={[styles.amountInput, { color: colors.foreground, textAlign: isRTL ? 'right' : 'left' }]}
+          />
+          <Text style={[styles.amountCurrency, { color: colors.primary }]}>{selectedCurrency}</Text>
         </View>
-        <Pressable
-          testID="quick-notice-close"
-          accessibilityRole="button"
-          onPress={onClose}
-          style={({ pressed }) => [styles.primaryButton, styles.fullButton, { backgroundColor: colors.primary, flexDirection: isRTL ? 'row-reverse' : 'row' }, pressed && styles.pressed]}
-        >
-          <Ionicons name="close" size={18} color={colors.primaryForeground} />
-          <Text style={[styles.primaryButtonText, { color: colors.primaryForeground }]}>{t('close')}</Text>
-        </Pressable>
-      </View>
+        {validation ? (
+          <Text testID="fab-settlement-validation" style={[styles.validation, { color: colors.destructive, textAlign: isRTL ? 'right' : 'left' }]}>
+            {validation}
+          </Text>
+        ) : null}
+
+        <View style={[styles.sheetButtons, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
+          <Pressable
+            testID="fab-settlement-cancel"
+            accessibilityRole="button"
+            onPress={onClose}
+            style={({ pressed }) => [styles.secondaryButton, { borderColor: colors.border }, pressed && styles.pressed]}
+          >
+            <Text style={[styles.secondaryButtonText, { color: colors.foreground }]}>{t('cancel')}</Text>
+          </Pressable>
+          <Pressable
+            testID="fab-settlement-confirm"
+            accessibilityRole="button"
+            onPress={() => void confirmSettlement()}
+            disabled={isSaving || customersWithDebt.length === 0}
+            style={({ pressed }) => [styles.primaryButton, { backgroundColor: colors.primary }, pressed && styles.pressed]}
+          >
+            {isSaving ? <ActivityIndicator size="small" color={colors.primaryForeground} /> : <Ionicons name="checkmark" size={18} color={colors.primaryForeground} />}
+            <Text style={[styles.primaryButtonText, { color: colors.primaryForeground }]}>{t('confirm')}</Text>
+          </Pressable>
+        </View>
+      </KeyboardAwareScrollViewCompat>
     </View>
   );
 }
@@ -570,7 +766,7 @@ export function FloatingQuickActions() {
   const [isMenuMounted, setIsMenuMounted] = useState<boolean>(false);
   const [cashAction, setCashAction] = useState<CashAction | null>(null);
   const [isCreditVisible, setIsCreditVisible] = useState<boolean>(false);
-  const [noticeAction, setNoticeAction] = useState<NoticeAction | null>(null);
+  const [isSettlementVisible, setIsSettlementVisible] = useState<boolean>(false);
   const menuProgress = useRef<Animated.Value>(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -591,7 +787,7 @@ export function FloatingQuickActions() {
   const openMenu = () => {
     setCashAction(null);
     setIsCreditVisible(false);
-    setNoticeAction(null);
+    setIsSettlementVisible(false);
     if (!isMenuOpen) {
       setIsMenuMounted(true);
     }
@@ -607,7 +803,7 @@ export function FloatingQuickActions() {
   const closeSheet = () => {
     setCashAction(null);
     setIsCreditVisible(false);
-    setNoticeAction(null);
+    setIsSettlementVisible(false);
   };
 
   const saveCredit = async (customerId: string, amount: number, currency: CurrencyCode) => {
@@ -623,7 +819,7 @@ export function FloatingQuickActions() {
   const fabAnimatedStyle = {
     transform: [{ rotate: menuProgress.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '45deg'] }) }],
   };
-  const hasSheet = Boolean(cashAction || isCreditVisible || noticeAction);
+  const hasSheet = Boolean(cashAction || isCreditVisible || isSettlementVisible);
 
   return (
     <View pointerEvents="box-none" style={[StyleSheet.absoluteFill, styles.floatingLayer]}>
@@ -672,7 +868,7 @@ export function FloatingQuickActions() {
                       setIsCreditVisible(true);
                     } else {
                       setIsMenuOpen(false);
-                      setNoticeAction(item.id);
+                      setIsSettlementVisible(true);
                     }
                   }}
                 />
@@ -711,8 +907,8 @@ export function FloatingQuickActions() {
         <View style={[styles.modalRoot, { paddingTop: insets.top, paddingBottom: Math.max(insets.bottom, 14) }]}>
           <Pressable testID="quick-sheet-backdrop" onPress={closeSheet} style={[styles.modalBackdrop, { backgroundColor: colors.overlay }]} />
           {cashAction ? <CashTransactionSheet action={cashAction} onClose={closeSheet} onSave={addTransaction} /> : null}
-           {isCreditVisible ? <CustomerCreditSheet onClose={closeSheet} onSave={saveCredit} /> : null}
-          {noticeAction ? <NoticeSheet action={noticeAction} onClose={closeSheet} /> : null}
+          {isCreditVisible ? <CustomerCreditSheet onClose={closeSheet} onSave={saveCredit} /> : null}
+          {isSettlementVisible ? <CustomerSettlementSheet onClose={closeSheet} /> : null}
         </View>
       </Modal>
     </View>
