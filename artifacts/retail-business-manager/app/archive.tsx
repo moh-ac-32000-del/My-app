@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, Share, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from 'expo-router';
 import { AppShell, EmptyState, GlassCard, PageHeader, SectionTitle } from '@/components/AppShell';
@@ -9,6 +9,7 @@ import { useStore } from '@/context/StoreContext';
 import { useColors } from '@/hooks/useColors';
 import { useI18n } from '@/hooks/useI18n';
 import { loadDailyArchives, type DailyJournalEvent } from '@/services/storage';
+import { buildArchiveShareMessage } from '@/services/archiveSharing';
 import type { DailyArchive } from '@/types/business';
 
 function parseArchiveDate(value: string): Date {
@@ -22,6 +23,7 @@ export default function ArchiveScreen() {
   const { t, language, isRTL } = useI18n();
   const [archives, setArchives] = useState<DailyArchive[]>([]);
   const [selectedArchiveId, setSelectedArchiveId] = useState<string | null>(null);
+  const [isSharing, setIsSharing] = useState(false);
   const selectedArchive = useMemo(
     () => archives.find((archive) => archive.id === selectedArchiveId) ?? null,
     [archives, selectedArchiveId],
@@ -61,6 +63,22 @@ export default function ArchiveScreen() {
     if (event.type === 'cash_in') return 'arrow-down-circle-outline';
     if (event.type === 'cash_out') return 'arrow-up-circle-outline';
     return event.type === 'debt' ? 'time-outline' : 'checkmark-done-circle-outline';
+  };
+
+  const shareSelectedArchive = async () => {
+    if (!selectedArchive || isSharing) {
+      return;
+    }
+    setIsSharing(true);
+    try {
+      const message = buildArchiveShareMessage(selectedArchive, profile.name, language, t);
+      await Share.share({ message });
+    } catch (error) {
+      console.error('Archive sharing failed', error);
+      Alert.alert(t('somethingWentWrong'), t('shareArchiveError'));
+    } finally {
+      setIsSharing(false);
+    }
   };
 
   return (
@@ -114,6 +132,22 @@ export default function ArchiveScreen() {
           {selectedArchive ? (
             <>
               <SectionTitle title={t('archiveEvents')} />
+              <Pressable
+                testID="share-archive-button"
+                accessibilityRole="button"
+                disabled={isSharing}
+                onPress={() => void shareSelectedArchive()}
+                style={({ pressed }) => [
+                  styles.shareButton,
+                  { backgroundColor: colors.primary, flexDirection: isRTL ? 'row-reverse' : 'row' },
+                  pressed && styles.pressed,
+                ]}
+              >
+                {isSharing
+                  ? <ActivityIndicator size="small" color={colors.primaryForeground} />
+                  : <Ionicons name="share-social-outline" size={17} color={colors.primaryForeground} />}
+                <Text style={[styles.shareButtonText, { color: colors.primaryForeground }]}>{t('shareArchive')}</Text>
+              </Pressable>
               {selectedArchive.snapshot.length === 0 ? (
                 <EmptyState icon="receipt-outline" title={t('archiveNoEvents')} hint={selectedArchive.date} />
               ) : (
@@ -173,4 +207,6 @@ const styles = StyleSheet.create({
   eventNote: { fontSize: 11, fontFamily: 'Inter_400Regular' },
   eventTime: { fontSize: 10, fontFamily: 'Inter_400Regular' },
   pressed: { opacity: 0.72 },
+  shareButton: { minHeight: 44, borderRadius: 15, alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 11 },
+  shareButtonText: { fontSize: 13, fontFamily: 'Inter_700Bold' },
 });
