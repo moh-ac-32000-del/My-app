@@ -81,6 +81,14 @@ export interface Payment extends BusinessEntity {
   note?: string;
 }
 
+export interface DailyArchive {
+  id: string;
+  storeId: string;
+  date: string;
+  closedAt: string;
+  snapshot: import('@/services/storage').DailyJournalEvent[];
+}
+
 export interface Debt extends BusinessEntity {
   customerId: string;
   currency: CurrencyCode;

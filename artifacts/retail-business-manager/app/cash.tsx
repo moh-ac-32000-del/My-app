@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from 'expo-router';
 import { AppShell, EmptyState, GlassCard, PageHeader } from '@/components/AppShell';
@@ -8,13 +8,14 @@ import { formatLocalizedDateTime } from '@/constants/i18n';
 import { useStore } from '@/context/StoreContext';
 import { useColors } from '@/hooks/useColors';
 import { useI18n } from '@/hooks/useI18n';
-import { loadDailyJournalEvents, type DailyJournalEvent } from '@/services/storage';
+import { closeDailyArchive, loadDailyJournalEvents, type DailyJournalEvent } from '@/services/storage';
 
 export default function CashScreen() {
   const colors = useColors();
   const { profile, isReady, journalRevision } = useStore();
   const { t, isRTL, language } = useI18n();
   const [events, setEvents] = useState<DailyJournalEvent[]>([]);
+  const [isClosing, setIsClosing] = useState<boolean>(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -57,9 +58,53 @@ export default function CashScreen() {
     return colors.primary;
   };
 
+  const closeDay = async () => {
+    if (isClosing) {
+      return;
+    }
+    setIsClosing(true);
+    try {
+      const result = await closeDailyArchive(profile.id);
+      Alert.alert(result.created ? t('archiveCreated') : t('archiveAlreadyClosed'));
+    } catch {
+      Alert.alert(t('somethingWentWrong'), t('archiveSaveError'));
+    } finally {
+      setIsClosing(false);
+    }
+  };
+
+  const confirmCloseDay = () => {
+    Alert.alert(t('closeDay'), t('closeDayConfirm'), [
+      { text: t('cancel'), style: 'cancel' },
+      { text: t('confirm'), onPress: () => void closeDay() },
+    ]);
+  };
+
   return (
     <AppShell>
-      <PageHeader title={t('dailyJournal')} subtitle={t('dailyJournalHint')} showBack />
+      <PageHeader
+        title={t('dailyJournal')}
+        subtitle={t('dailyJournalHint')}
+        showBack
+        action={
+          <Pressable
+            testID="close-day-button"
+            accessibilityRole="button"
+            disabled={isClosing}
+            onPress={confirmCloseDay}
+            style={({ pressed }) => [
+              styles.closeDayButton,
+              { backgroundColor: colors.primary },
+              pressed && styles.pressed,
+            ]}
+          >
+            {isClosing
+              ? <ActivityIndicator size="small" color={colors.primaryForeground} />
+              : <Ionicons name="lock-closed-outline" size={16} color={colors.primaryForeground} />}
+            <Text style={[styles.closeDayText, { color: colors.primaryForeground }]}>{t('closeDay')}</Text>
+          </Pressable>
+        }
+      />
 
       {events.length === 0 ? (
         <EmptyState
@@ -106,4 +151,7 @@ const styles = StyleSheet.create({
   currencyCode: { fontSize: 11, fontFamily: 'Inter_600SemiBold' },
   note: { fontSize: 13, fontFamily: 'Inter_400Regular', lineHeight: 19, marginTop: 11 },
   date: { fontSize: 11, fontFamily: 'Inter_400Regular', marginTop: 9 },
+  closeDayButton: { minHeight: 40, borderRadius: 13, paddingHorizontal: 10, alignItems: 'center', justifyContent: 'center', gap: 4 },
+  closeDayText: { fontSize: 9, fontFamily: 'Inter_700Bold' },
+  pressed: { opacity: 0.72 },
 });

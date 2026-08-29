@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { normalizeAccent } from '@/constants/colors';
 import { normalizeLanguage, type Language } from '@/constants/i18n';
 import { CURRENCY_OPTIONS, isCurrencyCode, normalizeCurrency, normalizeQuickCurrencies, type CurrencyCode } from '@/constants/currencies';
-import type { CashTransactionDraft, Customer, Debt, Payment, StoreProfile, Transaction } from '@/types/business';
+import type { CashTransactionDraft, Customer, DailyArchive, Debt, Payment, StoreProfile, Transaction } from '@/types/business';
 
 const PROFILE_KEY = '@retail-business-manager/store-profile';
 const AUTH_KEY = '@retail-business-manager/authenticated';
@@ -11,11 +11,13 @@ const CUSTOMERS_KEY = '@retail-business-manager/customers';
 const TRANSACTIONS_KEY = '@retail-business-manager/transactions';
 const DEBTS_KEY = '@retail-business-manager/debts';
 const PAYMENTS_KEY = '@retail-business-manager/payments';
+const ARCHIVE_KEY_PREFIX = '@retail-business-manager/daily-archive/';
 
 let transactionSequence = 0;
 let debtSequence = 0;
 let paymentSequence = 0;
 let settlementQueue: Promise<void> = Promise.resolve();
+let archiveClosingQueue: Promise<void> = Promise.resolve();
 
 export async function loadStoreProfile(): Promise<unknown | null> {
   const storedProfile = await AsyncStorage.getItem(PROFILE_KEY);
@@ -199,6 +201,7 @@ export interface DailyJournalEvent {
   currency: CurrencyCode;
   customerId?: string;
   customerName?: string;
+  note?: string;
   occurredAt: string;
   sourceId: string;
 }
@@ -233,6 +236,7 @@ export function buildDailyJournalEvents(
       type: transaction.type,
       amount: transaction.amount,
       currency: transaction.currency,
+      ...(transaction.note ? { note: transaction.note } : {}),
       occurredAt: transaction.createdAt,
       sourceId: transaction.id,
     });
@@ -272,6 +276,7 @@ export function buildDailyJournalEvents(
       currency: payment.amount.currency,
       customerId: payment.customerId,
       customerName: customerNames.get(payment.customerId),
+      ...(payment.note ? { note: payment.note } : {}),
       occurredAt: payment.paidAt,
       sourceId: payment.id,
     });
@@ -291,6 +296,164 @@ export async function loadDailyJournalEvents(
     loadCustomers(storeId),
   ]);
   return buildDailyJournalEvents(storeId, transactions, debts, payments, customers, now);
+}
+
+export interface DailyArchiveCloseResult {
+  archive: DailyArchive;
+  created: boolean;
+}
+
+export function getLocalDateKey(date: Date = new Date()): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+export function createDailyArchive(
+  storeId: string,
+  date: string,
+  snapshot: DailyJournalEvent[],
+  closedAt: string,
+): DailyArchive {
+  if (typeof storeId !== 'string' || storeId.trim().length === 0) {
+    throw new Error('storeIdRequired');
+  }
+  if (!isValidArchiveDate(date)) {
+    throw new Error('archiveDateInvalid');
+  }
+  if (!isValidDateString(closedAt)) {
+    throw new Error('closedAtInvalid');
+  }
+
+  return {
+    id: `archive:${encodeURIComponent(storeId.trim())}:${date}`,
+    storeId: storeId.trim(),
+    date,
+    closedAt,
+    snapshot: snapshot.map((event) => ({ ...event })),
+  };
+}
+
+export async function closeDailyArchive(
+  storeId: string,
+  now: Date = new Date(),
+): Promise<DailyArchiveCloseResult> {
+  const operation = archiveClosingQueue
+    .catch(() => undefined)
+    .then(() => closeDailyArchiveNow(storeId, now));
+  archiveClosingQueue = operation.then(() => undefined, () => undefined);
+  return operation;
+}
+
+async function closeDailyArchiveNow(
+  storeId: string,
+  now: Date,
+): Promise<DailyArchiveCloseResult> {
+  const date = getLocalDateKey(now);
+  const key = getDailyArchiveStorageKey(storeId, date);
+  const existingRaw = await AsyncStorage.getItem(key);
+  if (existingRaw !== null) {
+    const existing = parseStoredDailyArchive(existingRaw);
+    if (!existing) {
+      throw new Error('archiveDataCorrupted');
+    }
+    return { archive: existing, created: false };
+  }
+
+  const snapshot = await loadDailyJournalEvents(storeId, now);
+  const archive = createDailyArchive(storeId, date, snapshot, now.toISOString());
+  await AsyncStorage.setItem(key, JSON.stringify(archive));
+  return { archive, created: true };
+}
+
+export async function loadDailyArchives(storeId: string): Promise<DailyArchive[]> {
+  if (typeof storeId !== 'string' || storeId.trim().length === 0) {
+    return [];
+  }
+
+  try {
+    const keys = await AsyncStorage.getAllKeys();
+    const prefix = `${ARCHIVE_KEY_PREFIX}${encodeURIComponent(storeId.trim())}:`;
+    const archiveKeys = keys.filter((key) => key.startsWith(prefix));
+    const archives = await Promise.all(archiveKeys.map(async (key) => {
+      const raw = await AsyncStorage.getItem(key);
+      return raw === null ? null : parseStoredDailyArchive(raw);
+    }));
+    return archives
+      .filter((archive): archive is DailyArchive => archive !== null && archive.storeId === storeId.trim())
+      .sort((first, second) => {
+        const dateOrder = second.date.localeCompare(first.date);
+        return dateOrder !== 0 ? dateOrder : Date.parse(second.closedAt) - Date.parse(first.closedAt);
+      });
+  } catch {
+    return [];
+  }
+}
+
+export async function loadDailyArchive(storeId: string, date: string): Promise<DailyArchive | null> {
+  try {
+    const raw = await AsyncStorage.getItem(getDailyArchiveStorageKey(storeId, date));
+    return raw === null ? null : parseStoredDailyArchive(raw);
+  } catch {
+    return null;
+  }
+}
+
+function getDailyArchiveStorageKey(storeId: string, date: string): string {
+  return `${ARCHIVE_KEY_PREFIX}${encodeURIComponent(storeId.trim())}:${date}`;
+}
+
+function isValidArchiveDate(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return false;
+  }
+  const [year, month, day] = value.split('-').map(Number);
+  const parsed = new Date(year, month - 1, day);
+  return parsed.getFullYear() === year && parsed.getMonth() === month - 1 && parsed.getDate() === day;
+}
+
+function parseStoredDailyArchive(raw: string): DailyArchive | null {
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!isRecord(parsed) || typeof parsed.id !== 'string' || typeof parsed.storeId !== 'string' || typeof parsed.date !== 'string' || typeof parsed.closedAt !== 'string' || !Array.isArray(parsed.snapshot)) {
+      return null;
+    }
+    if (!isValidArchiveDate(parsed.date) || !isValidDateString(parsed.closedAt)) {
+      return null;
+    }
+    const snapshot = parsed.snapshot.filter(isDailyJournalEvent);
+    if (snapshot.length !== parsed.snapshot.length) {
+      return null;
+    }
+    return {
+      id: parsed.id,
+      storeId: parsed.storeId,
+      date: parsed.date,
+      closedAt: parsed.closedAt,
+      snapshot: snapshot.map((event) => ({ ...event })),
+    };
+  } catch {
+    return null;
+  }
+}
+
+function isDailyJournalEvent(value: unknown): value is DailyJournalEvent {
+  if (!isRecord(value)) {
+    return false;
+  }
+  return typeof value.id === 'string'
+    && typeof value.storeId === 'string'
+    && (value.type === 'cash_in' || value.type === 'cash_out' || value.type === 'debt' || value.type === 'settlement')
+    && typeof value.amount === 'number'
+    && Number.isFinite(value.amount)
+    && isCurrencyCode(value.currency)
+    && (value.customerId === undefined || typeof value.customerId === 'string')
+    && (value.customerName === undefined || typeof value.customerName === 'string')
+    && (value.note === undefined || typeof value.note === 'string')
+    && typeof value.occurredAt === 'string'
+    && isValidDateString(value.occurredAt)
+    && typeof value.sourceId === 'string';
 }
 
 export function parseLocalizedAmountInput(value: string, language: Language): number | null {
