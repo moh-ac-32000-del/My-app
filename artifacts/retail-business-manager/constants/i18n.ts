@@ -35,10 +35,18 @@ const ar = {
   quickActionCredit: 'آجل',
   quickActionSettlement: 'سداد',
   quickActionCurrencies: 'العملات السريعة',
-  cashInTitle: 'إدخال نقدي تجريبي',
-  cashOutTitle: 'إخراج نقدي تجريبي',
-  cashPreviewHint: 'هذه معاينة للواجهة فقط',
+  cashInTitle: 'إضافة عملية داخل',
+  cashOutTitle: 'إضافة عملية خارج',
+  cashPreviewHint: 'سجّل العملية النقدية الحالية',
   previewOnlyHint: 'لن يتم حفظ العملية أو تنفيذ أي محاسبة',
+  dailyJournal: 'اليومية',
+  dailyJournalHint: 'سجل عمليات النقد داخل وخارج',
+  cashIn: 'داخل',
+  cashOut: 'خارج',
+  transactionAdded: 'تم حفظ العملية',
+  transactionSaveError: 'تعذر حفظ العملية، حاول مرة أخرى',
+  noTransactions: 'لا توجد عمليات بعد',
+  noTransactionsHint: 'أضف عملية داخل أو خارج لتظهر هنا',
   amount: 'المبلغ',
   currentCurrency: 'العملة الحالية',
   optionalNote: 'ملاحظة اختيارية',
@@ -194,10 +202,18 @@ const en: Record<TranslationKey, string> = {
   quickActionCredit: 'Credit',
   quickActionSettlement: 'Settlement',
   quickActionCurrencies: 'Quick currencies',
-  cashInTitle: 'Cash in preview',
-  cashOutTitle: 'Cash out preview',
-  cashPreviewHint: 'This is a UI-only preview',
+  cashInTitle: 'Add cash-in transaction',
+  cashOutTitle: 'Add cash-out transaction',
+  cashPreviewHint: 'Record the current cash transaction',
   previewOnlyHint: 'Nothing will be saved and no accounting will run',
+  dailyJournal: 'Daily journal',
+  dailyJournalHint: 'A record of cash-in and cash-out transactions',
+  cashIn: 'Cash in',
+  cashOut: 'Cash out',
+  transactionAdded: 'Transaction saved',
+  transactionSaveError: 'Could not save the transaction. Try again.',
+  noTransactions: 'No transactions yet',
+  noTransactionsHint: 'Add a cash-in or cash-out transaction to see it here',
   amount: 'Amount',
   currentCurrency: 'Current currency',
   optionalNote: 'Optional note',
@@ -351,10 +367,18 @@ const tr: Record<TranslationKey, string> = {
   quickActionCredit: 'Vadeli',
   quickActionSettlement: 'Tahsilat',
   quickActionCurrencies: 'Hızlı para birimleri',
-  cashInTitle: 'Nakit giriş önizlemesi',
-  cashOutTitle: 'Nakit çıkış önizlemesi',
-  cashPreviewHint: 'Bu yalnızca arayüz önizlemesidir',
+  cashInTitle: 'Nakit giriş işlemi ekle',
+  cashOutTitle: 'Nakit çıkış işlemi ekle',
+  cashPreviewHint: 'Mevcut nakit işlemini kaydedin',
   previewOnlyHint: 'Hiçbir şey kaydedilmez ve muhasebe çalışmaz',
+  dailyJournal: 'Günlük',
+  dailyJournalHint: 'Nakit giriş ve çıkış işlemleri kaydı',
+  cashIn: 'Giriş',
+  cashOut: 'Çıkış',
+  transactionAdded: 'İşlem kaydedildi',
+  transactionSaveError: 'İşlem kaydedilemedi. Tekrar deneyin.',
+  noTransactions: 'Henüz işlem yok',
+  noTransactionsHint: 'Burada görmek için bir giriş veya çıkış işlemi ekleyin',
   amount: 'Tutar',
   currentCurrency: 'Geçerli para birimi',
   optionalNote: 'İsteğe bağlı not',
@@ -492,6 +516,17 @@ export function isRTL(language: Language): boolean {
 export function formatLocalizedDate(date: Date, language: Language): string {
   const locale = language === 'ar' ? 'ar' : language === 'tr' ? 'tr-TR' : 'en-US';
   return new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'long', year: 'numeric' }).format(date);
+}
+
+export function formatLocalizedDateTime(date: Date, language: Language): string {
+  const locale = language === 'ar' ? 'ar' : language === 'tr' ? 'tr-TR' : 'en-US';
+  return new Intl.DateTimeFormat(locale, {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(date);
 }
 
 export function translate(key: TranslationKey, language: Language = 'ar'): string {

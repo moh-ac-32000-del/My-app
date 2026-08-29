@@ -1,5 +1,5 @@
 import React, { createContext, ReactNode, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import type { StoreProfile } from '@/types/business';
+import type { CashTransactionDraft, StoreProfile, Transaction } from '@/types/business';
 import { isRTL, normalizeLanguage, translate, type Language, type TranslationKey } from '@/constants/i18n';
 import { DEFAULT_CURRENCY, normalizeCurrency, normalizeQuickCurrencies, type CurrencyCode } from '@/constants/currencies';
 import { normalizeAccent, type AccentColor } from '@/constants/colors';
@@ -11,6 +11,9 @@ import {
   normalizeStoredStoreProfile,
   saveAuthenticatedState,
   saveStoreProfile,
+  createCashTransaction,
+  loadTransactions,
+  saveTransactions,
 } from '@/services/storage';
 
 const defaultProfile: StoreProfile = {
@@ -32,6 +35,8 @@ interface StoreContextValue {
   t: (key: TranslationKey) => string;
   isAuthenticated: boolean;
   isReady: boolean;
+  transactions: Transaction[];
+  addTransaction: (draft: CashTransactionDraft) => Promise<Transaction>;
   saveProfile: (updates: Partial<StoreProfile>) => Promise<void>;
   toggleQuickCurrency: (code: CurrencyCode) => Promise<void>;
   setAuthenticated: (value: boolean) => Promise<void>;
@@ -44,7 +49,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<StoreProfile>(defaultProfile);
   const [isAuthenticated, setIsAuthenticatedState] = useState<boolean>(false);
   const [isReady, setIsReady] = useState<boolean>(false);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
   const profileRef = useRef<StoreProfile>(defaultProfile);
+  const transactionsRef = useRef<Transaction[]>([]);
+  const transactionLoadPromiseRef = useRef<Promise<void>>(Promise.resolve());
   const profileWriteQueueRef = useRef<Promise<void>>(Promise.resolve());
 
   useEffect(() => {
@@ -70,6 +78,26 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }
     void loadLocalState();
   }, []);
+
+  useEffect(() => {
+    if (!isReady) {
+      return;
+    }
+
+    let isActive = true;
+    const loadPromise = loadTransactions(profile.id).then((loadedTransactions) => {
+      if (!isActive) {
+        return;
+      }
+      transactionsRef.current = loadedTransactions;
+      setTransactions(loadedTransactions);
+    });
+    transactionLoadPromiseRef.current = loadPromise;
+
+    return () => {
+      isActive = false;
+    };
+  }, [isReady, profile.id]);
 
   const saveProfile = async (updates: Partial<StoreProfile>) => {
     const currentProfile = profileRef.current;
@@ -98,6 +126,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     await saveProfile({ quickCurrencies: nextCurrencies });
   };
 
+  const addTransaction = async (draft: CashTransactionDraft): Promise<Transaction> => {
+    await transactionLoadPromiseRef.current;
+    const transaction = createCashTransaction(profileRef.current.id, draft);
+    const nextTransactions = [transaction, ...transactionsRef.current];
+    await saveTransactions(profileRef.current.id, nextTransactions);
+    transactionsRef.current = nextTransactions;
+    setTransactions(nextTransactions);
+    return transaction;
+  };
+
   const setAuthenticated = async (value: boolean) => {
     setIsAuthenticatedState(value);
     await saveAuthenticatedState(value);
@@ -119,12 +157,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       t: (key: TranslationKey) => translate(key, language),
       isAuthenticated,
       isReady,
+      transactions,
+      addTransaction,
       saveProfile,
       toggleQuickCurrency,
       setAuthenticated,
       resetLocalSession,
     }),
-    [profile, language, rtl, isAuthenticated, isReady],
+    [profile, language, rtl, isAuthenticated, isReady, transactions],
   );
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;

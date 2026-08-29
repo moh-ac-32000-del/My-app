@@ -17,6 +17,7 @@ import { KeyboardAwareScrollViewCompat } from '@/components/KeyboardAwareScrollV
 import { CURRENCY_OPTIONS, getCurrency, type CurrencyCode } from '@/constants/currencies';
 import type { TranslationKey } from '@/constants/i18n';
 import { useStore } from '@/context/StoreContext';
+import type { CashTransactionDraft } from '@/types/business';
 import { useColors } from '@/hooks/useColors';
 import { useI18n } from '@/hooks/useI18n';
 
@@ -120,9 +121,15 @@ function SheetHeader({
   );
 }
 
-function QuickCurrencyPicker() {
+function QuickCurrencyPicker({
+  selectedCurrency,
+  onSelect,
+}: {
+  selectedCurrency: CurrencyCode;
+  onSelect?: (code: CurrencyCode) => void;
+}) {
   const colors = useColors();
-  const { profile, saveProfile } = useStore();
+  const { profile } = useStore();
   const { t, isRTL } = useI18n();
   const quickCurrencies = useMemo(
     () => CURRENCY_OPTIONS.filter((option) => profile.quickCurrencies.includes(option.code)),
@@ -130,7 +137,7 @@ function QuickCurrencyPicker() {
   );
 
   const chooseCurrency = async (code: CurrencyCode) => {
-    await saveProfile({ currency: code });
+    onSelect?.(code);
     await Haptics.selectionAsync();
   };
 
@@ -142,7 +149,7 @@ function QuickCurrencyPicker() {
       {quickCurrencies.length > 0 ? (
         <View style={[styles.quickCurrencyGrid, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
           {quickCurrencies.map((option) => {
-            const selected = option.code === profile.currency;
+            const selected = option.code === selectedCurrency;
             return (
               <Pressable
                 key={option.code}
@@ -172,23 +179,27 @@ function QuickCurrencyPicker() {
   );
 }
 
-function CashPreviewSheet({
+function CashTransactionSheet({
   action,
   onClose,
+  onSave,
 }: {
   action: CashAction;
   onClose: () => void;
+  onSave: (draft: CashTransactionDraft) => Promise<unknown>;
 }) {
   const colors = useColors();
   const { profile } = useStore();
   const { t, isRTL } = useI18n();
   const [amount, setAmount] = useState<string>('');
   const [note, setNote] = useState<string>('');
+  const [selectedCurrency, setSelectedCurrency] = useState<CurrencyCode>(profile.currency);
   const [validation, setValidation] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState<boolean>(false);
   const titleKey = action === 'cash-in' ? 'cashInTitle' : 'cashOutTitle';
   const icon: IconName = action === 'cash-in' ? 'arrow-down-circle-outline' : 'arrow-up-circle-outline';
 
-  const confirmPreview = () => {
+  const confirmTransaction = async () => {
     const normalized = Number(amount.replace(',', '.').trim());
     if (!amount.trim()) {
       setValidation(t('amountRequired'));
@@ -199,7 +210,20 @@ function CashPreviewSheet({
       return;
     }
     setValidation(null);
-    onClose();
+    setIsSaving(true);
+    try {
+      await onSave({
+        type: action === 'cash-in' ? 'cash_in' : 'cash_out',
+        amount: normalized,
+        currency: selectedCurrency,
+        note: note.trim() || undefined,
+      });
+      onClose();
+    } catch {
+      setValidation(t('transactionSaveError'));
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -219,14 +243,7 @@ function CashPreviewSheet({
           onClose={onClose}
         />
 
-        <View style={[styles.previewBanner, { backgroundColor: colors.accent, borderColor: colors.border, flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
-          <Ionicons name="information-circle-outline" size={18} color={colors.primary} />
-          <Text style={[styles.previewBannerText, { color: colors.accentForeground, textAlign: isRTL ? 'right' : 'left' }]}>
-            {t('previewOnlyHint')}
-          </Text>
-        </View>
-
-        <QuickCurrencyPicker />
+        <QuickCurrencyPicker selectedCurrency={selectedCurrency} onSelect={setSelectedCurrency} />
 
         <Text style={[styles.inputLabel, { color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' }]}>
           {t('amount')}
@@ -245,7 +262,7 @@ function CashPreviewSheet({
             inputMode="decimal"
             style={[styles.amountInput, { color: colors.foreground, textAlign: isRTL ? 'right' : 'left' }]}
           />
-          <Text style={[styles.amountCurrency, { color: colors.primary }]}>{profile.currency}</Text>
+          <Text style={[styles.amountCurrency, { color: colors.primary }]}>{selectedCurrency}</Text>
         </View>
         {validation ? (
           <Text testID="cash-preview-validation" style={[styles.validation, { color: colors.destructive, textAlign: isRTL ? 'right' : 'left' }]}>
@@ -254,15 +271,15 @@ function CashPreviewSheet({
         ) : null}
 
         <Text style={[styles.inputLabel, { color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' }]}>
-          {t('currentCurrency')}
+          {t('currency')}
         </Text>
         <View style={[styles.currencyReadout, { backgroundColor: colors.input, borderColor: colors.border, flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
           <View style={[styles.currencySymbol, { backgroundColor: colors.accent }]}>
-            <Text style={[styles.currencySymbolText, { color: colors.primary }]}>{getCurrency(profile.currency).symbol}</Text>
+            <Text style={[styles.currencySymbolText, { color: colors.primary }]}>{getCurrency(selectedCurrency).symbol}</Text>
           </View>
-          <Text style={[styles.currencyReadoutCode, { color: colors.foreground }]}>{profile.currency}</Text>
+          <Text style={[styles.currencyReadoutCode, { color: colors.foreground }]}>{selectedCurrency}</Text>
           <Text style={[styles.currencyReadoutName, { color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' }]}>
-            {t(getCurrency(profile.currency).nameKey)}
+            {t(getCurrency(selectedCurrency).nameKey)}
           </Text>
         </View>
 
@@ -291,7 +308,8 @@ function CashPreviewSheet({
           <Pressable
             testID="cash-preview-confirm"
             accessibilityRole="button"
-            onPress={confirmPreview}
+            onPress={() => void confirmTransaction()}
+            disabled={isSaving}
             style={({ pressed }) => [styles.primaryButton, { backgroundColor: colors.primary }, pressed && styles.pressed]}
           >
             <Ionicons name="checkmark" size={18} color={colors.primaryForeground} />
@@ -311,6 +329,7 @@ function NoticeSheet({
   onClose: () => void;
 }) {
   const colors = useColors();
+  const { profile } = useStore();
   const { t, isRTL } = useI18n();
   const titleKey = action === 'credit' ? 'quickActionCredit' : 'quickActionSettlement';
   return (
@@ -321,7 +340,7 @@ function NoticeSheet({
           <View style={[styles.sheetHandle, { backgroundColor: colors.border }]} />
         </View>
         <SheetHeader title={t(titleKey)} subtitle={t('cashPreviewHint')} icon="time-outline" onClose={onClose} />
-        <QuickCurrencyPicker />
+        <QuickCurrencyPicker selectedCurrency={profile.currency} />
         <View style={[styles.noticeCard, { backgroundColor: colors.accent, borderColor: colors.border }]}>
           <Ionicons name="sparkles-outline" size={28} color={colors.primary} />
           <Text style={[styles.noticeTitle, { color: colors.foreground, textAlign: 'center' }]}>{t('underDevelopment')}</Text>
@@ -343,6 +362,7 @@ function NoticeSheet({
 
 export function FloatingQuickActions() {
   const colors = useColors();
+  const { addTransaction } = useStore();
   const { t, isRTL } = useI18n();
   const insets = useSafeAreaInsets();
   const [isMenuOpen, setIsMenuOpen] = useState<boolean>(false);
@@ -476,7 +496,7 @@ export function FloatingQuickActions() {
       >
         <View style={[styles.modalRoot, { paddingTop: insets.top, paddingBottom: Math.max(insets.bottom, 14) }]}>
           <Pressable testID="quick-sheet-backdrop" onPress={closeSheet} style={[styles.modalBackdrop, { backgroundColor: colors.overlay }]} />
-          {cashAction ? <CashPreviewSheet action={cashAction} onClose={closeSheet} /> : null}
+          {cashAction ? <CashTransactionSheet action={cashAction} onClose={closeSheet} onSave={addTransaction} /> : null}
           {noticeAction ? <NoticeSheet action={noticeAction} onClose={closeSheet} /> : null}
         </View>
       </Modal>

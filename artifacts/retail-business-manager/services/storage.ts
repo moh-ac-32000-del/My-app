@@ -1,13 +1,16 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { normalizeAccent } from '@/constants/colors';
 import { normalizeLanguage } from '@/constants/i18n';
-import { normalizeCurrency, normalizeQuickCurrencies } from '@/constants/currencies';
-import type { Customer, StoreProfile } from '@/types/business';
+import { CURRENCY_OPTIONS, isCurrencyCode, normalizeCurrency, normalizeQuickCurrencies, type CurrencyCode } from '@/constants/currencies';
+import type { CashTransactionDraft, Customer, StoreProfile, Transaction } from '@/types/business';
 
 const PROFILE_KEY = '@retail-business-manager/store-profile';
 const AUTH_KEY = '@retail-business-manager/authenticated';
 const LEGACY_LANGUAGE_KEY = '@retail-business-manager/language';
 const CUSTOMERS_KEY = '@retail-business-manager/customers';
+const TRANSACTIONS_KEY = '@retail-business-manager/transactions';
+
+let transactionSequence = 0;
 
 export async function loadStoreProfile(): Promise<unknown | null> {
   const storedProfile = await AsyncStorage.getItem(PROFILE_KEY);
@@ -60,6 +63,89 @@ export async function saveCustomers(storeId: string, customers: Customer[]): Pro
   await AsyncStorage.setItem(CUSTOMERS_KEY, JSON.stringify([...otherStoreCustomers, ...customers]));
 }
 
+export function createTransactionId(): string {
+  transactionSequence += 1;
+  return `transaction_${Date.now().toString(36)}_${transactionSequence.toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+}
+
+export function validateCashTransactionDraft(input: {
+  storeId: unknown;
+  type: unknown;
+  amount: unknown;
+  currency: unknown;
+}): string | null {
+  if (typeof input.storeId !== 'string' || input.storeId.trim().length === 0) {
+    return 'storeIdRequired';
+  }
+  if (input.type !== 'cash_in' && input.type !== 'cash_out') {
+    return 'transactionTypeInvalid';
+  }
+  if (typeof input.amount !== 'number' || !Number.isFinite(input.amount) || input.amount <= 0) {
+    return 'amountInvalid';
+  }
+  if (!isCurrencyCode(input.currency)) {
+    return 'currencyInvalid';
+  }
+  return null;
+}
+
+export function createCashTransaction(
+  storeId: string,
+  draft: CashTransactionDraft,
+  now: string = new Date().toISOString(),
+): Transaction {
+  const validation = validateCashTransactionDraft({ storeId, ...draft });
+  if (validation) {
+    throw new Error(validation);
+  }
+
+  const note = typeof draft.note === 'string' ? draft.note.trim() : '';
+  return {
+    id: createTransactionId(),
+    storeId: storeId.trim(),
+    type: draft.type,
+    amount: draft.amount,
+    currency: draft.currency,
+    ...(note ? { note } : {}),
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+export function calculateCurrencyNetTotals(transactions: Transaction[]): Record<CurrencyCode, number> {
+  const totals = Object.fromEntries(CURRENCY_OPTIONS.map(({ code }) => [code, 0])) as Record<CurrencyCode, number>;
+
+  for (const transaction of transactions) {
+    totals[transaction.currency] += transaction.type === 'cash_in' ? transaction.amount : -transaction.amount;
+  }
+  return totals;
+}
+
+export async function loadTransactions(storeId: string): Promise<Transaction[]> {
+  try {
+    const transactions = await loadAllTransactions();
+    return transactions
+      .filter((transaction) => transaction.storeId === storeId)
+      .sort((first, second) => Date.parse(second.createdAt) - Date.parse(first.createdAt));
+  } catch {
+    return [];
+  }
+}
+
+export async function saveTransactions(storeId: string, transactions: Transaction[]): Promise<void> {
+  if (transactions.some((transaction) => transaction.storeId !== storeId || !isStoredTransaction(transaction))) {
+    throw new Error('All transactions must be valid and belong to the active store');
+  }
+
+  const stored = await readStoredTransactions();
+  if (stored.isCorrupted) {
+    throw new Error('Stored transaction data is corrupted');
+  }
+
+  const otherStoreTransactions = stored.transactions.filter((transaction) => transaction.storeId !== storeId);
+  await AsyncStorage.setItem(TRANSACTIONS_KEY, JSON.stringify([...otherStoreTransactions, ...transactions]));
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -94,6 +180,79 @@ async function loadAllCustomers(): Promise<Customer[]> {
   return parsed
     .map(normalizeStoredCustomer)
     .filter((customer): customer is Customer => customer !== null);
+}
+
+async function loadAllTransactions(): Promise<Transaction[]> {
+  return (await readStoredTransactions()).transactions;
+}
+
+async function readStoredTransactions(): Promise<{ transactions: Transaction[]; isCorrupted: boolean }> {
+  const storedTransactions = await AsyncStorage.getItem(TRANSACTIONS_KEY);
+  if (!storedTransactions) {
+    return { transactions: [], isCorrupted: false };
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(storedTransactions) as unknown;
+  } catch {
+    return { transactions: [], isCorrupted: true };
+  }
+
+  if (!Array.isArray(parsed)) {
+    return { transactions: [], isCorrupted: true };
+  }
+
+  return {
+    transactions: parsed
+      .map(normalizeStoredTransaction)
+      .filter((transaction): transaction is Transaction => transaction !== null),
+    isCorrupted: false,
+  };
+}
+
+function isStoredTransaction(value: unknown): value is Transaction {
+  return normalizeStoredTransaction(value) !== null;
+}
+
+function normalizeStoredTransaction(value: unknown): Transaction | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const id = readOptionalString(value, 'id');
+  const storeId = readOptionalString(value, 'storeId');
+  const type = value.type;
+  const amount = value.amount;
+  const currency = value.currency;
+  const createdAt = value.createdAt;
+  const updatedAt = value.updatedAt;
+
+  if (
+    !id ||
+    !storeId ||
+    (type !== 'cash_in' && type !== 'cash_out') ||
+    typeof amount !== 'number' ||
+    !Number.isFinite(amount) ||
+    amount <= 0 ||
+    !isCurrencyCode(currency) ||
+    !isValidDateString(createdAt) ||
+    !isValidDateString(updatedAt)
+  ) {
+    return null;
+  }
+
+  const note = readOptionalString(value, 'note');
+  return {
+    id,
+    storeId,
+    type,
+    amount,
+    currency,
+    ...(note ? { note } : {}),
+    createdAt,
+    updatedAt,
+  };
 }
 
 function normalizeStoredCustomer(value: unknown): Customer | null {

@@ -32,6 +32,10 @@ export function getCurrency(code: CurrencyCode): CurrencyDefinition {
   return currencyMap[code] ?? currencyMap[DEFAULT_CURRENCY];
 }
 
+export function isCurrencyCode(value: unknown): value is CurrencyCode {
+  return typeof value === 'string' && currencyCodes.has(value as CurrencyCode);
+}
+
 export function normalizeCurrency(value: unknown, fallback: CurrencyCode = DEFAULT_CURRENCY): CurrencyCode {
   if (typeof value === 'string' && value in currencyMap) {
     return value as CurrencyCode;

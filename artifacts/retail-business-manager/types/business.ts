@@ -51,15 +51,19 @@ export interface Customer extends BusinessEntity {
   isActive: boolean;
 }
 
-export type TransactionType = 'sale' | 'purchase' | 'cash-in' | 'cash-out' | 'adjustment';
-export type TransactionStatus = 'draft' | 'posted' | 'cancelled';
+export type TransactionType = 'cash_in' | 'cash_out';
 
-export interface Transaction extends BusinessEntity {
+export interface CashTransactionDraft {
   type: TransactionType;
-  status: TransactionStatus;
-  total: MoneyValue;
-  customerId?: string;
-  occurredAt: string;
+  amount: number;
+  currency: CurrencyCode;
+  note?: string;
+}
+
+export interface Transaction extends StoreScopedEntity {
+  type: TransactionType;
+  amount: number;
+  currency: CurrencyCode;
   note?: string;
 }
 

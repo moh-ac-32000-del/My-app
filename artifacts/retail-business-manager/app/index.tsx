@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -6,17 +6,21 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppShell, GlassCard, PageHeader, SectionTitle } from '@/components/AppShell';
 import { AmountMetric } from '@/components/MetricCard';
 import { SplashView } from '@/components/SplashView';
-import { formatLocalizedDate } from '@/constants/i18n';
+import { formatMoney } from '@/constants/currencies';
+import { formatLocalizedDate, formatLocalizedDateTime } from '@/constants/i18n';
 import { useStore } from '@/context/StoreContext';
 import { useColors } from '@/hooks/useColors';
 import { useI18n } from '@/hooks/useI18n';
+import { calculateCurrencyNetTotals } from '@/services/storage';
 
 export default function DashboardScreen() {
   const colors = useColors();
   const router = useRouter();
-  const { profile, isReady, isAuthenticated } = useStore();
+  const { profile, isReady, isAuthenticated, transactions } = useStore();
   const { t, isRTL, language } = useI18n();
   const insets = useSafeAreaInsets();
+  const balances = useMemo(() => calculateCurrencyNetTotals(transactions), [transactions]);
+  const recentTransactions = transactions.slice(0, 3);
 
   useEffect(() => {
     if (isReady && !isAuthenticated) {
@@ -47,14 +51,14 @@ export default function DashboardScreen() {
       <View style={[styles.metricRow, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
         <AmountMetric
           label={`${t('cashBalance')} TRY`}
-          value={0}
+          value={balances.TRY}
           icon="wallet-outline"
           currency="TRY"
           onPress={() => router.push('/cash')}
         />
         <AmountMetric
           label={`${t('cashBalance')} USD`}
-          value={0}
+          value={balances.USD}
           icon="wallet-outline"
           currency="USD"
           onPress={() => router.push('/cash')}
@@ -62,12 +66,51 @@ export default function DashboardScreen() {
       </View>
 
       <SectionTitle title={t('recentActivity')} />
-      <GlassCard style={[styles.emptyActivity, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
-        <Ionicons name="pulse-outline" size={22} color={colors.mutedForeground} />
-        <View style={{ flex: 1 }}>
-          <Text style={[styles.emptyTitle, { color: colors.foreground, textAlign: isRTL ? 'right' : 'left' }]}>{t('noActivity')}</Text>
-          <Text style={[styles.emptyHint, { color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' }]}>{t('startByAdding')}</Text>
-        </View>
+      <GlassCard style={styles.emptyActivity}>
+        {recentTransactions.length === 0 ? (
+          <View style={[styles.emptyActivityRow, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
+            <Ionicons name="pulse-outline" size={22} color={colors.mutedForeground} />
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.emptyTitle, { color: colors.foreground, textAlign: isRTL ? 'right' : 'left' }]}>{t('noActivity')}</Text>
+              <Text style={[styles.emptyHint, { color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' }]}>{t('startByAdding')}</Text>
+            </View>
+          </View>
+        ) : (
+          <View>
+            {recentTransactions.map((transaction, index) => {
+              const isCashIn = transaction.type === 'cash_in';
+              return (
+                <View
+                  key={transaction.id}
+                  style={[
+                    styles.activityRow,
+                    { flexDirection: isRTL ? 'row-reverse' : 'row', borderBottomColor: colors.border },
+                    index === recentTransactions.length - 1 && styles.lastActivityRow,
+                  ]}
+                >
+                  <Ionicons
+                    name={isCashIn ? 'arrow-down-circle-outline' : 'arrow-up-circle-outline'}
+                    size={21}
+                    color={isCashIn ? colors.primary : colors.destructive}
+                  />
+                  <View style={styles.activityContent}>
+                    <Text style={[styles.activityTitle, { color: colors.foreground, textAlign: isRTL ? 'right' : 'left' }]}>
+                      {t(isCashIn ? 'cashIn' : 'cashOut')} — {formatMoney(transaction.amount, transaction.currency, language)}
+                    </Text>
+                    {transaction.note ? (
+                      <Text numberOfLines={1} style={[styles.activityNote, { color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' }]}>
+                        {transaction.note}
+                      </Text>
+                    ) : null}
+                    <Text style={[styles.activityDate, { color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' }]}>
+                      {formatLocalizedDateTime(new Date(transaction.createdAt), language)}
+                    </Text>
+                  </View>
+                </View>
+              );
+            })}
+          </View>
+        )}
       </GlassCard>
       <View style={{ height: Math.max(insets.bottom, 8) }} />
     </AppShell>
@@ -79,7 +122,14 @@ const styles = StyleSheet.create({
   profileInitial: { fontSize: 18, fontFamily: 'Inter_700Bold' },
   pressed: { opacity: 0.7 },
   metricRow: { flexDirection: 'row-reverse', gap: 9, marginBottom: 9 },
-  emptyActivity: { flexDirection: 'row-reverse', alignItems: 'center', gap: 13, marginBottom: 18 },
+  emptyActivity: { marginBottom: 18 },
+  emptyActivityRow: { alignItems: 'center', gap: 13 },
   emptyTitle: { fontSize: 14, fontFamily: 'Inter_600SemiBold', textAlign: 'right' },
   emptyHint: { fontSize: 12, fontFamily: 'Inter_400Regular', textAlign: 'right', marginTop: 3 },
+  activityRow: { alignItems: 'center', gap: 11, paddingVertical: 10, borderBottomWidth: 1 },
+  lastActivityRow: { borderBottomWidth: 0, paddingBottom: 0 },
+  activityContent: { flex: 1 },
+  activityTitle: { fontSize: 13, fontFamily: 'Inter_600SemiBold' },
+  activityNote: { fontSize: 11, fontFamily: 'Inter_400Regular', marginTop: 3 },
+  activityDate: { fontSize: 10, fontFamily: 'Inter_400Regular', marginTop: 4 },
 });
