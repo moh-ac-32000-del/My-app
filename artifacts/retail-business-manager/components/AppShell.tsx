@@ -14,9 +14,8 @@ type IconName = React.ComponentProps<typeof Ionicons>['name'];
 
 const primaryNav: Array<{ path: string; label: TranslationKey; icon: IconName }> = [
   { path: '/', label: 'dashboard', icon: 'grid-outline' },
-  { path: '/sales', label: 'sales', icon: 'receipt-outline' },
-  { path: '/purchases', label: 'purchases', icon: 'bag-handle-outline' },
   { path: '/customers', label: 'customers', icon: 'people-outline' },
+  { path: '/archive', label: 'archive', icon: 'archive-outline' },
   { path: '/settings', label: 'settings', icon: 'settings-outline' },
 ];
 
