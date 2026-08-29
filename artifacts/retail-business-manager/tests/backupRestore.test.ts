@@ -3,6 +3,15 @@ import type { StoreProfile } from '@/types/business';
 
 const storageValues = vi.hoisted(() => new Map<string, string>());
 const writeFailure = vi.hoisted(() => ({ key: null as string | null, remaining: 0 }));
+const shareAsyncMock = vi.hoisted(() => vi.fn());
+const sharingAvailableMock = vi.hoisted(() => vi.fn(async () => true));
+const fileSystemMock = vi.hoisted(() => ({
+  cacheDirectory: 'file:///cache/',
+  documentDirectory: 'file:///documents/',
+  EncodingType: { UTF8: 'utf8' },
+  writeAsStringAsync: vi.fn(),
+  readAsStringAsync: vi.fn(),
+}));
 
 vi.mock('@react-native-async-storage/async-storage', () => ({
   default: {
@@ -19,6 +28,14 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
     },
     getAllKeys: async () => Array.from(storageValues.keys()),
   },
+}));
+vi.mock('expo-sharing', () => ({
+  isAvailableAsync: sharingAvailableMock,
+  shareAsync: shareAsyncMock,
+}));
+vi.mock('expo-file-system/legacy', () => fileSystemMock);
+vi.mock('expo-document-picker', () => ({
+  getDocumentAsync: vi.fn(),
 }));
 
 import {
@@ -41,6 +58,7 @@ import {
   saveTransactions,
   serializeLocalBackup,
 } from '@/services/storage';
+import { shareLocalBackupFile } from '@/services/backupFile';
 
 const CUSTOMERS_KEY = '@retail-business-manager/customers';
 const PAYMENTS_KEY = '@retail-business-manager/payments';
@@ -110,6 +128,21 @@ describe('local backup and restore', () => {
     storageValues.clear();
     writeFailure.key = null;
     writeFailure.remaining = 0;
+    shareAsyncMock.mockReset();
+    sharingAvailableMock.mockResolvedValue(true);
+  });
+
+  it('passes the backup URI as a JSON file attachment, never as a text message', async () => {
+    const fileUri = 'file:///data/user/0/host.exp.exponent/cache/store-manager-backup-2026.json';
+
+    await shareLocalBackupFile(fileUri);
+
+    expect(shareAsyncMock).toHaveBeenCalledWith(fileUri, expect.objectContaining({
+      mimeType: 'application/json',
+      UTI: 'public.json',
+    }));
+    const options = shareAsyncMock.mock.calls[0][1] as Record<string, unknown>;
+    expect(options).not.toHaveProperty('message');
   });
 
   it('creates a versioned, self-contained backup for the active store only', async () => {

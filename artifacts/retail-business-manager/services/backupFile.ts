@@ -1,6 +1,6 @@
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
-import { Share } from 'react-native';
+import * as Sharing from 'expo-sharing';
 import {
   createLocalBackup,
   parseLocalBackup,
@@ -24,8 +24,19 @@ export async function createAndShareLocalBackup(
   await FileSystem.writeAsStringAsync(fileUri, serializeLocalBackup(backup), {
     encoding: FileSystem.EncodingType.UTF8,
   });
-  await Share.share({ title: 'Store Manager backup', message: fileUri, url: fileUri });
+  await shareLocalBackupFile(fileUri);
   return { backup, fileUri };
+}
+
+export async function shareLocalBackupFile(fileUri: string): Promise<void> {
+  if (!(await Sharing.isAvailableAsync())) {
+    throw new Error('fileSharingUnavailable');
+  }
+  await Sharing.shareAsync(fileUri, {
+    mimeType: 'application/json',
+    dialogTitle: 'Store Manager backup',
+    UTI: 'public.json',
+  });
 }
 
 export async function pickLocalBackupFile(): Promise<string | null> {
