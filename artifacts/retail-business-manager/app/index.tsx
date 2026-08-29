@@ -11,7 +11,7 @@ import { formatLocalizedDate, formatLocalizedDateTime } from '@/constants/i18n';
 import { useStore } from '@/context/StoreContext';
 import { useColors } from '@/hooks/useColors';
 import { useI18n } from '@/hooks/useI18n';
-import { calculateUsedCurrencyBalances } from '@/services/storage';
+import { calculateVisibleCurrencyBalances } from '@/services/storage';
 
 export default function DashboardScreen() {
   const colors = useColors();
@@ -19,7 +19,10 @@ export default function DashboardScreen() {
   const { profile, isReady, isAuthenticated, transactions } = useStore();
   const { t, isRTL, language } = useI18n();
   const insets = useSafeAreaInsets();
-  const balances = useMemo(() => calculateUsedCurrencyBalances(transactions), [transactions]);
+  const balances = useMemo(
+    () => calculateVisibleCurrencyBalances(transactions, profile.visibleCurrencies),
+    [transactions, profile.visibleCurrencies],
+  );
   const recentTransactions = transactions;
   const currencyCardWidth = balances.length === 1 ? '100%' : '48%';
 
@@ -57,7 +60,6 @@ export default function DashboardScreen() {
               value={amount}
               icon="wallet-outline"
               currency={currency}
-              onPress={() => router.push('/cash')}
             />
           </View>
         ))}

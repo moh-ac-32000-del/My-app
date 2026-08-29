@@ -132,6 +132,16 @@ export function calculateUsedCurrencyBalances(
     .map(({ code }) => ({ currency: code, amount: totals[code] }));
 }
 
+export function calculateVisibleCurrencyBalances(
+  transactions: Transaction[],
+  visibleCurrencies: CurrencyCode[],
+): Array<{ currency: CurrencyCode; amount: number }> {
+  const totals = calculateCurrencyNetTotals(transactions);
+  return visibleCurrencies
+    .filter((currency, index, currencies) => isCurrencyCode(currency) && currencies.indexOf(currency) === index)
+    .map((currency) => ({ currency, amount: totals[currency] }));
+}
+
 export async function loadTransactions(storeId: string): Promise<Transaction[]> {
   try {
     const transactions = await loadAllTransactions();
@@ -316,6 +326,7 @@ export function normalizeStoredStoreProfile(
     address: readString(value, 'address', fallback.address),
     currency,
     quickCurrencies: normalizeQuickCurrencies(value.quickCurrencies, [currency]),
+    visibleCurrencies: normalizeQuickCurrencies(value.visibleCurrencies, [currency]),
     language: normalizeLanguage(value.language ?? legacyLanguage ?? fallback.language),
     accent: normalizeAccent(value.accent ?? fallback.accent),
     ...(logoUri === undefined ? {} : { logoUri }),

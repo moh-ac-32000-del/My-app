@@ -12,6 +12,7 @@ export interface StoreProfile {
   address: string;
   currency: CurrencyCode;
   quickCurrencies: CurrencyCode[];
+  visibleCurrencies: CurrencyCode[];
   language: Language;
   accent: AccentColor;
   logoUri?: string;

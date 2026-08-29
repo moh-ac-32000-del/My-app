@@ -59,7 +59,15 @@ export default function SettingsScreen() {
       Alert.alert(t('storeName'), t('fieldRequired'));
       return;
     }
-    await saveProfile({ name: name.trim(), phone: phone.trim(), address: address.trim(), currency, accent, quickCurrencies: profile.quickCurrencies });
+    await saveProfile({
+      name: name.trim(),
+      phone: phone.trim(),
+      address: address.trim(),
+      currency,
+      accent,
+      quickCurrencies: profile.quickCurrencies,
+      visibleCurrencies: profile.visibleCurrencies,
+    });
     await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     Alert.alert(t('saved'));
   };
@@ -85,6 +93,15 @@ export default function SettingsScreen() {
 
   const selectQuickCurrency = async (code: CurrencyCode) => {
     await toggleQuickCurrency(code);
+    await Haptics.selectionAsync();
+  };
+
+  const selectVisibleCurrency = async (code: CurrencyCode) => {
+    const currentCurrencies = profile.visibleCurrencies;
+    const nextCurrencies = currentCurrencies.includes(code)
+      ? currentCurrencies.filter((item) => item !== code)
+      : [...currentCurrencies, code];
+    await saveProfile({ visibleCurrencies: nextCurrencies });
     await Haptics.selectionAsync();
   };
 
@@ -165,6 +182,40 @@ export default function SettingsScreen() {
                 accessibilityRole="checkbox"
                 accessibilityState={{ checked: selected }}
                 onPress={() => void selectQuickCurrency(option.code)}
+                style={({ pressed }) => [
+                  styles.quickCurrencyRow,
+                  { borderColor: selected ? colors.primary : colors.border, backgroundColor: selected ? colors.accent : colors.input, flexDirection: isRTL ? 'row-reverse' : 'row' },
+                  pressed && styles.pressed,
+                ]}
+              >
+                <View style={[styles.quickCurrencyMark, { backgroundColor: selected ? colors.primary : colors.glass, borderColor: selected ? colors.primary : colors.border }]}>
+                  {selected ? <Ionicons name="checkmark" size={16} color={colors.primaryForeground} /> : null}
+                </View>
+                <View style={[styles.quickCurrencyCopy, { alignItems: isRTL ? 'flex-end' : 'flex-start' }]}>
+                  <Text style={[styles.quickCurrencyCode, { color: colors.foreground, textAlign: isRTL ? 'right' : 'left' }]}>{option.code} · {option.symbol}</Text>
+                  <Text style={[styles.quickCurrencyName, { color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' }]}>{t(option.nameKey)}</Text>
+                </View>
+              </Pressable>
+            );
+          })}
+        </View>
+      </GlassCard>
+
+      <SectionTitle title={t('visibleCurrencyBoxesTitle')} />
+      <GlassCard testID="visible-currencies-section" style={styles.card}>
+        <Text style={[styles.quickCurrenciesHint, { color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' }]}>
+          {t('visibleCurrencyBoxesHint')}
+        </Text>
+        <View style={styles.quickCurrenciesOptions}>
+          {CURRENCY_OPTIONS.map((option) => {
+            const selected = profile.visibleCurrencies.includes(option.code);
+            return (
+              <Pressable
+                key={option.code}
+                testID={`visible-currency-${option.code}`}
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: selected }}
+                onPress={() => void selectVisibleCurrency(option.code)}
                 style={({ pressed }) => [
                   styles.quickCurrencyRow,
                   { borderColor: selected ? colors.primary : colors.border, backgroundColor: selected ? colors.accent : colors.input, flexDirection: isRTL ? 'row-reverse' : 'row' },

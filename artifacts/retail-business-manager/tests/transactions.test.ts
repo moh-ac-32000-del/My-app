@@ -17,6 +17,7 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
 
 import {
   calculateCurrencyNetTotals,
+  calculateVisibleCurrencyBalances,
   calculateUsedCurrencyBalances,
   createCashTransaction,
   loadTransactions,
@@ -236,6 +237,36 @@ describe('cash transactions', () => {
 
     expect(calculateUsedCurrencyBalances(transactions)).toEqual([
       { currency: 'USD', amount: 0 },
+    ]);
+  });
+
+  it('returns selected currencies even when they have no transactions', () => {
+    expect(calculateVisibleCurrencyBalances([], ['TRY', 'EUR'])).toEqual([
+      { currency: 'TRY', amount: 0 },
+      { currency: 'EUR', amount: 0 },
+    ]);
+  });
+
+  it('shows only selected currencies even when other currencies have transactions', () => {
+    const transactions: Transaction[] = [
+      createCashTransaction('store-1', createDraft({ currency: 'EUR', amount: 200 }), timestamp),
+      createCashTransaction('store-1', createDraft({ currency: 'USD', amount: 100 }), timestamp),
+    ];
+
+    expect(calculateVisibleCurrencyBalances(transactions, ['TRY', 'USD'])).toEqual([
+      { currency: 'TRY', amount: 0 },
+      { currency: 'USD', amount: 100 },
+    ]);
+  });
+
+  it('keeps a selected currency visible when its net balance is zero', () => {
+    const transactions: Transaction[] = [
+      createCashTransaction('store-1', createDraft({ currency: 'EUR', amount: 200 }), timestamp),
+      createCashTransaction('store-1', createDraft({ type: 'cash_out', currency: 'EUR', amount: 200 }), timestamp),
+    ];
+
+    expect(calculateVisibleCurrencyBalances(transactions, ['EUR'])).toEqual([
+      { currency: 'EUR', amount: 0 },
     ]);
   });
 

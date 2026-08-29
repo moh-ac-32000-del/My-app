@@ -30,6 +30,7 @@ const profile: StoreProfile = {
   address: 'Istanbul',
   currency: 'TRY',
   quickCurrencies: ['TRY', 'USD'],
+  visibleCurrencies: ['TRY', 'USD'],
   language: 'tr',
   accent: 'violet',
 };
@@ -66,6 +67,7 @@ describe('storage', () => {
         address: 'Valid address',
         currency: 'not-a-currency',
         quickCurrencies: ['USD', 'USD', 'not-a-currency'],
+        visibleCurrencies: ['EUR', 'EUR', 'not-a-currency'],
         language: 'not-a-language',
         accent: 'not-an-accent',
       },
@@ -80,6 +82,7 @@ describe('storage', () => {
       address: 'Valid address',
       currency: profile.currency,
       quickCurrencies: ['USD'],
+      visibleCurrencies: ['EUR'],
       language: 'ar',
       accent: 'blue',
     });

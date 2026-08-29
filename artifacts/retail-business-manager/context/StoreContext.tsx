@@ -23,6 +23,7 @@ const defaultProfile: StoreProfile = {
   address: '',
   currency: DEFAULT_CURRENCY,
   quickCurrencies: [DEFAULT_CURRENCY],
+  visibleCurrencies: [DEFAULT_CURRENCY],
   language: 'ar',
   accent: 'blue',
 };
@@ -108,6 +109,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       quickCurrencies: updates.quickCurrencies === undefined
         ? currentProfile.quickCurrencies
         : normalizeQuickCurrencies(updates.quickCurrencies, []),
+      visibleCurrencies: updates.visibleCurrencies === undefined
+        ? currentProfile.visibleCurrencies
+        : normalizeQuickCurrencies(updates.visibleCurrencies, []),
       language: normalizeLanguage(updates.language ?? currentProfile.language),
     };
     profileRef.current = nextProfile;
