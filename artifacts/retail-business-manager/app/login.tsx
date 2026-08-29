@@ -1,35 +1,72 @@
 import React, { useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
-import { useStore } from '@/context/StoreContext';
 import type { TranslationKey } from '@/constants/i18n';
 import { useI18n } from '@/hooks/useI18n';
 import { GlassCard } from '@/components/AppShell';
+import { isFirebaseConfigured } from '@/services/firebase';
+import {
+  createFirebaseAccount,
+  getFirebaseAuthErrorKey,
+  signInWithFirebase,
+} from '@/services/firebaseAuth';
+
+type AuthMode = 'login' | 'createAccount';
 
 export default function LoginScreen() {
   const colors = useColors();
-  const { setAuthenticated } = useStore();
   const { t, isRTL, direction } = useI18n();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const [identity, setIdentity] = useState<string>('');
+  const [mode, setMode] = useState<AuthMode>('login');
+  const [email, setEmail] = useState<string>('');
   const [password, setPassword] = useState<string>('');
-  const [errorKey, setErrorKey] = useState<TranslationKey | null>(null);
+  const [status, setStatus] = useState<{ key: TranslationKey; success: boolean } | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
   const submit = async () => {
-    if (!identity.trim() || !password.trim()) {
-      setErrorKey('fieldRequired');
+    if (!email.trim() || !password.trim()) {
+      setStatus({ key: 'fieldRequired', success: false });
       return;
     }
-    setErrorKey(null);
-    await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    await setAuthenticated(true);
-    router.replace('/');
+    if (mode === 'createAccount' && password.length < 6) {
+      setStatus({ key: 'passwordTooShort', success: false });
+      return;
+    }
+    if (!isFirebaseConfigured) {
+      setStatus({ key: 'authFirebaseNotConfigured', success: false });
+      return;
+    }
+
+    setIsSubmitting(true);
+    setStatus(null);
+    try {
+      if (mode === 'createAccount') {
+        await createFirebaseAccount(email, password);
+        setStatus({ key: 'authAccountCreated', success: true });
+      } else {
+        await signInWithFirebase(email, password);
+        setStatus({ key: 'authSignedIn', success: true });
+      }
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      await new Promise((resolve) => setTimeout(resolve, 450));
+      router.replace('/');
+    } catch (error) {
+      setStatus({ key: getFirebaseAuthErrorKey(error), success: false });
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const toggleMode = () => {
+    setMode((current) => current === 'login' ? 'createAccount' : 'login');
+    setStatus(null);
   };
 
   return (
@@ -48,16 +85,18 @@ export default function LoginScreen() {
         <Text style={[styles.hint, { color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' }]}>{t('loginHint')}</Text>
         <GlassCard style={styles.formCard}>
           <View style={styles.field}>
-            <Text style={[styles.label, { color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' }]}>{t('phoneOrEmail')}</Text>
+            <Text style={[styles.label, { color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' }]}>{t('emailAddress')}</Text>
             <View style={[styles.inputWrap, { backgroundColor: colors.input, borderColor: colors.border, flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
-              <Ionicons name="person-outline" size={18} color={colors.mutedForeground} />
+              <Ionicons name="mail-outline" size={18} color={colors.mutedForeground} />
               <TextInput
                 testID="login-identity"
-                value={identity}
-                onChangeText={setIdentity}
+                value={email}
+                onChangeText={setEmail}
                 placeholder={t('identityPlaceholder')}
                 placeholderTextColor={colors.mutedForeground}
                 autoCapitalize="none"
+                autoCorrect={false}
+                autoComplete="email"
                 keyboardType="email-address"
                 style={[styles.input, { color: colors.foreground, textAlign: isRTL ? 'right' : 'left' }]}
               />
@@ -73,15 +112,60 @@ export default function LoginScreen() {
                 onChangeText={setPassword}
                 placeholder="••••••••"
                 placeholderTextColor={colors.mutedForeground}
+                autoComplete={mode === 'createAccount' ? 'new-password' : 'current-password'}
                 secureTextEntry
                 style={[styles.input, { color: colors.foreground, textAlign: isRTL ? 'right' : 'left' }]}
               />
             </View>
           </View>
-          {errorKey ? <Text style={[styles.error, { color: colors.destructive, textAlign: isRTL ? 'right' : 'left' }]}>{t(errorKey)}</Text> : null}
-          <Pressable testID="login-submit" onPress={() => void submit()} style={({ pressed }) => [styles.button, { backgroundColor: colors.primary, flexDirection: isRTL ? 'row-reverse' : 'row' }, pressed && styles.pressed]}>
-            <Text style={[styles.buttonText, { color: colors.primaryForeground }]}>{t('login')}</Text>
-            <Ionicons name={isRTL ? 'arrow-back' : 'arrow-forward'} size={19} color={colors.primaryForeground} />
+          {status ? (
+            <View
+              testID="auth-status"
+              style={[
+                styles.status,
+                {
+                  backgroundColor: status.success ? colors.accent : `${colors.destructive}18`,
+                  flexDirection: isRTL ? 'row-reverse' : 'row',
+                },
+              ]}
+            >
+              <Ionicons
+                name={status.success ? 'checkmark-circle-outline' : 'alert-circle-outline'}
+                size={18}
+                color={status.success ? colors.success : colors.destructive}
+              />
+              <Text style={[styles.statusText, { color: status.success ? colors.foreground : colors.destructive, textAlign: isRTL ? 'right' : 'left' }]}>
+                {t(status.key)}
+              </Text>
+            </View>
+          ) : null}
+          <Pressable
+            testID="login-submit"
+            disabled={isSubmitting}
+            onPress={() => void submit()}
+            style={({ pressed }) => [
+              styles.button,
+              { backgroundColor: colors.primary, flexDirection: isRTL ? 'row-reverse' : 'row' },
+              pressed && styles.pressed,
+              isSubmitting && styles.disabled,
+            ]}
+          >
+            {isSubmitting
+              ? <ActivityIndicator color={colors.primaryForeground} />
+              : <Ionicons name={isRTL ? 'arrow-back' : 'arrow-forward'} size={19} color={colors.primaryForeground} />}
+            <Text style={[styles.buttonText, { color: colors.primaryForeground }]}>
+              {t(mode === 'createAccount' ? 'createAccount' : 'login')}
+            </Text>
+          </Pressable>
+          <Pressable
+            testID="auth-mode-toggle"
+            disabled={isSubmitting}
+            onPress={toggleMode}
+            style={({ pressed }) => [styles.modeButton, pressed && styles.pressed, isSubmitting && styles.disabled]}
+          >
+            <Text style={[styles.modeText, { color: colors.primary }]}>
+              {t(mode === 'createAccount' ? 'switchToLogin' : 'switchToCreateAccount')}
+            </Text>
           </Pressable>
         </GlassCard>
         <View style={[styles.secureRow, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
@@ -108,9 +192,13 @@ const styles = StyleSheet.create({
   label: { fontSize: 12, fontFamily: 'Inter_600SemiBold', textAlign: 'right', marginBottom: 7 },
   inputWrap: { minHeight: 50, borderWidth: 1, borderRadius: 16, flexDirection: 'row-reverse', alignItems: 'center', gap: 9, paddingHorizontal: 14 },
   input: { flex: 1, textAlign: 'right', fontSize: 14, fontFamily: 'Inter_400Regular', minHeight: 48 },
-  error: { fontSize: 12, fontFamily: 'Inter_500Medium', textAlign: 'right', marginBottom: 12 },
+  status: { minHeight: 42, borderRadius: 13, alignItems: 'center', gap: 8, paddingHorizontal: 11, paddingVertical: 8, marginBottom: 12 },
+  statusText: { flex: 1, fontSize: 12, fontFamily: 'Inter_500Medium' },
   button: { minHeight: 52, borderRadius: 17, flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'center', gap: 9, marginTop: 4 },
   buttonText: { fontSize: 14, fontFamily: 'Inter_700Bold' },
+  modeButton: { minHeight: 44, alignItems: 'center', justifyContent: 'center', marginTop: 7 },
+  modeText: { fontSize: 12, fontFamily: 'Inter_600SemiBold', textAlign: 'center' },
+  disabled: { opacity: 0.55 },
   pressed: { opacity: 0.76, transform: [{ scale: 0.985 }] },
   secureRow: { flexDirection: 'row-reverse', justifyContent: 'center', alignItems: 'center', gap: 7, marginTop: 16 },
   secureText: { fontSize: 11, fontFamily: 'Inter_400Regular' },

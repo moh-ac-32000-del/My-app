@@ -60,6 +60,7 @@
   "dependencies": {
     "expo-document-picker": "~14.0.8",
     "expo-file-system": "~19.0.24",
-    "expo-sharing": "~14.0.8"
+    "expo-sharing": "~14.0.8",
+    "firebase": "^12.18.0"
   }
 }

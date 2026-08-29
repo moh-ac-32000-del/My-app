@@ -33,7 +33,7 @@ export default function SettingsScreen() {
     profile,
     saveProfile,
     toggleQuickCurrency,
-    resetLocalSession,
+    signOut,
     restoreFromLocalBackup,
     isAuthenticated,
     isReady,
@@ -119,7 +119,7 @@ export default function SettingsScreen() {
   };
 
   const logout = async () => {
-    await resetLocalSession();
+    await signOut();
     router.replace('/login');
   };
 

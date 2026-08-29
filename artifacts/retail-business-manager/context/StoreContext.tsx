@@ -1,8 +1,11 @@
 import React, { createContext, ReactNode, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import type { User } from 'firebase/auth';
 import type { CashTransactionDraft, Debt, StoreProfile, Transaction } from '@/types/business';
 import { isRTL, normalizeLanguage, translate, type Language, type TranslationKey } from '@/constants/i18n';
 import { DEFAULT_CURRENCY, normalizeCurrency, normalizeQuickCurrencies, type CurrencyCode } from '@/constants/currencies';
 import { normalizeAccent, type AccentColor } from '@/constants/colors';
+import { isFirebaseConfigured } from '@/services/firebase';
+import { signOutFromFirebase, subscribeToFirebaseAuth } from '@/services/firebaseAuth';
 import {
   clearLegacyLanguage,
   loadAuthenticatedState,
@@ -52,6 +55,7 @@ interface StoreContextValue {
   saveProfile: (updates: Partial<StoreProfile>) => Promise<void>;
   toggleQuickCurrency: (code: CurrencyCode) => Promise<void>;
   setAuthenticated: (value: boolean) => Promise<void>;
+  signOut: () => Promise<void>;
   restoreFromLocalBackup: (contents: string) => Promise<LocalBackup>;
   resetLocalSession: () => Promise<void>;
 }
@@ -60,8 +64,10 @@ const StoreContext = createContext<StoreContextValue | null>(null);
 
 export function StoreProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<StoreProfile>(defaultProfile);
-  const [isAuthenticated, setIsAuthenticatedState] = useState<boolean>(false);
-  const [isReady, setIsReady] = useState<boolean>(false);
+  const [localIsAuthenticated, setLocalIsAuthenticatedState] = useState<boolean>(false);
+  const [isLocalReady, setIsLocalReady] = useState<boolean>(false);
+  const [firebaseUser, setFirebaseUser] = useState<User | null>(null);
+  const [isFirebaseReady, setIsFirebaseReady] = useState<boolean>(!isFirebaseConfigured);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [journalRevision, setJournalRevision] = useState<number>(0);
   const profileRef = useRef<StoreProfile>(defaultProfile);
@@ -81,17 +87,37 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         profileRef.current = normalizedProfile;
         setProfile(normalizedProfile);
         await Promise.all([saveStoreProfile(normalizedProfile), clearLegacyLanguage()]);
-        setIsAuthenticatedState(storedAuth);
+        setLocalIsAuthenticatedState(storedAuth);
       } catch {
         profileRef.current = defaultProfile;
         setProfile(defaultProfile);
-        setIsAuthenticatedState(false);
+        setLocalIsAuthenticatedState(false);
       } finally {
-        setIsReady(true);
+        setIsLocalReady(true);
       }
     }
     void loadLocalState();
   }, []);
+
+  useEffect(() => {
+    if (!isFirebaseConfigured) {
+      return;
+    }
+
+    return subscribeToFirebaseAuth(
+      (user) => {
+        setFirebaseUser(user);
+        setIsFirebaseReady(true);
+      },
+      () => {
+        setFirebaseUser(null);
+        setIsFirebaseReady(true);
+      },
+    );
+  }, []);
+
+  const isReady = isLocalReady && isFirebaseReady;
+  const isAuthenticated = isFirebaseConfigured ? firebaseUser !== null : localIsAuthenticated;
 
   useEffect(() => {
     if (!isReady) {
@@ -177,7 +203,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   };
 
   const setAuthenticated = async (value: boolean) => {
-    setIsAuthenticatedState(value);
+    setLocalIsAuthenticatedState(value);
     await saveAuthenticatedState(value);
   };
 
@@ -192,14 +218,22 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     transactionsRef.current = nextTransactions;
     setProfile(nextProfile);
     setTransactions(nextTransactions);
-    setIsAuthenticatedState(restored.authenticated);
+    setLocalIsAuthenticatedState(restored.authenticated);
     setJournalRevision((current) => current + 1);
     return restored;
   };
 
   const resetLocalSession = async () => {
-    setIsAuthenticatedState(false);
+    setLocalIsAuthenticatedState(false);
     await saveAuthenticatedState(false);
+  };
+
+  const signOut = async () => {
+    if (isFirebaseConfigured) {
+      await signOutFromFirebase();
+      return;
+    }
+    await resetLocalSession();
   };
 
   const language = profile.language;
@@ -221,6 +255,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       saveProfile,
       toggleQuickCurrency,
       setAuthenticated,
+      signOut,
       restoreFromLocalBackup,
       resetLocalSession,
     }),

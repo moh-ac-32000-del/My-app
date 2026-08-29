@@ -2,3 +2,4 @@
 - [Local persistence guardrails](local-persistence-guardrails.md) — keep AsyncStorage isolation minimal and add schema versions only for demonstrated migrations.
 - [Cash-closing archive isolation](daily-archive-isolation.md) — each closing is an immutable batch; filter the journal by archived event IDs, never by date alone.
 - [React Native Web alerts](react-native-web-alerts.md) — do not use Alert.alert for critical web confirmations; the installed implementation is a no-op.
+- [Firebase Auth persistence typing](firebase-auth-persistence-typing.md) — Firebase 12 exposes RN persistence at runtime, but its universal TypeScript surface omits the named export.
