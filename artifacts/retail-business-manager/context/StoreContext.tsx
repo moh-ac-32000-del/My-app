@@ -9,6 +9,7 @@ import {
   loadLegacyLanguage,
   loadStoreProfile,
   normalizeStoredStoreProfile,
+  restoreLocalBackup,
   saveAuthenticatedState,
   saveStoreProfile,
   createCashTransaction,
@@ -20,6 +21,7 @@ import {
   settleCustomerDebt as persistCustomerSettlement,
   type SettlementDraft,
   type SettlementResult,
+  type LocalBackup,
 } from '@/services/storage';
 
 const defaultProfile: StoreProfile = {
@@ -50,6 +52,7 @@ interface StoreContextValue {
   saveProfile: (updates: Partial<StoreProfile>) => Promise<void>;
   toggleQuickCurrency: (code: CurrencyCode) => Promise<void>;
   setAuthenticated: (value: boolean) => Promise<void>;
+  restoreFromLocalBackup: (contents: string) => Promise<LocalBackup>;
   resetLocalSession: () => Promise<void>;
 }
 
@@ -178,6 +181,22 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     await saveAuthenticatedState(value);
   };
 
+  const restoreFromLocalBackup = async (contents: string): Promise<LocalBackup> => {
+    await profileWriteQueueRef.current.catch(() => undefined);
+    await transactionLoadPromiseRef.current.catch(() => undefined);
+    const restored = await restoreLocalBackup(contents, profileRef.current.id);
+    const nextProfile = restored.storeProfile;
+    const nextTransactions = await loadTransactions(restored.storeId);
+
+    profileRef.current = nextProfile;
+    transactionsRef.current = nextTransactions;
+    setProfile(nextProfile);
+    setTransactions(nextTransactions);
+    setIsAuthenticatedState(restored.authenticated);
+    setJournalRevision((current) => current + 1);
+    return restored;
+  };
+
   const resetLocalSession = async () => {
     setIsAuthenticatedState(false);
     await saveAuthenticatedState(false);
@@ -202,6 +221,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       saveProfile,
       toggleQuickCurrency,
       setAuthenticated,
+      restoreFromLocalBackup,
       resetLocalSession,
     }),
     [profile, language, rtl, isAuthenticated, isReady, transactions, journalRevision],

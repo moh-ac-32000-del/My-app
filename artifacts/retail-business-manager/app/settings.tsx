@@ -1,15 +1,16 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import { AppShell, GlassCard, PageHeader, SectionTitle } from '@/components/AppShell';
 import { useStore } from '@/context/StoreContext';
 import { useColors } from '@/hooks/useColors';
-import { languageOptions, type Language } from '@/constants/i18n';
+import { languageOptions, type Language, type TranslationKey } from '@/constants/i18n';
 import { accentOptions, type AccentColor } from '@/constants/colors';
 import { CURRENCY_OPTIONS, getCurrency, type CurrencyCode } from '@/constants/currencies';
 import { useI18n } from '@/hooks/useI18n';
+import { createAndShareLocalBackup, pickLocalBackupFile } from '@/services/backupFile';
 
 function SettingInput({ label, value, onChangeText, icon, multiline = false, placeholder }: { label: string; value: string; onChangeText: (value: string) => void; icon: React.ComponentProps<typeof Ionicons>['name']; multiline?: boolean; placeholder?: string }) {
   const colors = useColors();
@@ -28,7 +29,15 @@ function SettingInput({ label, value, onChangeText, icon, multiline = false, pla
 export default function SettingsScreen() {
   const colors = useColors();
   const router = useRouter();
-  const { profile, saveProfile, toggleQuickCurrency, resetLocalSession, isReady } = useStore();
+  const {
+    profile,
+    saveProfile,
+    toggleQuickCurrency,
+    resetLocalSession,
+    restoreFromLocalBackup,
+    isAuthenticated,
+    isReady,
+  } = useStore();
   const { t, isRTL, language } = useI18n();
   const [name, setName] = useState<string>('');
   const [phone, setPhone] = useState<string>('');
@@ -38,6 +47,10 @@ export default function SettingsScreen() {
   const draftInitializedRef = useRef<boolean>(false);
   const [isCurrencyPickerOpen, setIsCurrencyPickerOpen] = useState<boolean>(false);
   const [isLanguagePickerOpen, setIsLanguagePickerOpen] = useState<boolean>(false);
+  const [isBackupBusy, setIsBackupBusy] = useState<boolean>(false);
+  const [isRestoreBusy, setIsRestoreBusy] = useState<boolean>(false);
+  const [pendingRestoreContents, setPendingRestoreContents] = useState<string | null>(null);
+  const [backupStatus, setBackupStatus] = useState<{ key: TranslationKey; success: boolean } | null>(null);
 
   useEffect(() => {
     if (!isReady || draftInitializedRef.current) {
@@ -108,6 +121,61 @@ export default function SettingsScreen() {
   const logout = async () => {
     await resetLocalSession();
     router.replace('/login');
+  };
+
+  const createBackup = async () => {
+    setIsBackupBusy(true);
+    setBackupStatus(null);
+    try {
+      await createAndShareLocalBackup(profile, isAuthenticated);
+      setBackupStatus({ key: 'backupCreated', success: true });
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch {
+      setBackupStatus({ key: 'backupFailed', success: false });
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    } finally {
+      setIsBackupBusy(false);
+    }
+  };
+
+  const selectBackupForRestore = async () => {
+    setIsRestoreBusy(true);
+    setBackupStatus(null);
+    try {
+      const contents = await pickLocalBackupFile();
+      if (contents !== null) {
+        setPendingRestoreContents(contents);
+      }
+    } catch {
+      setBackupStatus({ key: 'restoreFailed', success: false });
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    } finally {
+      setIsRestoreBusy(false);
+    }
+  };
+
+  const confirmRestore = async () => {
+    if (pendingRestoreContents === null) {
+      return;
+    }
+    setIsRestoreBusy(true);
+    try {
+      const restored = await restoreFromLocalBackup(pendingRestoreContents);
+      setName(restored.storeProfile.name);
+      setPhone(restored.storeProfile.phone);
+      setAddress(restored.storeProfile.address);
+      setCurrency(restored.storeProfile.currency);
+      setAccent(restored.storeProfile.accent);
+      setPendingRestoreContents(null);
+      setBackupStatus({ key: 'restoreSucceeded', success: true });
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch {
+      setPendingRestoreContents(null);
+      setBackupStatus({ key: 'restoreFailed', success: false });
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    } finally {
+      setIsRestoreBusy(false);
+    }
   };
 
   return (
@@ -288,6 +356,71 @@ export default function SettingsScreen() {
         <View style={[styles.cloudCopy, { alignItems: isRTL ? 'flex-end' : 'flex-start' }]}><Text style={[styles.cloudTitle, { color: colors.foreground, textAlign: isRTL ? 'right' : 'left' }]}>{t('cloudReady')}</Text><Text style={[styles.cloudHint, { color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' }]}>{t('cloudReadyHint')}</Text></View>
       </GlassCard>
 
+      <SectionTitle title={t('backupRestore')} />
+      <GlassCard testID="backup-restore-section" style={styles.card}>
+        <View style={styles.backupActions}>
+          <Pressable
+            testID="create-backup-button"
+            accessibilityRole="button"
+            disabled={isBackupBusy || isRestoreBusy}
+            onPress={() => void createBackup()}
+            style={({ pressed }) => [
+              styles.backupAction,
+              { backgroundColor: colors.primary, flexDirection: isRTL ? 'row-reverse' : 'row' },
+              pressed && styles.pressed,
+              (isBackupBusy || isRestoreBusy) && styles.disabled,
+            ]}
+          >
+            {isBackupBusy
+              ? <ActivityIndicator color={colors.primaryForeground} />
+              : <Ionicons name="download-outline" size={20} color={colors.primaryForeground} />}
+            <View style={[styles.backupCopy, { alignItems: isRTL ? 'flex-end' : 'flex-start' }]}>
+              <Text style={[styles.backupTitle, { color: colors.primaryForeground }]}>{t('backupData')}</Text>
+              <Text style={[styles.backupHint, { color: colors.primaryForeground, textAlign: isRTL ? 'right' : 'left' }]}>{t('backupDataHint')}</Text>
+            </View>
+          </Pressable>
+          <Pressable
+            testID="restore-backup-button"
+            accessibilityRole="button"
+            disabled={isBackupBusy || isRestoreBusy}
+            onPress={() => void selectBackupForRestore()}
+            style={({ pressed }) => [
+              styles.backupAction,
+              { backgroundColor: colors.input, borderColor: colors.border, flexDirection: isRTL ? 'row-reverse' : 'row' },
+              styles.restoreAction,
+              pressed && styles.pressed,
+              (isBackupBusy || isRestoreBusy) && styles.disabled,
+            ]}
+          >
+            {isRestoreBusy
+              ? <ActivityIndicator color={colors.primary} />
+              : <Ionicons name="push-outline" size={20} color={colors.primary} />}
+            <View style={[styles.backupCopy, { alignItems: isRTL ? 'flex-end' : 'flex-start' }]}>
+              <Text style={[styles.backupTitle, { color: colors.foreground }]}>{t('restoreData')}</Text>
+              <Text style={[styles.backupHint, { color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' }]}>{t('restoreDataHint')}</Text>
+            </View>
+          </Pressable>
+        </View>
+        {backupStatus ? (
+          <View
+            testID="backup-status"
+            style={[
+              styles.backupStatus,
+              { backgroundColor: backupStatus.success ? colors.accent : `${colors.destructive}18` },
+            ]}
+          >
+            <Ionicons
+              name={backupStatus.success ? 'checkmark-circle-outline' : 'alert-circle-outline'}
+              size={18}
+              color={backupStatus.success ? colors.primary : colors.destructive}
+            />
+            <Text style={[styles.backupStatusText, { color: backupStatus.success ? colors.foreground : colors.destructive }]}>
+              {t(backupStatus.key)}
+            </Text>
+          </View>
+        ) : null}
+      </GlassCard>
+
       <Pressable testID="save-settings" onPress={() => void save()} style={({ pressed }) => [styles.saveButton, { backgroundColor: colors.primary, flexDirection: isRTL ? 'row-reverse' : 'row' }, pressed && styles.pressed]}>
         <Ionicons name="checkmark-circle-outline" size={19} color={colors.primaryForeground} />
         <Text style={[styles.saveText, { color: colors.primaryForeground }]}>{t('saveChanges')}</Text>
@@ -296,6 +429,46 @@ export default function SettingsScreen() {
         <Ionicons name="log-out-outline" size={18} color={colors.destructive} />
         <Text style={[styles.logoutText, { color: colors.destructive }]}>{t('logout')}</Text>
       </Pressable>
+      <Modal
+        visible={pendingRestoreContents !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setPendingRestoreContents(null)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={[styles.confirmCard, { backgroundColor: colors.glassStrong, borderColor: colors.border }]}>
+            <View style={[styles.confirmIcon, { backgroundColor: `${colors.destructive}18` }]}>
+              <Ionicons name="warning-outline" size={26} color={colors.destructive} />
+            </View>
+            <Text style={[styles.confirmTitle, { color: colors.foreground, textAlign: isRTL ? 'right' : 'left' }]}>
+              {t('restoreConfirmTitle')}
+            </Text>
+            <Text style={[styles.confirmMessage, { color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' }]}>
+              {t('restoreConfirmMessage')}
+            </Text>
+            <View style={[styles.confirmActions, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
+              <Pressable
+                testID="cancel-restore-button"
+                disabled={isRestoreBusy}
+                onPress={() => setPendingRestoreContents(null)}
+                style={({ pressed }) => [styles.confirmButton, { backgroundColor: colors.input, borderColor: colors.border }, pressed && styles.pressed]}
+              >
+                <Text style={[styles.confirmButtonText, { color: colors.foreground }]}>{t('cancel')}</Text>
+              </Pressable>
+              <Pressable
+                testID="confirm-restore-button"
+                disabled={isRestoreBusy}
+                onPress={() => void confirmRestore()}
+                style={({ pressed }) => [styles.confirmButton, { backgroundColor: colors.destructive }, pressed && styles.pressed, isRestoreBusy && styles.disabled]}
+              >
+                {isRestoreBusy
+                  ? <ActivityIndicator color={colors.primaryForeground} />
+                  : <Text style={[styles.confirmButtonText, { color: colors.primaryForeground }]}>{t('confirm')}</Text>}
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </AppShell>
   );
 }
@@ -341,6 +514,23 @@ const styles = StyleSheet.create({
   cloudCopy: { flex: 1, alignItems: 'flex-end' },
   cloudTitle: { fontSize: 13, fontFamily: 'Inter_700Bold' },
   cloudHint: { fontSize: 11, fontFamily: 'Inter_400Regular', textAlign: 'right', lineHeight: 17, marginTop: 3 },
+  backupActions: { gap: 10 },
+  backupAction: { minHeight: 72, borderRadius: 17, alignItems: 'center', gap: 11, paddingHorizontal: 14, paddingVertical: 11 },
+  restoreAction: { borderWidth: 1 },
+  backupCopy: { flex: 1 },
+  backupTitle: { fontSize: 13, fontFamily: 'Inter_700Bold' },
+  backupHint: { fontSize: 11, fontFamily: 'Inter_400Regular', lineHeight: 17, marginTop: 3 },
+  backupStatus: { marginTop: 12, borderRadius: 14, minHeight: 44, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  backupStatusText: { flex: 1, fontSize: 12, fontFamily: 'Inter_600SemiBold' },
+  disabled: { opacity: 0.55 },
+  modalBackdrop: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.72)', justifyContent: 'center', paddingHorizontal: 22 },
+  confirmCard: { borderWidth: 1, borderRadius: 24, padding: 20 },
+  confirmIcon: { width: 48, height: 48, borderRadius: 16, alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
+  confirmTitle: { fontSize: 18, fontFamily: 'Inter_700Bold', marginBottom: 9 },
+  confirmMessage: { fontSize: 13, fontFamily: 'Inter_400Regular', lineHeight: 21, marginBottom: 20 },
+  confirmActions: { gap: 10 },
+  confirmButton: { flex: 1, minHeight: 48, borderWidth: 1, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
+  confirmButtonText: { fontSize: 13, fontFamily: 'Inter_700Bold' },
   languageOptions: { borderWidth: 1, borderRadius: 18, overflow: 'hidden', marginTop: 12, marginBottom: 14 },
   languageOption: { minHeight: 50, alignItems: 'center', justifyContent: 'space-between', gap: 10, paddingHorizontal: 13, borderBottomWidth: 1 },
   languageOptionText: { flex: 1, fontSize: 13, fontFamily: 'Inter_600SemiBold' },

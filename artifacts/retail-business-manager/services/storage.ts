@@ -1149,3 +1149,398 @@ export function normalizeStoredStoreProfile(
     ...(logoUri === undefined ? {} : { logoUri }),
   };
 }
+
+export const LOCAL_BACKUP_FORMAT_VERSION = 1 as const;
+
+export interface LocalBackupData {
+  customers: Customer[];
+  transactions: Transaction[];
+  debts: Debt[];
+  payments: Payment[];
+  dailyArchives: DailyArchive[];
+}
+
+export interface LocalBackup {
+  formatVersion: typeof LOCAL_BACKUP_FORMAT_VERSION;
+  createdAt: string;
+  storeId: string;
+  storeProfile: StoreProfile;
+  authenticated: boolean;
+  data: LocalBackupData;
+}
+
+interface StoredArrayResult<T> {
+  values: T[];
+  isCorrupted: boolean;
+}
+
+interface LocalStorageSnapshot {
+  storeId: string;
+  values: Map<string, string | null>;
+}
+
+export async function createLocalBackup(
+  profile: StoreProfile,
+  authenticated: boolean,
+  createdAt: string = new Date().toISOString(),
+): Promise<LocalBackup> {
+  const storeId = normalizeBackupStoreId(profile.id);
+  if (!isValidDateString(createdAt)) {
+    throw new Error('backupCreatedAtInvalid');
+  }
+
+  const current = await readLocalBackupData(storeId);
+  if (current.isCorrupted) {
+    throw new Error('currentStorageDataCorrupted');
+  }
+
+  const storeProfile = cloneStoreProfile(profile);
+  const profileError = validateBackupStoreProfile(storeProfile, storeId);
+  if (profileError) {
+    throw new Error(profileError);
+  }
+
+  return {
+    formatVersion: LOCAL_BACKUP_FORMAT_VERSION,
+    createdAt,
+    storeId,
+    storeProfile,
+    authenticated: Boolean(authenticated),
+    data: {
+      customers: current.customers.filter((customer) => customer.storeId === storeId),
+      transactions: current.transactions.filter((transaction) => transaction.storeId === storeId),
+      debts: current.debts.filter((debt) => debt.storeId === storeId),
+      payments: current.payments.filter((payment) => payment.storeId === storeId),
+      dailyArchives: current.dailyArchives,
+    },
+  };
+}
+
+export function serializeLocalBackup(backup: LocalBackup): string {
+  return JSON.stringify(parseLocalBackup(JSON.stringify(backup)), null, 2);
+}
+
+export function parseLocalBackup(raw: string): LocalBackup {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw) as unknown;
+  } catch {
+    throw new Error('backupJsonInvalid');
+  }
+
+  if (!isRecord(parsed)) {
+    throw new Error('backupStructureInvalid');
+  }
+  if (parsed.formatVersion !== LOCAL_BACKUP_FORMAT_VERSION) {
+    throw new Error('backupVersionUnsupported');
+  }
+  if (!isValidDateString(parsed.createdAt)) {
+    throw new Error('backupCreatedAtInvalid');
+  }
+
+  const storeId = normalizeBackupStoreId(parsed.storeId);
+  const profileError = validateBackupStoreProfile(parsed.storeProfile, storeId);
+  if (profileError) {
+    throw new Error(profileError);
+  }
+  if (typeof parsed.authenticated !== 'boolean') {
+    throw new Error('backupAuthenticatedInvalid');
+  }
+  if (!isRecord(parsed.data)) {
+    throw new Error('backupDataMissing');
+  }
+
+  const customers = normalizeBackupArray(parsed.data.customers, normalizeStoredCustomer, 'backupCustomersInvalid');
+  const transactions = normalizeBackupArray(parsed.data.transactions, normalizeStoredTransaction, 'backupTransactionsInvalid');
+  const debts = normalizeBackupArray(parsed.data.debts, normalizeStoredDebt, 'backupDebtsInvalid');
+  const payments = normalizeBackupArray(parsed.data.payments, normalizeStoredPayment, 'backupPaymentsInvalid');
+  const dailyArchives = normalizeBackupArray(
+    parsed.data.dailyArchives,
+    (value) => parseStoredDailyArchive(JSON.stringify(value)),
+    'backupArchivesInvalid',
+  );
+
+  const backup: LocalBackup = {
+    formatVersion: LOCAL_BACKUP_FORMAT_VERSION,
+    createdAt: parsed.createdAt,
+    storeId,
+    storeProfile: cloneStoreProfile(parsed.storeProfile as StoreProfile),
+    authenticated: parsed.authenticated,
+    data: { customers, transactions, debts, payments, dailyArchives },
+  };
+  const dataError = validateBackupRelationships(backup);
+  if (dataError) {
+    throw new Error(dataError);
+  }
+  return backup;
+}
+
+export async function restoreLocalBackup(raw: string, activeStoreId: string): Promise<LocalBackup> {
+  const backup = parseLocalBackup(raw);
+  const normalizedActiveStoreId = normalizeBackupStoreId(activeStoreId);
+  if (backup.storeId !== normalizedActiveStoreId) {
+    throw new Error('backupStoreMismatch');
+  }
+
+  const current = await readLocalBackupData(normalizedActiveStoreId);
+  if (current.isCorrupted) {
+    throw new Error('currentStorageDataCorrupted');
+  }
+  const snapshot = await captureLocalStorageSnapshot(normalizedActiveStoreId);
+
+  const nextCustomers = [
+    ...current.customers.filter((customer) => customer.storeId !== normalizedActiveStoreId),
+    ...backup.data.customers,
+  ];
+  const nextTransactions = [
+    ...current.transactions.filter((transaction) => transaction.storeId !== normalizedActiveStoreId),
+    ...backup.data.transactions,
+  ];
+  const nextDebts = [
+    ...current.debts.filter((debt) => debt.storeId !== normalizedActiveStoreId),
+    ...backup.data.debts,
+  ];
+  const nextPayments = [
+    ...current.payments.filter((payment) => payment.storeId !== normalizedActiveStoreId),
+    ...backup.data.payments,
+  ];
+  const archivePrefix = getDailyArchiveStoragePrefix(normalizedActiveStoreId);
+
+  try {
+    await AsyncStorage.setItem(PROFILE_KEY, JSON.stringify(backup.storeProfile));
+    await AsyncStorage.setItem(CUSTOMERS_KEY, JSON.stringify(nextCustomers));
+    await AsyncStorage.setItem(TRANSACTIONS_KEY, JSON.stringify(nextTransactions));
+    await AsyncStorage.setItem(DEBTS_KEY, JSON.stringify(nextDebts));
+    await AsyncStorage.setItem(PAYMENTS_KEY, JSON.stringify(nextPayments));
+    await AsyncStorage.setItem(AUTH_KEY, String(backup.authenticated));
+
+    const keys = await AsyncStorage.getAllKeys();
+    for (const key of keys) {
+      if (key.startsWith(archivePrefix)) {
+        await AsyncStorage.removeItem(key);
+      }
+    }
+    for (const archive of backup.data.dailyArchives) {
+      await AsyncStorage.setItem(
+        getDailyArchiveStorageKey(normalizedActiveStoreId, archive.date, archive.closingNumber),
+        JSON.stringify(archive),
+      );
+    }
+  } catch (error) {
+    await restoreLocalStorageSnapshot(snapshot);
+    throw error;
+  }
+
+  return backup;
+}
+
+async function readLocalBackupData(storeId: string): Promise<LocalBackupData & { isCorrupted: boolean }> {
+  const [customers, transactions, debts, payments, dailyArchives] = await Promise.all([
+    readStoredArray(CUSTOMERS_KEY, normalizeStoredCustomer),
+    readStoredArray(TRANSACTIONS_KEY, normalizeStoredTransaction),
+    readStoredArray(DEBTS_KEY, normalizeStoredDebt),
+    readStoredArray(PAYMENTS_KEY, normalizeStoredPayment),
+    readStoredArchives(storeId),
+  ]);
+  return {
+    customers: customers.values,
+    transactions: transactions.values,
+    debts: debts.values,
+    payments: payments.values,
+    dailyArchives: dailyArchives.values,
+    isCorrupted: customers.isCorrupted
+      || transactions.isCorrupted
+      || debts.isCorrupted
+      || payments.isCorrupted
+      || dailyArchives.isCorrupted,
+  };
+}
+
+async function readStoredArray<T>(
+  key: string,
+  normalize: (value: unknown) => T | null,
+): Promise<StoredArrayResult<T>> {
+  const raw = await AsyncStorage.getItem(key);
+  if (raw === null) {
+    return { values: [], isCorrupted: false };
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw) as unknown;
+  } catch {
+    return { values: [], isCorrupted: true };
+  }
+  if (!Array.isArray(parsed)) {
+    return { values: [], isCorrupted: true };
+  }
+
+  const normalized = parsed.map(normalize);
+  return {
+    values: normalized.filter((value): value is T => value !== null),
+    isCorrupted: normalized.some((value) => value === null),
+  };
+}
+
+async function readStoredArchives(storeId: string): Promise<StoredArrayResult<DailyArchive>> {
+  const keys = await AsyncStorage.getAllKeys();
+  const prefix = getDailyArchiveStoragePrefix(storeId);
+  const archiveKeys = keys.filter((key) => key.startsWith(prefix));
+  const values: DailyArchive[] = [];
+  let isCorrupted = false;
+
+  for (const key of archiveKeys) {
+    const raw = await AsyncStorage.getItem(key);
+    const archive = raw === null ? null : parseStoredDailyArchive(raw);
+    if (archive === null || archive.storeId !== storeId) {
+      isCorrupted = true;
+      continue;
+    }
+    values.push(archive);
+  }
+
+  return { values, isCorrupted };
+}
+
+async function captureLocalStorageSnapshot(storeId: string): Promise<LocalStorageSnapshot> {
+  const keys = await AsyncStorage.getAllKeys();
+  const archivePrefix = getDailyArchiveStoragePrefix(storeId);
+  const managedKeys = new Set([
+    PROFILE_KEY,
+    AUTH_KEY,
+    CUSTOMERS_KEY,
+    TRANSACTIONS_KEY,
+    DEBTS_KEY,
+    PAYMENTS_KEY,
+    ...keys.filter((key) => key.startsWith(archivePrefix)),
+  ]);
+  const entries = await Promise.all(
+    Array.from(managedKeys, async (key) => [key, await AsyncStorage.getItem(key)] as const),
+  );
+  return { storeId, values: new Map(entries) };
+}
+
+async function restoreLocalStorageSnapshot(snapshot: LocalStorageSnapshot): Promise<void> {
+  const archivePrefix = getDailyArchiveStoragePrefix(snapshot.storeId);
+  const currentKeys = await AsyncStorage.getAllKeys();
+  for (const key of currentKeys) {
+    if (key.startsWith(archivePrefix) && !snapshot.values.has(key)) {
+      await AsyncStorage.removeItem(key);
+    }
+  }
+
+  for (const [key, value] of snapshot.values) {
+    if (value === null) {
+      await AsyncStorage.removeItem(key);
+    } else {
+      await AsyncStorage.setItem(key, value);
+    }
+  }
+}
+
+function normalizeBackupArray<T>(
+  value: unknown,
+  normalize: (item: unknown) => T | null,
+  errorCode: string,
+): T[] {
+  if (!Array.isArray(value)) {
+    throw new Error(errorCode);
+  }
+  const normalized = value.map(normalize);
+  if (normalized.some((item) => item === null)) {
+    throw new Error(errorCode);
+  }
+  return normalized as T[];
+}
+
+function normalizeBackupStoreId(value: unknown): string {
+  if (typeof value !== 'string' || value.trim().length === 0) {
+    throw new Error('backupStoreIdInvalid');
+  }
+  return value.trim();
+}
+
+function validateBackupStoreProfile(value: unknown, storeId: string): string | null {
+  if (!isRecord(value)) {
+    return 'backupStoreProfileInvalid';
+  }
+  if (
+    typeof value.id !== 'string'
+    || value.id.trim() !== storeId
+    || typeof value.name !== 'string'
+    || typeof value.phone !== 'string'
+    || typeof value.address !== 'string'
+    || !isCurrencyCode(value.currency)
+    || !Array.isArray(value.quickCurrencies)
+    || !Array.isArray(value.visibleCurrencies)
+    || !value.quickCurrencies.every(isCurrencyCode)
+    || !value.visibleCurrencies.every(isCurrencyCode)
+    || (value.language !== 'ar' && value.language !== 'en' && value.language !== 'tr')
+    || !isAccentColor(value.accent)
+    || (value.logoUri !== undefined && typeof value.logoUri !== 'string')
+  ) {
+    return 'backupStoreProfileInvalid';
+  }
+  return null;
+}
+
+function validateBackupRelationships(backup: LocalBackup): string | null {
+  const customerIds = new Set(backup.data.customers.map((customer) => customer.id));
+  const transactionIds = new Set(backup.data.transactions.map((transaction) => transaction.id));
+  if (backup.data.customers.some((customer) => customer.storeId !== backup.storeId)) {
+    return 'backupCustomersStoreMismatch';
+  }
+  if (backup.data.transactions.some((transaction) => transaction.storeId !== backup.storeId)) {
+    return 'backupTransactionsStoreMismatch';
+  }
+  if (backup.data.debts.some((debt) => debt.storeId !== backup.storeId || !customerIds.has(debt.customerId))) {
+    return 'backupDebtRelationshipInvalid';
+  }
+  if (backup.data.payments.some((payment) => (
+    payment.storeId !== backup.storeId
+    || (payment.customerId !== undefined && !customerIds.has(payment.customerId))
+    || (payment.transactionId !== undefined && !transactionIds.has(payment.transactionId))
+  ))) {
+    return 'backupPaymentRelationshipInvalid';
+  }
+  if (backup.data.dailyArchives.some((archive) => (
+    archive.storeId !== backup.storeId
+    || archive.snapshot.some((event) => (
+      event.storeId !== backup.storeId
+      || (event.customerId !== undefined && !customerIds.has(event.customerId))
+    ))
+  ))) {
+    return 'backupArchiveRelationshipInvalid';
+  }
+
+  const archiveKeys = new Set<string>();
+  for (const archive of backup.data.dailyArchives) {
+    const archiveKey = `${archive.date}:${archive.closingNumber}`;
+    if (archiveKeys.has(archiveKey)) {
+      return 'backupArchivesDuplicate';
+    }
+    archiveKeys.add(archiveKey);
+  }
+  return null;
+}
+
+function cloneStoreProfile(profile: StoreProfile): StoreProfile {
+  return {
+    ...profile,
+    quickCurrencies: [...profile.quickCurrencies],
+    visibleCurrencies: [...profile.visibleCurrencies],
+  };
+}
+
+function isAccentColor(value: unknown): value is StoreProfile['accent'] {
+  return value === 'silver'
+    || value === 'white'
+    || value === 'gold'
+    || value === 'blue'
+    || value === 'violet'
+    || value === 'green';
+}
+
+function getDailyArchiveStoragePrefix(storeId: string): string {
+  return `${ARCHIVE_KEY_PREFIX}${encodeURIComponent(storeId)}:`;
+}
