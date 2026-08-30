@@ -1,4 +1,10 @@
 {
+  "functions": {
+    "source": "functions",
+    "predeploy": [
+      "pnpm --dir \"$RESOURCE_DIR\" run build"
+    ]
+  },
   "firestore": {
     "rules": "firestore.rules"
   },
