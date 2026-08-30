@@ -1,11 +1,13 @@
 import React, { createContext, ReactNode, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { User } from 'firebase/auth';
 import type { CashTransactionDraft, Debt, StoreProfile, Transaction } from '@/types/business';
+import type { SpaceIdentity } from '@/types/space';
 import { isRTL, normalizeLanguage, translate, type Language, type TranslationKey } from '@/constants/i18n';
 import { DEFAULT_CURRENCY, normalizeCurrency, normalizeQuickCurrencies, type CurrencyCode } from '@/constants/currencies';
 import { normalizeAccent, type AccentColor } from '@/constants/colors';
 import { isFirebaseConfigured } from '@/services/firebase';
 import { signOutFromFirebase, subscribeToFirebaseAuth } from '@/services/firebaseAuth';
+import { getOrCreateSpaceIdentity } from '@/services/spaceIdentity';
 import {
   clearLegacyLanguage,
   loadAuthenticatedState,
@@ -47,6 +49,7 @@ interface StoreContextValue {
   t: (key: TranslationKey) => string;
   isAuthenticated: boolean;
   isReady: boolean;
+  spaceIdentity: SpaceIdentity | null;
   transactions: Transaction[];
   journalRevision: number;
   addTransaction: (draft: CashTransactionDraft) => Promise<Transaction>;
@@ -67,6 +70,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [localIsAuthenticated, setLocalIsAuthenticatedState] = useState<boolean>(false);
   const [isLocalReady, setIsLocalReady] = useState<boolean>(false);
   const [firebaseUser, setFirebaseUser] = useState<User | null>(null);
+  const [spaceIdentity, setSpaceIdentity] = useState<SpaceIdentity | null>(null);
   const [isFirebaseReady, setIsFirebaseReady] = useState<boolean>(!isFirebaseConfigured);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [journalRevision, setJournalRevision] = useState<number>(0);
@@ -74,6 +78,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const transactionsRef = useRef<Transaction[]>([]);
   const transactionLoadPromiseRef = useRef<Promise<void>>(Promise.resolve());
   const profileWriteQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const authTransitionRef = useRef<number>(0);
 
   useEffect(() => {
     async function loadLocalState() {
@@ -106,18 +111,45 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
     return subscribeToFirebaseAuth(
       (user) => {
+        const transition = authTransitionRef.current + 1;
+        authTransitionRef.current = transition;
         setFirebaseUser(user);
-        setIsFirebaseReady(true);
+        if (!user) {
+          setSpaceIdentity(null);
+          setIsFirebaseReady(true);
+          return;
+        }
+
+        void getOrCreateSpaceIdentity(user.uid)
+          .then((identity) => {
+            if (authTransitionRef.current !== transition) {
+              return;
+            }
+            setSpaceIdentity(identity);
+            setIsFirebaseReady(true);
+          })
+          .catch(() => {
+            if (authTransitionRef.current !== transition) {
+              return;
+            }
+            setFirebaseUser(null);
+            setSpaceIdentity(null);
+            setIsFirebaseReady(true);
+          });
       },
       () => {
+        authTransitionRef.current += 1;
         setFirebaseUser(null);
+        setSpaceIdentity(null);
         setIsFirebaseReady(true);
       },
     );
   }, []);
 
   const isReady = isLocalReady && isFirebaseReady;
-  const isAuthenticated = isFirebaseConfigured ? firebaseUser !== null : localIsAuthenticated;
+  const isAuthenticated = isFirebaseConfigured
+    ? firebaseUser !== null && spaceIdentity !== null
+    : localIsAuthenticated;
 
   useEffect(() => {
     if (!isReady) {
@@ -247,6 +279,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       t: (key: TranslationKey) => translate(key, language),
       isAuthenticated,
       isReady,
+      spaceIdentity,
       transactions,
       journalRevision,
       addTransaction,
@@ -259,7 +292,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       restoreFromLocalBackup,
       resetLocalSession,
     }),
-    [profile, language, rtl, isAuthenticated, isReady, transactions, journalRevision],
+    [profile, language, rtl, isAuthenticated, isReady, spaceIdentity, transactions, journalRevision],
   );
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
