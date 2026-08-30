@@ -1,10 +1,10 @@
 ---
 name: Local Space identity
-description: The boundary between Firebase account identity and the unchanged local store data model.
+description: The boundary between Firebase account identity and Space-namespaced local business data.
 ---
 
-Space identity is separate account metadata: a Firebase UID maps to a generated Space ID in its own local AsyncStorage entry. It must not replace `StoreProfile.id` or any business entity `storeId`.
+Space identity is separate account metadata: a Firebase UID maps to a generated Space ID in its own local AsyncStorage entry. The Space ID selects the local business-data namespace but must not replace `StoreProfile.id` or any business entity `storeId`.
 
-**Why:** Space identity is groundwork for later isolation, but this phase explicitly forbids migrating, rewriting, deleting, or cloud-syncing existing business data.
+**Why:** Multiple Firebase accounts can use the same device, so unscoped business keys leak one account's local data to another. Legacy `local-store` data has no trustworthy owner and must remain untouched outside all Firebase Space namespaces.
 
-**How to apply:** Resolve the identity after Firebase Auth restores a user, retain it across sign-out, and keep all current business and backup operations scoped to the existing local store identity until a separately approved isolation migration.
+**How to apply:** Resolve the identity after Firebase Auth restores a user, select its Space namespace before any business read or write, clear only in-memory business state on account transitions, and leave legacy keys unmigrated and undeleted.

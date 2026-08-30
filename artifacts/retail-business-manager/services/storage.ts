@@ -12,15 +12,25 @@ const TRANSACTIONS_KEY = '@retail-business-manager/transactions';
 const DEBTS_KEY = '@retail-business-manager/debts';
 const PAYMENTS_KEY = '@retail-business-manager/payments';
 const ARCHIVE_KEY_PREFIX = '@retail-business-manager/daily-archive/';
+export const SPACE_STORAGE_PREFIX = '@retail-business-manager/spaces/';
 
 let transactionSequence = 0;
 let debtSequence = 0;
 let paymentSequence = 0;
 let settlementQueue: Promise<void> = Promise.resolve();
 let archiveClosingQueue: Promise<void> = Promise.resolve();
+let activeSpaceId: string | null = null;
+
+export function setActiveSpaceId(spaceId: string | null): void {
+  activeSpaceId = spaceId?.trim() || null;
+}
+
+export function getActiveSpaceId(): string | null {
+  return activeSpaceId;
+}
 
 export async function loadStoreProfile(): Promise<unknown | null> {
-  const storedProfile = await AsyncStorage.getItem(PROFILE_KEY);
+  const storedProfile = await AsyncStorage.getItem(getStoreProfileKey());
   if (!storedProfile) {
     return null;
   }
@@ -33,7 +43,7 @@ export async function loadStoreProfile(): Promise<unknown | null> {
 }
 
 export async function saveStoreProfile(profile: StoreProfile): Promise<void> {
-  await AsyncStorage.setItem(PROFILE_KEY, JSON.stringify(profile));
+  await AsyncStorage.setItem(getStoreProfileKey(), JSON.stringify(profile));
 }
 
 export async function loadAuthenticatedState(): Promise<boolean> {
@@ -67,7 +77,7 @@ export async function saveCustomers(storeId: string, customers: Customer[]): Pro
 
   const storedCustomers = await loadAllCustomers();
   const otherStoreCustomers = storedCustomers.filter((customer) => customer.storeId !== storeId);
-  await AsyncStorage.setItem(CUSTOMERS_KEY, JSON.stringify([...otherStoreCustomers, ...customers]));
+  await AsyncStorage.setItem(getCustomersKey(), JSON.stringify([...otherStoreCustomers, ...customers]));
 }
 
 export function createTransactionId(): string {
@@ -171,7 +181,7 @@ export async function saveTransactions(storeId: string, transactions: Transactio
   }
 
   const otherStoreTransactions = stored.transactions.filter((transaction) => transaction.storeId !== storeId);
-  await AsyncStorage.setItem(TRANSACTIONS_KEY, JSON.stringify([...otherStoreTransactions, ...transactions]));
+  await AsyncStorage.setItem(getTransactionsKey(), JSON.stringify([...otherStoreTransactions, ...transactions]));
 }
 
 export function createDebtId(): string {
@@ -383,7 +393,7 @@ export async function loadDailyArchives(storeId: string): Promise<DailyArchive[]
 
   try {
     const keys = await AsyncStorage.getAllKeys();
-    const prefix = `${ARCHIVE_KEY_PREFIX}${encodeURIComponent(storeId.trim())}:`;
+    const prefix = getDailyArchiveStoragePrefix(storeId);
     const archiveKeys = keys.filter((key) => key.startsWith(prefix));
     const archives = await Promise.all(archiveKeys.map(async (key) => {
       const raw = await AsyncStorage.getItem(key);
@@ -409,7 +419,7 @@ export async function loadDailyArchive(storeId: string, date: string): Promise<D
 }
 
 function getDailyArchiveStorageKey(storeId: string, date: string, closingNumber: number): string {
-  return `${ARCHIVE_KEY_PREFIX}${encodeURIComponent(storeId.trim())}:${date}:${String(closingNumber).padStart(6, '0')}`;
+  return `${getDailyArchiveStoragePrefix(storeId)}${date}:${String(closingNumber).padStart(6, '0')}`;
 }
 
 function isValidArchiveDate(value: string): boolean {
@@ -611,7 +621,7 @@ export async function saveDebts(storeId: string, debts: Debt[]): Promise<void> {
   }
 
   const otherStoreDebts = stored.debts.filter((debt) => debt.storeId !== storeId);
-  await AsyncStorage.setItem(DEBTS_KEY, JSON.stringify([...otherStoreDebts, ...debts]));
+  await AsyncStorage.setItem(getDebtsKey(), JSON.stringify([...otherStoreDebts, ...debts]));
 }
 
 export function createPaymentId(): string {
@@ -717,7 +727,7 @@ export async function savePayments(storeId: string, payments: Payment[]): Promis
   }
 
   const otherStorePayments = stored.payments.filter((payment) => payment.storeId !== storeId);
-  await AsyncStorage.setItem(PAYMENTS_KEY, JSON.stringify([...otherStorePayments, ...payments]));
+  await AsyncStorage.setItem(getPaymentsKey(), JSON.stringify([...otherStorePayments, ...payments]));
 }
 
 export function settleCustomerDebt(
@@ -806,9 +816,9 @@ async function settleCustomerDebtNow(
   const nextTransactions = [...currentTransactions, transaction];
   const nextPayments = [...currentPayments, payment];
   const snapshots = await Promise.all([
-    AsyncStorage.getItem(DEBTS_KEY),
-    AsyncStorage.getItem(TRANSACTIONS_KEY),
-    AsyncStorage.getItem(PAYMENTS_KEY),
+    AsyncStorage.getItem(getDebtsKey()),
+    AsyncStorage.getItem(getTransactionsKey()),
+    AsyncStorage.getItem(getPaymentsKey()),
   ]);
 
   try {
@@ -816,9 +826,9 @@ async function settleCustomerDebtNow(
     await saveTransactions(storeId, nextTransactions);
     await savePayments(storeId, nextPayments);
   } catch (error) {
-    await restoreStorageValue(DEBTS_KEY, snapshots[0]);
-    await restoreStorageValue(TRANSACTIONS_KEY, snapshots[1]);
-    await restoreStorageValue(PAYMENTS_KEY, snapshots[2]);
+    await restoreStorageValue(getDebtsKey(), snapshots[0]);
+    await restoreStorageValue(getTransactionsKey(), snapshots[1]);
+    await restoreStorageValue(getPaymentsKey(), snapshots[2]);
     throw error;
   }
 
@@ -858,7 +868,7 @@ function isSameLocalDay(value: string, now: Date): boolean {
 }
 
 async function loadAllCustomers(): Promise<Customer[]> {
-  const storedCustomers = await AsyncStorage.getItem(CUSTOMERS_KEY);
+  const storedCustomers = await AsyncStorage.getItem(getCustomersKey());
   if (!storedCustomers) {
     return [];
   }
@@ -886,7 +896,7 @@ async function loadAllPayments(): Promise<Payment[]> {
 }
 
 async function readStoredTransactions(): Promise<{ transactions: Transaction[]; isCorrupted: boolean }> {
-  const storedTransactions = await AsyncStorage.getItem(TRANSACTIONS_KEY);
+  const storedTransactions = await AsyncStorage.getItem(getTransactionsKey());
   if (!storedTransactions) {
     return { transactions: [], isCorrupted: false };
   }
@@ -959,7 +969,7 @@ function normalizeStoredTransaction(value: unknown): Transaction | null {
 }
 
 async function readStoredDebts(): Promise<{ debts: Debt[]; isCorrupted: boolean }> {
-  const storedDebts = await AsyncStorage.getItem(DEBTS_KEY);
+  const storedDebts = await AsyncStorage.getItem(getDebtsKey());
   if (!storedDebts) {
     return { debts: [], isCorrupted: false };
   }
@@ -1018,7 +1028,7 @@ function normalizeStoredDebt(value: unknown): Debt | null {
 }
 
 async function readStoredPayments(): Promise<{ payments: Payment[]; isCorrupted: boolean }> {
-  const storedPayments = await AsyncStorage.getItem(PAYMENTS_KEY);
+  const storedPayments = await AsyncStorage.getItem(getPaymentsKey());
   if (!storedPayments) {
     return { payments: [], isCorrupted: false };
   }
@@ -1307,11 +1317,11 @@ export async function restoreLocalBackup(raw: string, activeStoreId: string): Pr
   const archivePrefix = getDailyArchiveStoragePrefix(normalizedActiveStoreId);
 
   try {
-    await AsyncStorage.setItem(PROFILE_KEY, JSON.stringify(backup.storeProfile));
-    await AsyncStorage.setItem(CUSTOMERS_KEY, JSON.stringify(nextCustomers));
-    await AsyncStorage.setItem(TRANSACTIONS_KEY, JSON.stringify(nextTransactions));
-    await AsyncStorage.setItem(DEBTS_KEY, JSON.stringify(nextDebts));
-    await AsyncStorage.setItem(PAYMENTS_KEY, JSON.stringify(nextPayments));
+    await AsyncStorage.setItem(getStoreProfileKey(), JSON.stringify(backup.storeProfile));
+    await AsyncStorage.setItem(getCustomersKey(), JSON.stringify(nextCustomers));
+    await AsyncStorage.setItem(getTransactionsKey(), JSON.stringify(nextTransactions));
+    await AsyncStorage.setItem(getDebtsKey(), JSON.stringify(nextDebts));
+    await AsyncStorage.setItem(getPaymentsKey(), JSON.stringify(nextPayments));
     await AsyncStorage.setItem(AUTH_KEY, String(backup.authenticated));
 
     const keys = await AsyncStorage.getAllKeys();
@@ -1336,10 +1346,10 @@ export async function restoreLocalBackup(raw: string, activeStoreId: string): Pr
 
 async function readLocalBackupData(storeId: string): Promise<LocalBackupData & { isCorrupted: boolean }> {
   const [customers, transactions, debts, payments, dailyArchives] = await Promise.all([
-    readStoredArray(CUSTOMERS_KEY, normalizeStoredCustomer),
-    readStoredArray(TRANSACTIONS_KEY, normalizeStoredTransaction),
-    readStoredArray(DEBTS_KEY, normalizeStoredDebt),
-    readStoredArray(PAYMENTS_KEY, normalizeStoredPayment),
+    readStoredArray(getCustomersKey(), normalizeStoredCustomer),
+    readStoredArray(getTransactionsKey(), normalizeStoredTransaction),
+    readStoredArray(getDebtsKey(), normalizeStoredDebt),
+    readStoredArray(getPaymentsKey(), normalizeStoredPayment),
     readStoredArchives(storeId),
   ]);
   return {
@@ -1406,12 +1416,12 @@ async function captureLocalStorageSnapshot(storeId: string): Promise<LocalStorag
   const keys = await AsyncStorage.getAllKeys();
   const archivePrefix = getDailyArchiveStoragePrefix(storeId);
   const managedKeys = new Set([
-    PROFILE_KEY,
+    getStoreProfileKey(),
     AUTH_KEY,
-    CUSTOMERS_KEY,
-    TRANSACTIONS_KEY,
-    DEBTS_KEY,
-    PAYMENTS_KEY,
+    getCustomersKey(),
+    getTransactionsKey(),
+    getDebtsKey(),
+    getPaymentsKey(),
     ...keys.filter((key) => key.startsWith(archivePrefix)),
   ]);
   const entries = await Promise.all(
@@ -1542,5 +1552,38 @@ function isAccentColor(value: unknown): value is StoreProfile['accent'] {
 }
 
 function getDailyArchiveStoragePrefix(storeId: string): string {
-  return `${ARCHIVE_KEY_PREFIX}${encodeURIComponent(storeId)}:`;
+  const archivePrefix = activeSpaceId
+    ? `${getSpaceStoragePrefix(activeSpaceId)}daily-archive/`
+    : ARCHIVE_KEY_PREFIX;
+  return `${archivePrefix}${encodeURIComponent(storeId.trim())}:`;
+}
+
+function getStoreProfileKey(): string {
+  return getSpaceStorageKey(PROFILE_KEY, 'store-profile');
+}
+
+function getCustomersKey(): string {
+  return getSpaceStorageKey(CUSTOMERS_KEY, 'customers');
+}
+
+function getTransactionsKey(): string {
+  return getSpaceStorageKey(TRANSACTIONS_KEY, 'transactions');
+}
+
+function getDebtsKey(): string {
+  return getSpaceStorageKey(DEBTS_KEY, 'debts');
+}
+
+function getPaymentsKey(): string {
+  return getSpaceStorageKey(PAYMENTS_KEY, 'payments');
+}
+
+function getSpaceStorageKey(legacyKey: string, dataName: string): string {
+  return activeSpaceId
+    ? `${getSpaceStoragePrefix(activeSpaceId)}${dataName}`
+    : legacyKey;
+}
+
+function getSpaceStoragePrefix(spaceId: string): string {
+  return `${SPACE_STORAGE_PREFIX}${encodeURIComponent(spaceId)}/`;
 }

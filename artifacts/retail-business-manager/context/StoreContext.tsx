@@ -23,6 +23,7 @@ import {
   loadTransactions,
   saveDebts,
   saveTransactions,
+  setActiveSpaceId,
   settleCustomerDebt as persistCustomerSettlement,
   type SettlementDraft,
   type SettlementResult,
@@ -83,15 +84,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     async function loadLocalState() {
       try {
-        const [storedProfile, storedAuth, storedLanguage] = await Promise.all([
-          loadStoreProfile(),
+        const [storedAuth, storedLanguage] = await Promise.all([
           loadAuthenticatedState(),
           loadLegacyLanguage(),
         ]);
+        const storedProfile = isFirebaseConfigured ? null : await loadStoreProfile();
         const normalizedProfile = normalizeStoredStoreProfile(storedProfile, defaultProfile, storedLanguage);
         profileRef.current = normalizedProfile;
         setProfile(normalizedProfile);
-        await Promise.all([saveStoreProfile(normalizedProfile), clearLegacyLanguage()]);
+        await Promise.all([
+          ...(isFirebaseConfigured ? [] : [saveStoreProfile(normalizedProfile)]),
+          clearLegacyLanguage(),
+        ]);
         setLocalIsAuthenticatedState(storedAuth);
       } catch {
         profileRef.current = defaultProfile;
@@ -109,22 +113,44 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       return;
     }
 
+    setActiveSpaceId(null);
+    setIsFirebaseReady(false);
+
     return subscribeToFirebaseAuth(
       (user) => {
         const transition = authTransitionRef.current + 1;
         authTransitionRef.current = transition;
         setFirebaseUser(user);
+        setSpaceIdentity(null);
+        setIsFirebaseReady(false);
+        setActiveSpaceId(null);
+        profileRef.current = defaultProfile;
+        transactionsRef.current = [];
+        transactionLoadPromiseRef.current = Promise.resolve();
+        setProfile(defaultProfile);
+        setTransactions([]);
         if (!user) {
-          setSpaceIdentity(null);
           setIsFirebaseReady(true);
           return;
         }
 
         void getOrCreateSpaceIdentity(user.uid)
-          .then((identity) => {
+          .then(async (identity) => {
             if (authTransitionRef.current !== transition) {
               return;
             }
+            setActiveSpaceId(identity.spaceId);
+            const storedProfile = await loadStoreProfile();
+            if (authTransitionRef.current !== transition) {
+              return;
+            }
+            const normalizedProfile = normalizeStoredStoreProfile(storedProfile, defaultProfile);
+            await saveStoreProfile(normalizedProfile);
+            if (authTransitionRef.current !== transition) {
+              return;
+            }
+            profileRef.current = normalizedProfile;
+            setProfile(normalizedProfile);
             setSpaceIdentity(identity);
             setIsFirebaseReady(true);
           })
@@ -134,6 +160,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             }
             setFirebaseUser(null);
             setSpaceIdentity(null);
+            setActiveSpaceId(null);
             setIsFirebaseReady(true);
           });
       },
@@ -141,6 +168,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         authTransitionRef.current += 1;
         setFirebaseUser(null);
         setSpaceIdentity(null);
+        setActiveSpaceId(null);
+        profileRef.current = defaultProfile;
+        transactionsRef.current = [];
+        transactionLoadPromiseRef.current = Promise.resolve();
+        setProfile(defaultProfile);
+        setTransactions([]);
         setIsFirebaseReady(true);
       },
     );
@@ -169,7 +202,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return () => {
       isActive = false;
     };
-  }, [isReady, profile.id]);
+  }, [isReady, profile.id, spaceIdentity?.spaceId]);
 
   const saveProfile = async (updates: Partial<StoreProfile>) => {
     const currentProfile = profileRef.current;
