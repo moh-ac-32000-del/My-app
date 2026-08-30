@@ -4,3 +4,4 @@
 - [React Native Web alerts](react-native-web-alerts.md) — do not use Alert.alert for critical web confirmations; the installed implementation is a no-op.
 - [Firebase Auth persistence typing](firebase-auth-persistence-typing.md) — Firebase 12 exposes RN persistence at runtime, but its universal TypeScript surface omits the named export.
 - [Local Space identity](local-space-identity.md) — Space ID selects the local business namespace without replacing store or entity IDs.
+- [Firestore Space foundation](firestore-space-foundation.md) — cloud stores ownership metadata only; failures must never block local business data.

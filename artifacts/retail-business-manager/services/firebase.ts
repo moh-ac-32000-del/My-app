@@ -32,7 +32,7 @@ export const isFirebaseConfigured = Boolean(
 let firebaseApp: FirebaseApp | null = null;
 let firebaseAuth: Auth | null = null;
 
-function getFirebaseApp(): FirebaseApp {
+export function getFirebaseApp(): FirebaseApp {
   if (!isFirebaseConfigured) {
     throw new Error('firebaseNotConfigured');
   }

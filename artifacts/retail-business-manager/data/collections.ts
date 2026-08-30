@@ -23,6 +23,13 @@ export interface StoreDocument {
   updatedAt: string;
 }
 
+export interface SpaceDocument {
+  spaceId: string;
+  ownerUserId: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 /**
  * Every future Firestore document should carry storeId.
  * This keeps one account ready for multiple stores and role-based access.

@@ -7,6 +7,7 @@ import { DEFAULT_CURRENCY, normalizeCurrency, normalizeQuickCurrencies, type Cur
 import { normalizeAccent, type AccentColor } from '@/constants/colors';
 import { isFirebaseConfigured } from '@/services/firebase';
 import { signOutFromFirebase, subscribeToFirebaseAuth } from '@/services/firebaseAuth';
+import { ensureCloudSpace } from '@/services/firestore';
 import { getOrCreateSpaceIdentity } from '@/services/spaceIdentity';
 import {
   clearLegacyLanguage,
@@ -153,6 +154,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             setProfile(normalizedProfile);
             setSpaceIdentity(identity);
             setIsFirebaseReady(true);
+            void ensureCloudSpace(identity).catch(() => undefined);
           })
           .catch(() => {
             if (authTransitionRef.current !== transition) {

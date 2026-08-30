@@ -1,0 +1,39 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /stores/{spaceId} {
+      allow read: if request.auth != null
+        && resource.data.spaceId == spaceId
+        && resource.data.ownerUserId == request.auth.uid;
+
+      allow create: if request.auth != null
+        && request.resource.data.keys().hasOnly([
+          'spaceId',
+          'ownerUserId',
+          'createdAt',
+          'updatedAt'
+        ])
+        && request.resource.data.spaceId == spaceId
+        && request.resource.data.ownerUserId == request.auth.uid
+        && request.resource.data.createdAt is string
+        && request.resource.data.updatedAt is string;
+
+      allow update: if request.auth != null
+        && resource.data.spaceId == spaceId
+        && resource.data.ownerUserId == request.auth.uid
+        && request.resource.data.keys().hasOnly([
+          'spaceId',
+          'ownerUserId',
+          'createdAt',
+          'updatedAt'
+        ])
+        && request.resource.data.spaceId == resource.data.spaceId
+        && request.resource.data.ownerUserId == resource.data.ownerUserId
+        && request.resource.data.createdAt is string
+        && request.resource.data.updatedAt is string;
+
+      allow delete: if false;
+    }
+  }
+}
