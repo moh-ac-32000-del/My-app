@@ -1,0 +1,453 @@
+Task 2B — Local Space Isolation
+
+نفّذ هذه المهمة فقط.
+
+## الهدف
+
+جعل بيانات التطبيق المحلية معزولة حسب Firebase Space ID.
+
+لدينا حاليًا:
+
+Firebase Authentication حقيقي.
+Space Identity Foundation مكتملة.
+كل Firebase UID لديه spaceId مستقل.
+التخزين الحالي ما زال يستخدم مفاتيح AsyncStorage عامة.
+لذلك حسابان مختلفان على نفس الجهاز يمكن أن يريا نفس البيانات.
+
+نريد الآن تنفيذ العزل المحلي فقط.
+
+---
+
+# قرار مهم بخصوص البيانات القديمة
+
+البيانات الحالية الموجودة تحت:
+
+local-store
+
+هي بيانات تجريبية وغير مهمة.
+
+لذلك:
+
+- لا تنفذ Migration لها.
+- لا تحاول معرفة صاحبها.
+- لا تربطها تلقائيًا بأي Firebase account.
+- لا تعمل Claim.
+- لا تنقلها إلى Space جديد.
+- لا تحذفها.
+- لا تمسح AsyncStorage بالكامل.
+
+اعتبرها Legacy data غير مرتبطة بحساب Firebase.
+
+يمكن تركها موجودة، لكن يجب ألا تظهر تلقائيًا داخل Spaces الجديدة.
+
+---
+
+# التصميم المطلوب
+
+يجب أن يصبح التخزين المحلي مرتبطًا بالـspaceId.
+
+المفهوم:
+
+Firebase UID
+↓
+Space Identity
+↓
+spaceId
+↓
+Local Storage namespace
+↓
+بيانات هذا Space
+
+مثال:
+
+Account A
+→ space_A
+→ بيانات A
+
+Account B
+→ space_B
+→ بيانات B
+
+---
+
+# البيانات التي يجب عزلها
+
+اعزل جميع بيانات المتجر، بما فيها:
+
+- Store Profile
+- Customers
+- Transactions
+- Debts
+- Payments
+- Daily Archives
+- Cash Box إن كان له تخزين مستقل
+- Inventory إن كان له تخزين مستقل
+- Purchases إن كان لها تخزين مستقل
+- أي بيانات أعمال أخرى موجودة في AsyncStorage
+
+ولا تعزل:
+
+- Firebase Auth persistence
+- Space Identity نفسها
+- أي إعداد عام للتطبيق لا يخص متجرًا معينًا
+
+---
+
+# طريقة التنفيذ
+
+عدّل طبقة التخزين فقط بالقدر الضروري.
+
+يفضل استخدام namespace أو مفاتيح تحتوي على spaceId.
+
+مثال:
+
+@retail-business-manager/spaces/<spaceId>/customers
+
+لكن استخدم التصميم الأنسب للبنية الحالية بدل نسخ المثال حرفيًا.
+
+يجب أن يكون:
+
+spaceId
+
+هو مصدر العزل، وليس:
+
+Firebase email
+
+ولا:
+
+Firebase displayName
+
+ولا:
+
+local-store
+
+---
+
+# StoreProfile
+
+لا تجعل:
+
+spaceId
+
+يستبدل:
+
+StoreProfile.id
+
+إلا إذا كان ذلك ضروريًا جدًا.
+
+حافظ على الفرق بين:
+
+StoreProfile.id
+و
+Space Identity.spaceId
+
+ولا تغيّر نموذج StoreProfile دون ضرورة.
+
+إذا احتاجت بيانات Space إلى معرفة الـspaceId، استخدم metadata منفصلة أو طبقة namespace.
+
+---
+
+# البيانات القديمة
+
+يجب ألا تظهر بيانات:
+
+local-store
+
+لحساب جديد.
+
+عند تسجيل الدخول بحساب جديد:
+
+- لا يقرأ التطبيق مفاتيح البيانات القديمة العامة.
+- يفتح namespace الخاص بالـspace الجديد.
+- إذا لم توجد بيانات لهذا الـspace، يبدأ ببيانات فارغة/default مناسبة.
+
+لكن:
+
+لا تحذف مفاتيح local-store القديمة.
+
+لا تعيد كتابتها.
+
+لا تنقلها.
+
+لا تعمل Migration.
+
+---
+
+# Logout
+
+عند تسجيل الخروج:
+
+- لا تحذف بيانات Space.
+- لا تحذف Space Identity.
+- لا تمسح AsyncStorage.
+- لا تحذف Backup.
+- لا تحذف أي بيانات.
+
+عند تسجيل الدخول بنفس الحساب مرة أخرى:
+
+يجب تحميل نفس Space ونفس بياناته.
+
+---
+
+# الحسابان على نفس الجهاز
+
+يجب أن يصبح هذا السيناريو صحيحًا:
+
+### Account A
+
+يسجل الدخول.
+
+يضيف:
+
+Customer:
+ISOLATION_A
+
+Transaction:
+100 TRY
+
+Debt:
+500 TRY
+
+### Logout
+
+### Account B
+
+يسجل الدخول.
+
+يجب ألا يرى:
+
+ISOLATION_A
+100 TRY
+500 TRY
+
+ثم يضيف:
+
+Customer:
+ISOLATION_B
+
+Transaction:
+200 TRY
+
+Debt:
+800 TRY
+
+### Logout
+
+### Account A
+
+يسجل الدخول مرة أخرى.
+
+يجب أن يرى:
+
+ISOLATION_A
+100 TRY
+500 TRY
+
+ولا يرى:
+
+ISOLATION_B
+200 TRY
+800 TRY
+
+---
+
+# Backup / Restore
+
+Backup/Restore الحالي يعمل بشكل صحيح ولا نريد كسره.
+
+قبل تعديل storage افحص:
+
+services/backupFile.ts
+
+لا تغير:
+
+formatVersion = 1
+
+إلا إذا كان ذلك ضروريًا جدًا.
+
+Backup يجب أن يقرأ بيانات Space الحالي فقط.
+
+Restore يجب أن يستعيد بيانات Space الحالي فقط.
+
+لكن لا تنفذ Migration لملفات Backup القديمة في هذه المهمة.
+
+إذا وجدت أن العزل سيكسر Backup/Restore الحالي، توقف وأبلغني بدل التخمين أو إجراء تعديل كبير.
+
+---
+
+# العلاقات الداخلية
+
+لا تكسر العلاقات بين:
+
+Customer
+Debt
+Payment
+Transaction
+Archive
+
+خصوصًا:
+
+customerId
+transactionId
+sourceId
+
+يجب أن تبقى IDs الداخلية كما هي.
+
+لا تعيد توليد IDs.
+
+لا تغير محتوى السجلات إلا إذا كان ضروريًا للعزل.
+
+---
+
+# البيانات المالية
+
+لا تغير أي منطق مالي.
+
+لا تغير:
+
+- حساب الرصيد.
+- Cash In.
+- Cash Out.
+- Debt.
+- Settlement.
+- Payments.
+- Daily Closing.
+- Multiple Closing.
+- Archives.
+
+نحن نغيّر فقط مكان قراءة وكتابة البيانات.
+
+---
+
+# Firebase
+
+لا تضف:
+
+- Firestore
+- Cloud Sync
+- Cloud Storage
+- Cloud Functions
+- Realtime Database
+
+هذه المهمة Local Storage فقط.
+
+---
+
+# الحزم
+
+لا تضف أي حزمة جديدة إلا إذا كانت ضرورية جدًا.
+
+يفضل عدم إضافة أي حزمة.
+
+---
+
+# الاختبارات
+
+أضف Unit Tests تغطي:
+
+1. Space A يحصل على بياناته فقط.
+2. Space B يحصل على بياناته فقط.
+3. A لا يستطيع قراءة بيانات B.
+4. B لا يستطيع قراءة بيانات A.
+5. Logout لا يحذف بيانات Space.
+6. إعادة تسجيل الدخول تعيد بيانات Space نفسها.
+7. Store Profile معزول.
+8. Customers معزولون.
+9. Transactions معزولة.
+10. Debts معزولة.
+11. Payments معزولة.
+12. Daily Archives معزولة.
+13. local-store legacy data لا تظهر تلقائيًا في Space جديد.
+14. local-store legacy data لا يتم حذفها.
+15. IDs والعلاقات الداخلية تبقى سليمة.
+16. Backup لا يخلط بيانات Spaces.
+17. Restore لا يخلط بيانات Spaces.
+
+---
+
+# الاختبارات المطلوبة
+
+بعد التنفيذ شغّل فقط:
+
+- TypeScript
+- Unit Tests
+- git diff --check
+
+لا تشغّل:
+
+- Browser
+- Playwright
+- E2E
+- Screenshots
+
+---
+
+# Git / Scope
+
+قبل إنهاء المهمة راجع git diff كاملًا.
+
+التغييرات يجب أن تكون محصورة في:
+
+- storage isolation
+- StoreContext إذا كان ضروريًا
+- migration metadata فقط إذا كانت ضرورية
+- Backup/Restore فقط إذا كان ضروريًا للحفاظ على التوافق
+- tests
+
+لا تعدّل:
+
+.replit
+
+ولا Workflow.
+
+لا تثبّت حزمًا بدون ضرورة.
+
+لا تضف ميزات مستقبلية.
+
+---
+
+# شرط أمان مهم جدًا
+
+إذا واجهت أي نقطة قد تؤدي إلى:
+
+- فقدان بيانات.
+- حذف بيانات.
+- تغيير StoreProfile.id.
+- تغيير storeId للسجلات.
+- كسر Backup/Restore.
+- خلط Space A وSpace B.
+- Migration غير واضحة.
+
+توقف فورًا ولا تخمّن.
+
+أبلغني بالمشكلة بدل تنفيذ حل غير مؤكد.
+
+---
+
+# التقرير النهائي
+
+بعد التنفيذ أرسل تقريرًا يحتوي على:
+
+1. الملفات التي تغيرت.
+2. طريقة عزل البيانات.
+3. شكل مفاتيح AsyncStorage الجديدة.
+4. كيف يتم تحديد Space الحالي.
+5. كيف تم التعامل مع local-store.
+6. تأكيد أن local-store لم تُحذف ولم تُنقل.
+7. كيف تم الحفاظ على StoreProfile.id.
+8. كيف تم الحفاظ على IDs والعلاقات.
+9. حالة Backup/Restore.
+10. نتائج TypeScript.
+11. نتائج Unit Tests.
+12. نتيجة git diff --check.
+13. عدد الحزم المضافة.
+14. أي مخاطر متبقية.
+
+ثم توقف تمامًا.
+
+لا تبدأ Firestore.
+لا تبدأ Cloud Sync.
+لا تبدأ Spaces UI.
+لا تبدأ أي Task أخرى.
+
+انتظر موافقتي الصريحة.
