@@ -24,6 +24,41 @@ const userA = testEnvironment.authenticatedContext('user-A');
 const userB = testEnvironment.authenticatedContext('user-B');
 const anonymous = testEnvironment.unauthenticatedContext();
 
+function legacySpaceDocument(spaceId, ownerUserId) {
+  return {
+    spaceId,
+    name: `Space ${spaceId}`,
+    mode: 'private',
+    status: 'active',
+    ownerUserId,
+    createdAt: '2026-08-30T10:00:00.000Z',
+    updatedAt: '2026-08-30T10:00:00.000Z',
+  };
+}
+
+function membershipDocument(spaceId, userId, role) {
+  return {
+    spaceId,
+    userId,
+    role,
+    status: 'active',
+    createdAt: '2026-08-30T10:00:00.000Z',
+    updatedAt: '2026-08-30T10:00:00.000Z',
+    joinedAt: '2026-08-30T10:00:00.000Z',
+  };
+}
+
+function membershipIndexDocument(spaceId, role) {
+  return {
+    spaceId,
+    role,
+    status: 'active',
+    spaceNameSnapshot: `Space ${spaceId}`,
+    joinedAt: '2026-08-30T10:00:00.000Z',
+    updatedAt: '2026-08-30T10:00:00.000Z',
+  };
+}
+
 function spaceDocument(spaceId, ownerUserId) {
   return {
     spaceId,
@@ -37,14 +72,40 @@ function spaceReference(context, spaceId) {
   return doc(context.firestore(), 'stores', spaceId);
 }
 
+function multiSpaceReference(context, spaceId) {
+  return doc(context.firestore(), 'spaces', spaceId);
+}
+
+function memberReference(context, spaceId, uid) {
+  return doc(context.firestore(), 'spaces', spaceId, 'members', uid);
+}
+
+function membershipIndexReference(context, uid, spaceId) {
+  return doc(context.firestore(), 'users', uid, 'memberships', spaceId);
+}
+
 async function clearFirestore() {
   await testEnvironment.clearFirestore();
+}
+
+async function seedMultiSpace(spaceId, ownerUserId, members = []) {
+  await testEnvironment.withSecurityRulesDisabled(async (context) => {
+    const firestore = context.firestore();
+    await setDoc(multiSpaceReference(context, spaceId), spaceDocument(spaceId, ownerUserId));
+    for (const member of members) {
+      await setDoc(memberReference(context, spaceId, member.uid), membershipDocument(spaceId, member.uid, member.role));
+      await setDoc(
+        membershipIndexReference(context, member.uid, spaceId),
+        membershipIndexDocument(spaceId, member.role),
+      );
+    }
+  });
 }
 
 async function seedSpace(context, spaceId, ownerUserId) {
   await assertSucceeds(setDoc(
     spaceReference(context, spaceId),
-    spaceDocument(spaceId, ownerUserId),
+    legacySpaceDocument(spaceId, ownerUserId),
   ));
 }
 
@@ -139,6 +200,88 @@ try {
     () => getDocs(collection(userA.firestore(), 'stores')),
     'DENY',
   );
+
+  await clearFirestore();
+  await seedMultiSpace('space-A', 'user-A', [
+    { uid: 'user-A', role: 'owner' },
+    { uid: 'user-C', role: 'manager' },
+  ]);
+  await seedMultiSpace('space-B', 'user-B', [
+    { uid: 'user-B', role: 'owner' },
+  ]);
+  const userC = testEnvironment.authenticatedContext('user-C');
+  try {
+    await runCase(
+      'Test 9 — owner reads Space A',
+      () => getDoc(multiSpaceReference(userA, 'space-A')),
+      'ALLOW',
+    );
+    await runCase(
+      'Test 10 — active member reads Space A',
+      () => getDoc(multiSpaceReference(userC, 'space-A')),
+      'ALLOW',
+    );
+    await runCase(
+      'Test 11 — user from another Space is denied',
+      () => getDoc(multiSpaceReference(userB, 'space-A')),
+      'DENY',
+    );
+    await runCase(
+      'Test 12 — anonymous is denied',
+      () => getDoc(multiSpaceReference(anonymous, 'space-A')),
+      'DENY',
+    );
+    await runCase(
+      'Test 13 — active member reads membership',
+      () => getDoc(memberReference(userC, 'space-A', 'user-C')),
+      'ALLOW',
+    );
+    await runCase(
+      'Test 14 — owner cannot change ownerUserId',
+      () => updateDoc(multiSpaceReference(userA, 'space-A'), { ownerUserId: 'user-C' }),
+      'DENY',
+    );
+    await runCase(
+      'Test 15 — member cannot promote itself to owner',
+      () => updateDoc(memberReference(userC, 'space-A', 'user-C'), { role: 'owner' }),
+      'DENY',
+    );
+    await runCase(
+      'Test 16 — client cannot change membership index',
+      () => updateDoc(membershipIndexReference(userA, 'user-A', 'space-A'), { role: 'manager' }),
+      'DENY',
+    );
+    await runCase(
+      'Test 17 — client cannot add itself as a member',
+      () => setDoc(memberReference(userC, 'space-A', 'user-C'), membershipDocument('space-A', 'user-C', 'manager')),
+      'DENY',
+    );
+    await runCase(
+      'Test 18 — client cannot delete Owner Membership',
+      () => deleteDoc(memberReference(userA, 'space-A', 'user-A')),
+      'DENY',
+    );
+
+    for (const collectionName of [
+      'customers',
+      'transactions',
+      'debts',
+      'payments',
+      'ledgerEntries',
+      'settlements',
+      'dailyClosings',
+      'operationReceipts',
+      'auditEvents',
+    ]) {
+      await runCase(
+        `Financial deny — ${collectionName}`,
+        () => getDoc(doc(userA.firestore(), collectionName, 'record-A')),
+        'DENY',
+      );
+    }
+  } finally {
+    await userC.cleanup();
+  }
 } finally {
   await userA.cleanup();
   await userB.cleanup();

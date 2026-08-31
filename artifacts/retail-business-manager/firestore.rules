@@ -2,6 +2,68 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isActiveMember(spaceId) {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/spaces/$(spaceId)/members/$(request.auth.uid))
+        && get(/databases/$(database)/documents/spaces/$(spaceId)/members/$(request.auth.uid)).data.status == 'active';
+    }
+
+    match /spaces/{spaceId} {
+      allow read: if isActiveMember(spaceId);
+      allow create, update, delete: if false;
+
+      match /members/{uid} {
+        allow read: if isActiveMember(spaceId);
+        allow create, update, delete: if false;
+      }
+    }
+
+    match /users/{uid}/memberships/{spaceId} {
+      allow read: if isActiveMember(spaceId)
+        && request.auth.uid == uid;
+      allow create, update, delete: if false;
+    }
+
+    match /customers/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /transactions/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /debts/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /payments/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /ledgerEntries/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /settlements/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /dailyClosings/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /operationReceipts/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /auditEvents/{document=**} {
+      allow read, write: if false;
+    }
+
     match /stores/{spaceId} {
       allow read: if request.auth != null
         && resource.data.spaceId == spaceId
