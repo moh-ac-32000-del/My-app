@@ -1,0 +1,168 @@
+Create a complete PROJECT HANDOFF archive of the current project, exactly like a professional developer-to-developer handoff.
+
+IMPORTANT:
+This is an existing project. Do NOT modify, refactor, clean up, or improve the project while creating the archive.
+
+First inspect the current project state and then create ONE compressed archive containing the exact current source/configuration snapshot.
+
+The archive must include:
+
+- Expo application source
+- Firebase Functions source
+- API server artifact
+- workspace manifests
+- package.json files
+- pnpm lockfiles
+- TypeScript configuration
+- Firebase configuration
+- firestore.rules
+- all relevant tests
+- types
+- services
+- context
+- components
+- app routes
+- configuration files
+- replit.md
+- any other source/configuration file required for another developer or AI to continue the project
+
+EXCLUDE:
+
+- node_modules
+- installed dependency directories
+- build output
+- generated artifacts that are not required
+- logs
+- .env files
+- API keys
+- passwords
+- credentials
+- private keys
+- access tokens
+- Firebase service-account secrets
+- Replit secret values
+- any other secret or sensitive value
+
+If a configuration file contains secret-like values, preserve the structure/name of the configuration but redact the actual secret values.
+
+Also create a file named:
+
+PROJECT_HANDOFF.md
+
+It must be included INSIDE the archive.
+
+PROJECT_HANDOFF.md must describe the EXACT current state of the project at the moment the archive is created.
+
+Include these sections:
+
+1. Scope and fidelity
+2. Project structure
+3. Dependencies and configuration
+4. Current architecture
+5. Authentication
+6. Space Identity
+7. Multi-Space architecture
+8. Trusted Bootstrap
+9. Firestore structure
+10. Firestore Security Rules
+11. Local storage
+12. StoreContext
+13. Backup/Restore
+14. Firebase Functions
+15. API server
+16. Current project status
+    - IMPLEMENTED
+    - DESIGNED BUT NOT IMPLEMENTED
+    - NOT STARTED
+17. Important architectural decisions
+18. Current task history
+19. Next planned work
+20. Test status
+21. Security and secrets
+22. IMPORTANT FOR THE NEXT DEVELOPER / AI
+
+For every section, describe what ACTUALLY exists in the current code.
+
+Do NOT invent features that are not implemented.
+
+Do NOT describe planned architecture as implemented.
+
+Clearly distinguish:
+
+- IMPLEMENTED
+- DESIGNED BUT NOT IMPLEMENTED
+- NOT STARTED
+
+Preserve these architectural principles if they exist in the current project:
+
+- Firebase UID is independent from Space ID.
+- Local SpaceIdentity remains separate from Cloud Space identity.
+- Space ID remains independent from StoreProfile.id and storeId.
+- Local storage must not be deleted, renamed, or migrated automatically.
+- Membership inside spaces/{spaceId}/members/{uid} is the authorization source.
+- users/{uid}/memberships/{spaceId} is only a discovery index.
+- Trusted backend controls ownership and Owner Membership.
+- Financial data must not receive unrestricted client writes.
+- Backup/Restore remains independent from Cloud Sync.
+- Firebase Production must not be used for development/testing.
+- Local activeSpaceId is never proof of Cloud authorization.
+
+Also document all important limitations discovered in the current implementation.
+
+At the end of PROJECT_HANDOFF.md include:
+
+- Snapshot date
+- Exact project state
+- Files intentionally unchanged
+- Known test results
+- Known environment limitations
+- Remaining major tasks
+- Any known architectural risks
+
+ARCHIVE REQUIREMENTS:
+
+- Create the archive OUTSIDE the source tree first.
+- Then place ONLY the final archive in:
+  .agents/outputs/
+
+Use a clear filename such as:
+
+retail-business-manager-project-handoff-YYYY-MM-DD.zip
+
+Before finishing:
+
+1. Verify the archive can be extracted.
+2. Verify PROJECT_HANDOFF.md exists inside it.
+3. Verify the source files are actually present.
+4. Verify no secrets are included.
+5. Verify the source project itself was not modified by the packaging operation.
+6. Run git status/diff check only for verification; do not make unrelated changes.
+
+DO NOT:
+
+- change application code
+- change Firebase configuration
+- change firestore.rules
+- change SpaceIdentity
+- change StoreContext
+- change AsyncStorage
+- change Backup/Restore
+- change API server
+- add dependencies
+- deploy anything
+- connect to Firebase Production
+- run migrations
+- run Cloud Sync
+- create test data in Production
+
+This task is ONLY for creating a faithful developer/AI handoff backup.
+
+At the end, report:
+
+- exact archive path
+- archive size
+- number of files included
+- confirmation that PROJECT_HANDOFF.md was verified inside the archive
+- confirmation that secrets were excluded
+- confirmation that the source project was unchanged
+- any packaging issue encountered
