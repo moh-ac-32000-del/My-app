@@ -1,5 +1,211 @@
 # Retail Business Manager — Project Handoff
 
+> **Current snapshot authority — 2026-08-31, Europe/Istanbul**
+>
+> This current-snapshot block supersedes older baseline wording later in this file wherever it conflicts. It was prepared from the current source tree at commit `4ed9d018b027a84dbe880b266f1561ad734c6f27` on branch `main`. The repository was clean before this documentation-only export. No application code, Firebase data, local data, or dependency graph was changed by the export.
+
+## 0. Exact current state and transfer scope
+
+Retail Business Manager is a local-first, mobile-first Expo application for small retail/telecom/electronics/repair shops. The implemented foundation covers store profiles, customers, customer credit/debts, settlements, Cash In/Cash Out, per-currency balances, the derived Daily Journal, multiple same-day closings, immutable archive snapshots, and selected-archive sharing through the device share sheet (WhatsApp can be selected when installed).
+
+The current release plan is intentionally limited to:
+
+1. Sharing a selected Daily Archive through the device share sheet, including WhatsApp when installed.
+2. Backup and Restore of important local data.
+3. Login plus Spaces plus data isolation.
+
+Archive sharing is already implemented at the current foundation level; it remains an explicit release-scope pillar that must be preserved while the other two pillars are completed.
+
+Sales, Purchases, Inventory, Capital, and Reports are **not** in the current release plan. Their routes are placeholders only and must not be expanded unless the owner explicitly requests it in a future task.
+
+This package is documentation and export only. It does not run Expo, connect to Firebase Production, migrate data, run Cloud Sync, install dependencies, or repair code.
+
+## 1. Project name and function
+
+The project name is **Retail Business Manager**. It provides a generic store-management foundation, currently centered on customers, credit/debt, cash movements, daily journal review, daily archive/closing, local settings, and archive sharing.
+
+## 2. Technology currently used
+
+- pnpm monorepo/workspace with a locked dependency graph.
+- Expo SDK 54, React Native 0.81.5, React 19, Expo Router 6, TypeScript 5.9.
+- React Native Web support, React Query boundary, Reanimated, gesture/safe-area/keyboard support, Inter fonts, Expo file/document/sharing packages.
+- AsyncStorage as the active local business persistence layer.
+- Vitest unit/contract tests.
+- Firebase client configuration/Auth/Firestore callable boundary and Firebase Functions v2 source are present; cloud business synchronization is not implemented.
+- Separate Express 5 API artifact and Drizzle/PostgreSQL workspace packages exist, but they are not the current business-data source.
+
+## 3. Important structure and entry points
+
+- `artifacts/retail-business-manager/` — Expo application.
+- `artifacts/retail-business-manager/app/_layout.tsx` — root providers, fonts, splash, navigation, error boundary, and shell integration.
+- `artifacts/retail-business-manager/app/index.tsx` — dashboard entry route.
+- `artifacts/retail-business-manager/package.json` — `dev`, `test`, `typecheck`, `build`, and `serve` scripts; the mobile entry is `expo-router/entry`.
+- `artifacts/retail-business-manager/functions/src/index.ts` — Firebase Functions export entry.
+- `artifacts/api-server/src/index.ts` — separate API server entry.
+- `lib/` — API client/spec/Zod and database packages.
+- `scripts/` — workspace scripts.
+
+## 4. Current screens and routes
+
+Implemented routes:
+
+- `/login` — local session entry; when Firebase is configured, Firebase email/password Auth is used by the Auth boundary.
+- `/` — authenticated dashboard, visible currency balances, Daily Journal, and quick actions.
+- `/customers` — store-scoped customer list, search, create, edit, and delete.
+- `/customer/[id]` — customer detail, debt creation, debt history/totals, payment history, settlement, statement and sharing.
+- `/cash` — Cash In/Cash Out entry and history, journal view, and closing action.
+- `/archive` — store-scoped archive list, snapshot detail, and selected archive sharing.
+- `/settings` — store identity, currency, visible/quick currencies, language, accent, and logout.
+- `/sales`, `/purchases`, `/inventory`, `/reports` — real routes but deliberate `UnderDevelopment` placeholders.
+- `+not-found` — fallback route.
+
+## 5. Main components
+
+`AppShell`, `AppBackground`, `PageHeader`, `GlassCard`, `SectionTitle`, `EmptyState`, `MetricCard`, `QuickActions`, `FloatingQuickActions`, `DailyClosingAction`, `CustomerFormModal`, `KeyboardAwareScrollViewCompat`, `SplashView`, `ErrorBoundary`, `ErrorFallback`, `UnderDevelopment`, and `customer-utils` are the main reusable UI pieces. `DailyClosingAction` uses an in-app confirmation/result path rather than relying on `Alert.alert`, whose installed React Native Web implementation is not reliable for critical confirmation.
+
+## 6. Contexts, hooks, and services
+
+- `context/StoreContext.tsx` is the only app context. It owns profile, readiness, auth mode, Firebase user/cloud Space state, local SpaceIdentity, transactions, journal revision, cash creation, debt creation, settlement, profile settings, backup restore, sign-out, and local session reset.
+- `hooks/useI18n.ts` exposes translation and direction behavior.
+- `hooks/useColors.ts` derives light/dark and accent theme values.
+- `services/storage.ts` is the local domain/storage boundary: normalization, validation, store/Space namespaces, balances, journal, archive, debt/payment settlement, and local backup data.
+- `services/backupFile.ts` handles JSON backup serialization, validation, temporary/cache/document file writing, document picking, and platform sharing.
+- `services/dailyClosing.ts` orchestrates the close action.
+- `services/archiveSharing.ts` creates a message from one selected archive without mutating it.
+- `services/firebase.ts`, `firebaseAuth.ts`, `firestore.ts`, `spaceIdentity.ts`, and `trustedBootstrap.ts` provide the Firebase/Space foundations.
+- `functions/src/bootstrapPrimarySpace.ts` is the trusted server-side provisioning handler.
+
+## 7. Actual models and relationships
+
+In `types/business.ts`:
+
+- `StoreProfile` — local store identity and settings; its `id` is the business `storeId`.
+- `StoreScopedEntity` / `BusinessEntity` — common IDs, `storeId`, timestamps, and optional `workspaceId`/`createdByUserId`.
+- `MoneyValue` — amount plus a required `CurrencyCode`.
+- `Customer` — belongs to one store and can own debts and payments.
+- `Transaction` — a store-scoped `cash_in` or `cash_out` with amount, currency, note, and timestamps.
+- `Debt` — one customer, one store, one currency, current amount, optional `originalAmount`, and optional `settledAt`.
+- `Payment` — amount/currency, direction, method, optional customer/transaction links, and timestamps.
+- `DailyArchive` — store/date/close time/closing number plus a copied `DailyJournalEvent[]` snapshot.
+- `Reminder` — contract exists, but no completed reminder workflow is part of the current product.
+- `DashboardMetrics` and `CashTransactionDraft` — UI/input contracts; `DashboardMetrics` is not a full accounting engine.
+
+The current customer settlement creates one inbound cash transaction and one linked cash payment. A payment may reference the transaction it represents. Journal construction suppresses that linked cash transaction so the settlement is shown once. Debts and payments do not create sales, purchasing, inventory, profit, or receivables-aging records.
+
+## 8. Storage and store isolation
+
+Business data is local in AsyncStorage. Legacy/default keys are:
+
+- `@retail-business-manager/store-profile`
+- `@retail-business-manager/authenticated`
+- `@retail-business-manager/language` (legacy language key)
+- `@retail-business-manager/customers`
+- `@retail-business-manager/transactions`
+- `@retail-business-manager/debts`
+- `@retail-business-manager/payments`
+- `@retail-business-manager/daily-archive/…`
+
+The current Space-aware namespace is `@retail-business-manager/spaces/` plus an encoded active Space ID. `setActiveSpaceId` selects the local namespace; the local `SpaceIdentity.spaceId` is not the store ID and is not the Firebase UID. Every business record still carries `storeId`. Reads filter by it; writes validate it and preserve records belonging to other stores. Archive keys contain store/date/closing information and reads re-check the stored `archive.storeId`.
+
+No automatic deletion, rename, migration, or movement of legacy local data is allowed.
+
+## 9. Daily Journal, Archive, and multiple closings
+
+`buildDailyJournalEvents` derives today’s local-day events from store-scoped transactions, debts, and inbound customer payments, resolves customer names, suppresses settlement-linked cash transactions, and sorts by occurrence time. `loadDailyJournalEvents` then removes only event IDs already present in today’s archive snapshots.
+
+`closeDailyArchive` snapshots the currently unarchived journal, assigns the next closing number for that store/date, stores a copied `DailyArchive`, and does not delete or mutate source transactions, debts, payments, customers, the date, or cash balances. `archiveClosingQueue` serializes close operations. Multiple closings on one day are supported and each receives a distinct closing number and ID. `loadDailyArchive(storeId, date)` currently returns the first archive for a date; callers needing a particular same-day closing should use the archive list/closing number.
+
+Archive sharing reads only the selected snapshot, preserves each event’s currency, builds a message, and uses the device share sheet. It does not require a WhatsApp SDK or API key.
+
+## 10. Currency and amount behavior
+
+Supported codes are TRY, USD, EUR, GBP, SAR, AED, and SYP; SAR is the default. Centralized definitions in `constants/currencies.ts` normalize and format values. `calculateCurrencyNetTotals` computes Cash In minus Cash Out separately for each currency. Visible/used currency helpers never convert or merge currencies. Localized amount parsing supports Turkish comma conventions and grouping/decimal forms. Debt totals and settlements are also strictly per currency.
+
+## 11. Debt, Payment, and Cash behavior
+
+Debt amounts must be positive at creation. Settlement validates store/customer/currency/amount, rejects overpayment, applies the amount across matching debts, retains `originalAmount` and `settledAt` when a debt reaches zero, and creates a cash-in transaction plus cash payment with method `cash`. Settlement writes are serialized and restore prior AsyncStorage values if a multi-key write fails. The UI currently does not offer card/bank/other settlement even though the Payment contract supports those methods.
+
+Cash In/Cash Out validates a positive amount, valid currency, valid store, and trimmed note. Cash balances are derived from transactions, never converted across currencies, and are unaffected by archiving.
+
+## 12. Authentication, Space Identity, and Multi-Space architecture
+
+`firebaseAuth.ts` contains Firebase email/password Auth and subscriptions. When Firebase configuration is incomplete, the app uses the persisted local authenticated flag for the local/demo mode. When configured, `StoreContext` observes Firebase Auth, creates/restores a UID-scoped local `SpaceIdentity`, sets the local active Space namespace, invokes trusted primary-Space bootstrap, and retains the returned `cloudSpace` separately from the local `StoreProfile`.
+
+`Space`, `Membership`, `OwnerMembership`, `Invitation`, `CloudOperation`, `OperationReceipt`, and `SpaceIdentity` are contracts in `types/space.ts`. The intended authority is `spaces/{spaceId}/members/{uid}`; `users/{uid}/memberships/{spaceId}` is only a discovery index. Firebase UID, Cloud Space ID, local Space ID, and StoreProfile/store ID are separate identifiers.
+
+The membership UI, invitations, member management, role management, additional Space creation/switching workflows, and cloud business synchronization are not implemented. `activeSpaceId` alone is never proof of cloud authorization.
+
+## 13. Trusted Bootstrap and Firestore
+
+The callable `bootstrapPrimarySpace` requires verified Auth context and an empty client request. The server derives the UID, creates or repairs the primary Space, owner membership, membership discovery index, and idempotency receipt transactionally, then verifies the committed records. The client validates the response and stores it as `cloudSpace`; it cannot submit or choose UID, Space ID, owner, or role.
+
+`firestore.rules` allows only authenticated active-membership access to the Space boundary and prevents client writes to ownership/membership structures. User membership indexes are self-scoped. Business/financial collections such as customers, transactions, debts, payments, ledger entries, settlements, daily closings, operation receipts, and audit events are explicitly denied for unrestricted client access. This is a security boundary, not a completed sync implementation.
+
+## 14. Backup and Restore
+
+The storage layer contains a version-1 `LocalBackup` contract and validation/restore functions for the active store: profile, auth flag, customers, transactions, debts, payments, and daily archives. It validates JSON, format version, records, store ID, and relationships before writing, preserves other local stores, and has rollback logic for multi-key writes. `backupFile.ts` supplies the file picker/cache/document/share plumbing.
+
+The user-facing Backup/Restore screen and complete product flow are still the next release work. This is local backup, not Firebase backup, Cloud Sync, or remote storage.
+
+## 15. API server
+
+`artifacts/api-server` is a separate Express 5 artifact with CORS/cookie-parser/pino and workspace Drizzle/PostgreSQL packages. Its current implemented endpoint is the health route (`GET /api/healthz`). It is not the Retail Business Manager business-data source.
+
+## 16. Current status classification
+
+**IMPLEMENTED**
+
+- Expo app shell, routes, local session mode, profile/settings, customers, customer debt, settlement, Cash In/Cash Out.
+- Per-currency balances and formatting.
+- Daily Journal, multiple same-day closings, archive snapshots, archive isolation, no-cash-impact archive behavior.
+- Selected archive sharing through the system share sheet.
+- Arabic/English/Turkish dictionaries, Arabic RTL, English/Turkish LTR, accent themes.
+- AsyncStorage validation and store/Space namespace foundation.
+- Local Backup/Restore data contract and file-service foundation.
+- Firebase client/Auth boundary, local UID-scoped SpaceIdentity, trusted primary-Space callable client/server, and membership-oriented Firestore Rules foundation.
+- API health artifact, workspace manifests, types, tests, and configuration.
+
+**DESIGNED BUT NOT IMPLEMENTED**
+
+- Complete user-facing Backup/Restore flow.
+- Full Login + Spaces product flow beyond configured Auth/bootstrap foundation.
+- Additional Spaces, switching UI, memberships, invitations, member management, roles, and permissions UI.
+- Cloud Sync, durable outbox, migration, trusted financial commands, append-only ledger, notifications, and remote backup.
+- Reminder workflow, logo picker/storage, and non-cash settlement UI.
+
+**NOT STARTED / DEFERRED**
+
+- Sales, Purchases, Inventory, Capital, Reports, profit/accounting engine, stock valuation, and receivables aging.
+- Firebase Production rollout, production data use, emulator execution in this environment, and E2E/Playwright verification for this handoff.
+
+## 17. Important constraints for continuation
+
+Preserve UID/Space/store identity separation; keep local storage and Backup/Restore independent from Cloud Sync; keep membership under the Space as authorization authority; never treat a local active Space ID as cloud authorization; keep financial client writes restricted; preserve store isolation, per-currency arithmetic, settlement links, archive event-ID filtering, immutable snapshots, and multiple same-day closing semantics. Do not silently migrate or delete local data.
+
+## 18. Tests and verification
+
+Latest recorded non-Emulator verification: 19 test files and 153 tests passed; TypeScript passed; `git diff --check` passed. The current handoff generation itself did not run tests, Expo, browser, Playwright, Firebase Production, migrations, or Cloud Sync. Rules Emulator tests remain not run because Emulator tooling/Java was unavailable. Functions target Node 20 while the development workspace previously reported Node 24, producing only an engine warning.
+
+## 19. Latest task history and remaining work
+
+Recent completed technical work includes local cash/journal, settlement/home-credit, archive isolation/no cash impact, archive sharing, multi-Space contracts, Firebase/Firestore foundation, trusted bootstrap, client bootstrap integration, and membership-based Rules. The latest Git commit is metadata-only (`4ed9d01`); the latest functional foundation commits include trusted bootstrap and membership Rules.
+
+The remaining release work is Backup/Restore UX and robust Login + Spaces + Data Isolation; Archive sharing is implemented but remains part of the release scope and must not regress. Do not create a new task or expand to deferred modules without explicit owner approval.
+
+## 20. Security and secrets
+
+This handoff must not contain `.env` files, secret values, passwords, tokens, credentials, private keys, service-account material, or live user data. Firebase environment-variable names may remain in source contracts, but values are not included. Any copied configuration containing secret-like assignments must be redacted.
+
+## 21. Snapshot metadata
+
+- Snapshot date: 2026-08-31 (Europe/Istanbul).
+- Branch: `main`.
+- Commit before documentation export: `4ed9d018b027a84dbe880b266f1561ad734c6f27`.
+- Working tree before documentation export: clean.
+- Budget/cost remaining: not available in the project state and therefore not inferred.
+- Files intentionally unchanged: all application source, Firebase configuration, Firestore Rules, AsyncStorage behavior, API source, lockfiles, dependencies, workflows, Git remotes, and data.
+- Packaging output: `.agents/outputs/retail-business-manager-project-handoff-2026-08-31.zip`.
+
 ## 1. Purpose
 
 Retail Business Manager is a mobile-first Expo/React Native application for managing phone, telecom, electronics, accessories, and repair shops.

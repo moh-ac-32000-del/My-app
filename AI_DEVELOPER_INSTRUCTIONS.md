@@ -1,5 +1,9 @@
 # Mandatory Instructions for Any AI Developer or Human Developer
 
+> **Current scope authority — 2026-08-31**
+>
+> The current release focuses only on **Archive sharing through the device share sheet/WhatsApp**, **Backup/Restore**, and **Login + Spaces + data isolation**. Sales, Purchases, Inventory, Capital, and Reports are postponed. These instructions apply to every future AI or human continuation.
+
 This file is part of the project handoff. Treat it as binding continuation guidance.
 
 ## Scope control
@@ -26,6 +30,9 @@ This file is part of the project handoff. Treat it as binding continuation guida
 3. A save for one store must not overwrite or delete records belonging to another store.
 4. Archive storage and reads must remain store-scoped.
 5. Any future Spaces implementation must make the active space/store boundary explicit and must not weaken the existing `storeId` checks.
+6. Firebase UID, Cloud Space ID, local `SpaceIdentity.spaceId`, and `StoreProfile.id`/`storeId` are independent identifiers.
+7. `spaces/{spaceId}/members/{uid}` is the authorization source; `users/{uid}/memberships/{spaceId}` is only a discovery index.
+8. A local active Space ID is never proof of Cloud authorization.
 
 ## Currency rules
 
@@ -57,10 +64,30 @@ This file is part of the project handoff. Treat it as binding continuation guida
 
 The current release focuses only on:
 
+- Archive sharing through the existing device share sheet, including WhatsApp when installed.
 - Backup / Restore.
 - Login + Spaces + Data Isolation.
 
 Sales, Purchases, Inventory, Capital, and Reports are postponed until after the current release. Do not include them in implementation plans for this release.
+
+## Backup, restore, and cloud boundaries
+
+1. Keep Backup/Restore local and independent from Cloud Sync.
+2. Validate backup format, store identity, records, relationships, and currencies before writing.
+3. Preserve other local stores and archives; never clear all AsyncStorage as a shortcut.
+4. Do not connect to Firebase Production, upload financial data, or add Cloud Sync without explicit approval.
+5. Do not grant unrestricted client writes to financial/business Firestore collections.
+6. Trusted backend controls Space ownership, owner membership, and primary-Space provisioning. Clients cannot submit UID, Space ID, owner ID, or role to bootstrap.
+
+## Explicit behavior invariants
+
+1. Do not mix currencies or add implicit exchange rates/conversion.
+2. Archive operations must never change cash balances, transactions, debts, payments, customers, or the current date.
+3. Preserve event-ID-based Daily Journal filtering and immutable archive snapshots.
+4. Preserve multiple closings on the same day with independent closing numbers and archive IDs.
+5. Do not delete original data when archiving.
+6. Do not change Debt, Payment, Cash In, Cash Out, or settlement behavior without a direct requirement and focused verification.
+7. Do not use Expo, Browser, or Playwright for a documentation/export task; use them only when explicitly requested for a later task.
 
 ## Verification and safety
 

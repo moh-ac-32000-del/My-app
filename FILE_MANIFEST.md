@@ -1,5 +1,9 @@
 # File Manifest
 
+> **Current snapshot note — 2026-08-31**
+>
+> This manifest is an important-file index, not a substitute for the complete source copy in the handoff ZIP. The current implementation includes the Firebase/Space/bootstrap files and newer tests listed in the additions below. The archive preserves the complete transferable source/configuration tree after excluding dependency directories, generated build output, logs, and secrets.
+
 This manifest lists the important project files and the role of each area. The external handoff copy contains the complete portable source tree, not only the files listed here.
 
 ## Root and workspace
@@ -86,6 +90,25 @@ This manifest lists the important project files and the role of each area. The e
 | `services/firebase.ts` | Future Firebase config boundary; no active Firebase client. |
 | `data/collections.ts` | Future Firebase collection names and store-scoped document type. |
 
+### Current Space/Firebase additions
+
+| Path | Purpose |
+|---|---|
+| `types/space.ts` | Space, membership, owner, invitation, operation receipt, and local SpaceIdentity contracts. |
+| `types/trustedBootstrap.ts` | Trusted primary-Space request/response, provisioning, outcome, and error contracts. |
+| `services/firebaseAuth.ts` | Firebase email/password Auth operations and Auth-state subscription. |
+| `services/spaceIdentity.ts` | UID-scoped local SpaceIdentity creation/restoration. |
+| `services/trustedBootstrap.ts` | Client callable boundary and response validation for primary-Space bootstrap. |
+| `services/firestore.ts` | Existing Firestore/store helper retained for compatibility; not the active Auth bootstrap path. |
+| `services/backupFile.ts` | Local backup JSON file creation, validation handoff, picking, caching, and sharing. |
+| `functions/src/index.ts` | Firebase Admin initialization and exported callable. |
+| `functions/src/bootstrapPrimarySpace.ts` | Trusted transactional primary-Space provisioning and repair handler. |
+| `functions/package.json` | Isolated Functions dependencies and Node 20/build/typecheck scripts. |
+| `functions/pnpm-lock.yaml` | Locked Functions dependency graph. |
+| `functions/tsconfig.json` | Functions TypeScript configuration. |
+| `firebase.json` | Functions source/predeploy and Firestore Rules configuration. |
+| `firestore.rules` | Active-membership boundary and explicit denial of unrestricted financial client access. |
+
 ## Main app: tests
 
 | Path | Coverage |
@@ -100,6 +123,21 @@ This manifest lists the important project files and the role of each area. The e
 | `tests/archive-sharing.test.ts` | Selected Archive message content, currencies, customer names, and immutability. |
 | `tests/currencies.test.ts` | Currency definitions, normalization, and formatting. |
 | `tests/storage.test.ts` | Local storage normalization and persistence behavior. |
+
+### Current additional tests
+
+| Path | Coverage |
+|---|---|
+| `tests/backupRestore.test.ts` | Versioned local backup, validation, relationships, isolation, and restore behavior. |
+| `tests/firebase-auth.test.ts` | Firebase Auth boundary behavior. |
+| `tests/space-identity.test.ts` | UID-scoped local SpaceIdentity behavior. |
+| `tests/space-storage-isolation.test.ts` | Space namespace isolation. |
+| `tests/firestore-space.test.ts` | Firestore Space contract behavior. |
+| `tests/multi-space-domain.test.ts` | Multi-Space domain contracts. |
+| `tests/trusted-bootstrap-contract.test.ts` | Trusted bootstrap type/contract validation. |
+| `tests/trusted-bootstrap.test.ts` | Client callable boundary validation. |
+| `tests/bootstrap-primary-space-function.test.ts` | Server provisioning, repair, and idempotency behavior. |
+| `tests/firestore-rules.test.mjs` | Membership and financial-denial Rules cases; requires Emulator and was not run here. |
 
 ## Other workspace packages
 
@@ -123,6 +161,7 @@ This manifest lists the important project files and the role of each area. The e
 | `.agents/memory/local-persistence-guardrails.md` | AsyncStorage isolation/schema guidance. |
 | `.agents/memory/daily-archive-isolation.md` | Archive event-ID isolation guidance. |
 | `.agents/memory/react-native-web-alerts.md` | React Native Web alert limitation. |
+| `.agents/memory/tracked-handoff-outputs.md` | Packaging note for the tracked handoff ZIP output. |
 | `.local/tasks/` | Existing project task plans and task context. |
 | `.local/skills/` | Replit-provided task-specific instructions. |
 | `.local/secondary_skills/` | Additional skill instructions available in the workspace. |
@@ -148,5 +187,15 @@ The external portable source snapshot omits only generated or reinstallable mate
 - Build `dist` directories.
 - TypeScript `*.tsbuildinfo` files.
 - `.local/share` package/tool cache.
+
+## Current Git/package metadata
+
+| Item | Value |
+|---|---|
+| Branch | `main` |
+| Commit before documentation export | `4ed9d018b027a84dbe880b266f1561ad734c6f27` |
+| Recorded latest verification | 19 test files / 153 tests passed; TypeScript passed; `git diff --check` passed |
+| Current release scope | Archive sharing/WhatsApp; Backup/Restore; Login + Spaces; data isolation |
+| Deferred product modules | Sales, Purchases, Inventory, Capital, Reports |
 
 All source, assets, tests, lockfiles, project instructions, agent memory, task plans, Git metadata, and relevant configuration are included.
