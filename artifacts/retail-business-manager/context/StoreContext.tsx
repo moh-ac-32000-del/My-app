@@ -7,8 +7,9 @@ import { DEFAULT_CURRENCY, normalizeCurrency, normalizeQuickCurrencies, type Cur
 import { normalizeAccent, type AccentColor } from '@/constants/colors';
 import { isFirebaseConfigured } from '@/services/firebase';
 import { signOutFromFirebase, subscribeToFirebaseAuth } from '@/services/firebaseAuth';
-import { ensureCloudSpace } from '@/services/firestore';
 import { getOrCreateSpaceIdentity } from '@/services/spaceIdentity';
+import { bootstrapPrimarySpace } from '@/services/trustedBootstrap';
+import type { Space } from '@/types/space';
 import {
   clearLegacyLanguage,
   loadAuthenticatedState,
@@ -52,6 +53,7 @@ interface StoreContextValue {
   isAuthenticated: boolean;
   isReady: boolean;
   spaceIdentity: SpaceIdentity | null;
+  cloudSpace: Space | null;
   transactions: Transaction[];
   journalRevision: number;
   addTransaction: (draft: CashTransactionDraft) => Promise<Transaction>;
@@ -73,6 +75,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [isLocalReady, setIsLocalReady] = useState<boolean>(false);
   const [firebaseUser, setFirebaseUser] = useState<User | null>(null);
   const [spaceIdentity, setSpaceIdentity] = useState<SpaceIdentity | null>(null);
+  const [cloudSpace, setCloudSpace] = useState<Space | null>(null);
   const [isFirebaseReady, setIsFirebaseReady] = useState<boolean>(!isFirebaseConfigured);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [journalRevision, setJournalRevision] = useState<number>(0);
@@ -123,6 +126,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         authTransitionRef.current = transition;
         setFirebaseUser(user);
         setSpaceIdentity(null);
+        setCloudSpace(null);
         setIsFirebaseReady(false);
         setActiveSpaceId(null);
         profileRef.current = defaultProfile;
@@ -141,6 +145,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
               return;
             }
             setActiveSpaceId(identity.spaceId);
+            const bootstrapResult = await bootstrapPrimarySpace();
+            if (authTransitionRef.current !== transition) {
+              return;
+            }
+            setCloudSpace(bootstrapResult.space);
             const storedProfile = await loadStoreProfile();
             if (authTransitionRef.current !== transition) {
               return;
@@ -154,7 +163,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             setProfile(normalizedProfile);
             setSpaceIdentity(identity);
             setIsFirebaseReady(true);
-            void ensureCloudSpace(identity).catch(() => undefined);
           })
           .catch(() => {
             if (authTransitionRef.current !== transition) {
@@ -162,6 +170,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             }
             setFirebaseUser(null);
             setSpaceIdentity(null);
+            setCloudSpace(null);
             setActiveSpaceId(null);
             setIsFirebaseReady(true);
           });
@@ -170,6 +179,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         authTransitionRef.current += 1;
         setFirebaseUser(null);
         setSpaceIdentity(null);
+        setCloudSpace(null);
         setActiveSpaceId(null);
         profileRef.current = defaultProfile;
         transactionsRef.current = [];
@@ -183,7 +193,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const isReady = isLocalReady && isFirebaseReady;
   const isAuthenticated = isFirebaseConfigured
-    ? firebaseUser !== null && spaceIdentity !== null
+    ? firebaseUser !== null && spaceIdentity !== null && cloudSpace !== null
     : localIsAuthenticated;
 
   useEffect(() => {
@@ -315,6 +325,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       isAuthenticated,
       isReady,
       spaceIdentity,
+      cloudSpace,
       transactions,
       journalRevision,
       addTransaction,
@@ -327,7 +338,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       restoreFromLocalBackup,
       resetLocalSession,
     }),
-    [profile, language, rtl, isAuthenticated, isReady, spaceIdentity, transactions, journalRevision],
+    [profile, language, rtl, isAuthenticated, isReady, spaceIdentity, cloudSpace, transactions, journalRevision],
   );
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
