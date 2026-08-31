@@ -14,3 +14,17 @@ mtime_ms = 1788013993225
 storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/repl:b069b282-770b-4ef1-ba53-6a5ac53826ce/a110c4fe-b70e-4f18-a122-f1ba5277de81/d856a512-205a-4adc-80a4-663112767bd1"
 storage_version_token = "1788014650226456"
 content_type = "application/octet-stream"
+
+[[outputs]]
+id = "TaOaqXCpxq9cnR22FLZ9c"
+uri = "file://.agents/outputs/retail-business-manager-project-handoff-2026-08-31.zip"
+type = "unspecified"
+title = "Retail Business Manager Project Handoff"
+description = "Complete source, configuration, tests, Firebase Functions, Security Rules, and PROJECT_HANDOFF.md snapshot."
+logical_id = "e3dea486-2c61-4d3a-8ea1-f42fdbce6f5c"
+content_hash = "sha256:67edee62104894ab80a2e8e6ac7011b8ddcb19fb9a92ba2662602fb23444e981"
+size = 1822755
+mtime_ms = 1788181004900
+storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/repl:b069b282-770b-4ef1-ba53-6a5ac53826ce/e3dea486-2c61-4d3a-8ea1-f42fdbce6f5c/77963555-b276-4366-b550-590ec05ae976"
+storage_version_token = "1788181020700214"
+content_type = "application/octet-stream"
