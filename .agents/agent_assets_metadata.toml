@@ -28,3 +28,17 @@ mtime_ms = 1788184631807
 storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/repl:b069b282-770b-4ef1-ba53-6a5ac53826ce/e3dea486-2c61-4d3a-8ea1-f42fdbce6f5c/64699463-2cbd-4849-b436-2b392e81d55c"
 storage_version_token = "1788185743466180"
 content_type = "application/octet-stream"
+
+[[outputs]]
+id = "UxRT7iy60mmkISiFx_jT3"
+uri = "file://.agents/outputs/my%20app.tar.gz"
+type = "unspecified"
+title = "my app.tar.gz"
+description = "Verified current-project TAR.GZ archive packaged in the same general full-project style as the previous stable baseline."
+logical_id = "5c1cdb60-d67a-4c12-8cba-2a62e7263924"
+content_hash = "sha256:2aeabee5b6519e56cd15157aa9af820ee4433f39622eb1014282df9855f1e7cb"
+size = 20703880
+mtime_ms = 1788186286717
+storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/repl:b069b282-770b-4ef1-ba53-6a5ac53826ce/5c1cdb60-d67a-4c12-8cba-2a62e7263924/c7298b52-12d6-4b4c-a16d-433d0c8a0f85"
+storage_version_token = "1788186334725805"
+content_type = "application/octet-stream"
