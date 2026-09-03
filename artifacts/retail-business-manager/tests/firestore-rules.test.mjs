@@ -84,8 +84,21 @@ function membershipIndexReference(context, uid, spaceId) {
   return doc(context.firestore(), 'users', uid, 'memberships', spaceId);
 }
 
+function userReference(context, uid) {
+  return doc(context.firestore(), 'users', uid);
+}
+
 async function clearFirestore() {
   await testEnvironment.clearFirestore();
+}
+
+async function seedUser(uid, data = {}) {
+  await testEnvironment.withSecurityRulesDisabled(async (context) => {
+    await setDoc(userReference(context, uid), {
+      primarySpaceId: 'space-A',
+      ...data,
+    });
+  });
 }
 
 async function seedMultiSpace(spaceId, ownerUserId, members = []) {
@@ -193,6 +206,34 @@ try {
   );
 
   await clearFirestore();
+  await seedUser('user-A');
+  await runCase(
+    'Test 9 — user A reads own user document',
+    () => getDoc(userReference(userA, 'user-A')),
+    'ALLOW',
+  );
+  await runCase(
+    'Test 10 — user A cannot read user B document',
+    () => getDoc(userReference(userA, 'user-B')),
+    'DENY',
+  );
+  await runCase(
+    'Test 11 — client cannot create user document',
+    () => setDoc(userReference(userA, 'user-B'), { primarySpaceId: 'space-B' }),
+    'DENY',
+  );
+  await runCase(
+    'Test 12 — client cannot update user document',
+    () => updateDoc(userReference(userA, 'user-A'), { primarySpaceId: 'space-B' }),
+    'DENY',
+  );
+  await runCase(
+    'Test 13 — client cannot delete user document',
+    () => deleteDoc(userReference(userA, 'user-A')),
+    'DENY',
+  );
+
+  await clearFirestore();
   await seedSpace(userA, 'space-A', 'user-A');
   await seedSpace(userB, 'space-B', 'user-B');
   await runCase(
@@ -212,52 +253,67 @@ try {
   const userC = testEnvironment.authenticatedContext('user-C');
   try {
     await runCase(
-      'Test 9 — owner reads Space A',
+      'Test 14 — owner reads Space A',
       () => getDoc(multiSpaceReference(userA, 'space-A')),
       'ALLOW',
     );
     await runCase(
-      'Test 10 — active member reads Space A',
+      'Test 15 — active member reads Space A',
       () => getDoc(multiSpaceReference(userC, 'space-A')),
       'ALLOW',
     );
     await runCase(
-      'Test 11 — user from another Space is denied',
+      'Test 16 — user from another Space is denied',
       () => getDoc(multiSpaceReference(userB, 'space-A')),
       'DENY',
     );
     await runCase(
-      'Test 12 — anonymous is denied',
+      'Test 17 — anonymous is denied',
       () => getDoc(multiSpaceReference(anonymous, 'space-A')),
       'DENY',
     );
     await runCase(
-      'Test 13 — active member reads membership',
+      'Test 18 — active member reads own membership',
       () => getDoc(memberReference(userC, 'space-A', 'user-C')),
       'ALLOW',
     );
     await runCase(
-      'Test 14 — owner cannot change ownerUserId',
+      'Test 19 — member cannot read another member membership',
+      () => getDoc(memberReference(userC, 'space-A', 'user-A')),
+      'DENY',
+    );
+    await runCase(
+      'Test 20 — user A reads own membership discovery index',
+      () => getDoc(membershipIndexReference(userA, 'user-A', 'space-A')),
+      'ALLOW',
+    );
+    await runCase(
+      'Test 21 — user A cannot read another user membership discovery index',
+      () => getDoc(membershipIndexReference(userA, 'user-C', 'space-A')),
+      'DENY',
+    );
+    await runCase(
+      'Test 22 — owner cannot change ownerUserId',
       () => updateDoc(multiSpaceReference(userA, 'space-A'), { ownerUserId: 'user-C' }),
       'DENY',
     );
     await runCase(
-      'Test 15 — member cannot promote itself to owner',
+      'Test 23 — member cannot promote itself to owner',
       () => updateDoc(memberReference(userC, 'space-A', 'user-C'), { role: 'owner' }),
       'DENY',
     );
     await runCase(
-      'Test 16 — client cannot change membership index',
+      'Test 24 — client cannot change membership index',
       () => updateDoc(membershipIndexReference(userA, 'user-A', 'space-A'), { role: 'manager' }),
       'DENY',
     );
     await runCase(
-      'Test 17 — client cannot add itself as a member',
+      'Test 25 — client cannot add itself as a member',
       () => setDoc(memberReference(userC, 'space-A', 'user-C'), membershipDocument('space-A', 'user-C', 'manager')),
       'DENY',
     );
     await runCase(
-      'Test 18 — client cannot delete Owner Membership',
+      'Test 26 — client cannot delete Owner Membership',
       () => deleteDoc(memberReference(userA, 'space-A', 'user-A')),
       'DENY',
     );

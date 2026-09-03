@@ -22,6 +22,12 @@ service cloud.firestore {
       }
     }
 
+    match /users/{uid} {
+      allow read: if request.auth != null
+        && request.auth.uid == uid;
+      allow create, update, delete: if false;
+    }
+
     match /users/{uid}/memberships/{spaceId} {
       allow read: if isActiveMember(spaceId)
         && request.auth.uid == uid;
