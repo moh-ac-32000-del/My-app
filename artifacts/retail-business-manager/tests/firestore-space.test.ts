@@ -4,15 +4,19 @@ import type { SpaceIdentity } from '@/types/space';
 
 const firestoreState = vi.hoisted(() => ({
   documents: new Map<string, SpaceDocument>(),
+  collection: vi.fn(),
   doc: vi.fn((database: unknown, collection: string, id: string) => ({ database, collection, id })),
   getDoc: vi.fn(),
+  getDocs: vi.fn(),
   getFirestore: vi.fn(() => ({ name: 'test-firestore' })),
   setDoc: vi.fn(),
 }));
 
 vi.mock('firebase/firestore', () => ({
+  collection: firestoreState.collection,
   doc: firestoreState.doc,
   getDoc: firestoreState.getDoc,
+  getDocs: firestoreState.getDocs,
   getFirestore: firestoreState.getFirestore,
   setDoc: firestoreState.setDoc,
 }));

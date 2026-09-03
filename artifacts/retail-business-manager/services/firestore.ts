@@ -1,9 +1,39 @@
-import { doc, getDoc, getFirestore, setDoc, type Firestore } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, getFirestore, setDoc, type Firestore } from 'firebase/firestore';
 import { FIREBASE_COLLECTIONS, type SpaceDocument } from '@/data/collections';
 import { getFirebaseApp, isFirebaseConfigured } from '@/services/firebase';
-import type { SpaceIdentity } from '@/types/space';
+import type { SpaceDiscoveryResult, SpaceIdentity } from '@/types/space';
+import type { MembershipDiscoveryIndexEntry } from '@/types/trustedBootstrap';
 
 const LEGACY_LOCAL_STORE_ID = 'local-store';
+const USERS_COLLECTION = 'users';
+const MEMBERSHIPS_COLLECTION = 'memberships';
+
+export async function discoverUserSpaces(uid: string): Promise<SpaceDiscoveryResult> {
+  const normalizedUid = uid.trim();
+  if (!normalizedUid) {
+    throw new Error('firebaseUserIdRequired');
+  }
+
+  const database = getFirestoreInstance();
+  const [userSnapshot, membershipsSnapshot] = await Promise.all([
+    getDoc(doc(database, USERS_COLLECTION, normalizedUid)),
+    getDocs(collection(database, USERS_COLLECTION, normalizedUid, MEMBERSHIPS_COLLECTION)),
+  ]);
+  const userData = userSnapshot.exists() ? userSnapshot.data() : undefined;
+  const primarySpaceId = typeof userData?.primarySpaceId === 'string'
+    && userData.primarySpaceId.trim()
+    ? userData.primarySpaceId
+    : null;
+
+  return {
+    memberships: membershipsSnapshot.docs.map(
+      (membershipSnapshot) => membershipSnapshot.data() as MembershipDiscoveryIndexEntry,
+    ),
+    primarySpaceId,
+    // activeSpaceId is an in-memory namespace selector, not a persisted last-active source.
+    lastActiveSpaceId: null,
+  };
+}
 
 let firestore: Firestore | null = null;
 
