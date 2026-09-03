@@ -102,3 +102,24 @@ export interface SpaceIdentity {
   spaceId: string;
   createdAt: string;
 }
+
+/**
+ * The discovery result is built from the user's membership discovery index.
+ * Primary and last-active values are selection hints only; neither replaces
+ * membership authorization or creates persistence requirements.
+ */
+export interface SpaceDiscoveryResult {
+  memberships: import('@/types/trustedBootstrap').MembershipDiscoveryIndexEntry[];
+  primarySpaceId: string | null;
+  lastActiveSpaceId: string | null;
+}
+
+/**
+ * Local active-space state is a namespace-selection hint, not an
+ * authorization source. The discovered ID is the Cloud/membership identity
+ * selected for the current session.
+ */
+export interface ActiveSpaceSelection {
+  localActiveSpaceId: string | null;
+  discoveredSpaceId: string | null;
+}

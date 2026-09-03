@@ -11,11 +11,14 @@ import {
   type CloudOperation,
   type Invitation,
   type Membership,
+  type ActiveSpaceSelection,
+  type SpaceDiscoveryResult,
   type OperationReceipt,
   type OwnerMembership,
   type Space,
   type SpaceIdentity,
 } from '@/types/space';
+import type { MembershipDiscoveryIndexEntry } from '@/types/trustedBootstrap';
 
 describe('Multi-Space domain contracts', () => {
   it('defines the initial membership roles without custom permissions', () => {
@@ -129,6 +132,40 @@ describe('Multi-Space domain contracts', () => {
 
     expect(membership).toHaveProperty('userId');
     expect(discoveryIndexEntry).not.toHaveProperty('userId');
+  });
+
+  it('represents Space discovery with the existing membership index entries', () => {
+    const membershipEntry: MembershipDiscoveryIndexEntry = {
+      spaceId: 'space-discovered',
+      role: 'owner',
+      status: 'active',
+      spaceNameSnapshot: 'Discovered Space',
+      joinedAt: '2026-08-30T10:00:00.000Z',
+      updatedAt: '2026-08-30T10:00:00.000Z',
+    };
+    const result: SpaceDiscoveryResult = {
+      memberships: [membershipEntry],
+      primarySpaceId: 'space-primary',
+      lastActiveSpaceId: null,
+    };
+
+    expect(result.memberships[0]).toBe(membershipEntry);
+    expect(result.primarySpaceId).toBe('space-primary');
+    expect(result.lastActiveSpaceId).toBeNull();
+    expect(result.memberships[0]).not.toHaveProperty('userId');
+  });
+
+  it('separates local active-space state from the discovered Cloud identity', () => {
+    const selection: ActiveSpaceSelection = {
+      localActiveSpaceId: 'local-space-namespace',
+      discoveredSpaceId: 'space-discovered',
+    };
+
+    expect(selection.localActiveSpaceId).toBe('local-space-namespace');
+    expect(selection.discoveredSpaceId).toBe('space-discovered');
+    expect(selection.localActiveSpaceId).not.toBe(selection.discoveredSpaceId);
+    expect(selection).not.toHaveProperty('role');
+    expect(selection).not.toHaveProperty('status');
   });
 
   it('provides contracts for idempotent trusted operations and receipts', () => {
