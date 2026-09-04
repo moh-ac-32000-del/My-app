@@ -42,3 +42,17 @@ mtime_ms = 1788186286717
 storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/repl:b069b282-770b-4ef1-ba53-6a5ac53826ce/5c1cdb60-d67a-4c12-8cba-2a62e7263924/c7298b52-12d6-4b4c-a16d-433d0c8a0f85"
 storage_version_token = "1788186334725805"
 content_type = "application/octet-stream"
+
+[[outputs]]
+id = "x-ZSkkT3ZnxYdTD_r-prg"
+uri = "file://artifacts/retail-business-manager-current-snapshot.tar.gz"
+type = "unspecified"
+title = "Retail Business Manager Current Snapshot"
+description = "Clean export of the current project source, configuration, assets, and tests for external audit. Generated and verified without modifying project files."
+logical_id = "6b94f156-be53-482d-96ca-29542da121dd"
+content_hash = "sha256:d1de36b1c62a336cc75b3c07aa5788b98956cee109b0ef90f2547407ef3c6b62"
+size = 1536005
+mtime_ms = 1788532174833
+storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/repl:b069b282-770b-4ef1-ba53-6a5ac53826ce/6b94f156-be53-482d-96ca-29542da121dd/417b25e8-0cb8-4d89-b0bf-eba65a559add"
+storage_version_token = "1788532186719366"
+content_type = "application/octet-stream"
