@@ -325,7 +325,7 @@ export default function CustomerDetailsScreen() {
         onPress={() => {
           setDebtCurrency(profile.currency);
           setDebtAmount('');
-             setDebtDueDate('');
+           setDebtDueDate('');
           setIsDebtVisible(true);
         }}
         style={({ pressed }) => [styles.addDebtButton, { backgroundColor: colors.accent, borderColor: colors.primary, flexDirection: isRTL ? 'row-reverse' : 'row' }, pressed && styles.pressed]}
@@ -465,6 +465,23 @@ export default function CustomerDetailsScreen() {
                   />
                 </View>
               </View>
+
+               <View style={styles.debtField}>
+                 <Text style={[styles.debtFieldLabel, { color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' }]}>{t('debtDueDate')}</Text>
+                 <View style={[styles.debtInputWrap, { backgroundColor: colors.input, borderColor: colors.border, flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
+                   <Ionicons name="calendar-outline" size={18} color={colors.mutedForeground} />
+                   <TextInput
+                     testID="debt-due-date-input"
+                     value={debtDueDate}
+                     onChangeText={setDebtDueDate}
+                     placeholder={t('debtDueDatePlaceholder')}
+                     placeholderTextColor={colors.mutedForeground}
+                     autoCapitalize="none"
+                     textAlign={isRTL ? 'right' : 'left'}
+                     style={[styles.debtInput, { color: colors.foreground }]}
+                   />
+                 </View>
+               </View>
 
               <View style={styles.debtField}>
                 <Text style={[styles.debtFieldLabel, { color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' }]}>{t('debtCurrency')}</Text>
