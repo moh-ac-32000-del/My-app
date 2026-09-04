@@ -56,6 +56,7 @@ describe('customer debts', () => {
       createdAt: timestamp,
       updatedAt: timestamp,
     });
+    expect(first).not.toHaveProperty('dueDate');
     expect(first.id).toBe(firstId);
     expect(second.id).not.toBe(first.id);
   });
@@ -68,10 +69,49 @@ describe('customer debts', () => {
     ['missing customer', { customerId: '' }, 'customerIdRequired'],
     ['missing store', { storeId: '' }, 'storeIdRequired'],
     ['missing id', { id: '' }, 'debtIdRequired'],
+    ['invalid due date', { dueDate: '2026-02-30' }, 'dueDateInvalid'],
     ['invalid creation timestamp', { createdAt: 'not-a-date' }, 'timestampInvalid'],
     ['invalid update timestamp', { updatedAt: 'not-a-date' }, 'timestampInvalid'],
   ])('rejects %s', (_label, override, expectedError) => {
     expect(validateDebtInput({ ...debt(), ...override })).toBe(expectedError);
+  });
+
+  it('creates and persists a debt with an optional due date', async () => {
+    const created = createDebt(
+      'store-a',
+      'customer-a',
+      { currency: 'TRY', amount: 500, dueDate: '2026-09-30' },
+      timestamp,
+    );
+
+    expect(created.dueDate).toBe('2026-09-30');
+    await saveDebts('store-a', [created]);
+
+    await expect(loadDebts('store-a')).resolves.toEqual([created]);
+  });
+
+  it('keeps legacy debts without due dates valid when reloaded', async () => {
+    const legacyDebt = debt();
+    storedValues.set('@retail-business-manager/debts', JSON.stringify([legacyDebt]));
+
+    await expect(loadDebts('store-a')).resolves.toEqual([legacyDebt]);
+    expect((await loadDebts('store-a'))[0]).not.toHaveProperty('dueDate');
+  });
+
+  it('does not create reminder fields or reminder records when creating a debt', async () => {
+    const created = createDebt(
+      'store-a',
+      'customer-a',
+      { currency: 'TRY', amount: 500, dueDate: '2026-09-30' },
+      timestamp,
+    );
+
+    expect(created).not.toHaveProperty('remindAt');
+    expect(created).not.toHaveProperty('status');
+    expect(created).not.toHaveProperty('debtId');
+
+    await saveDebts('store-a', [created]);
+    expect(storedValues.has('@retail-business-manager/reminders')).toBe(false);
   });
 
   it('parses decimal points and decimal commas without changing their value', () => {

@@ -524,6 +524,7 @@ export function validateDebtInput(input: {
   amount: unknown;
   createdAt: unknown;
   updatedAt: unknown;
+  dueDate?: unknown;
   originalAmount?: unknown;
   settledAt?: unknown;
 }): string | null {
@@ -556,6 +557,12 @@ export function validateDebtInput(input: {
   if (input.settledAt !== undefined && !isValidDateString(input.settledAt)) {
     return 'settledAtInvalid';
   }
+  if (
+    input.dueDate !== undefined
+    && (typeof input.dueDate !== 'string' || !isValidArchiveDate(input.dueDate))
+  ) {
+    return 'dueDateInvalid';
+  }
   if (!isCurrencyCode(input.currency)) {
     return 'currencyInvalid';
   }
@@ -568,15 +575,17 @@ export function validateDebtInput(input: {
 export function createDebt(
   storeId: string,
   customerId: string,
-  draft: { amount: number; currency: CurrencyCode },
+  draft: { amount: number; currency: CurrencyCode; dueDate?: string },
   now: string = new Date().toISOString(),
 ): Debt {
+  const dueDate = draft.dueDate?.trim();
   const debt: Debt = {
     id: createDebtId(),
     storeId: storeId.trim(),
     customerId: customerId.trim(),
     currency: draft.currency,
     amount: draft.amount,
+    ...(dueDate ? { dueDate } : {}),
     createdAt: now,
     updatedAt: now,
   };
@@ -1006,6 +1015,7 @@ function normalizeStoredDebt(value: unknown): Debt | null {
     amount: value.amount,
     createdAt: value.createdAt,
     updatedAt: value.updatedAt,
+    dueDate: value.dueDate,
     originalAmount: value.originalAmount,
     settledAt: value.settledAt,
   };
@@ -1020,6 +1030,7 @@ function normalizeStoredDebt(value: unknown): Debt | null {
     customerId: debt.customerId as string,
     currency: debt.currency as CurrencyCode,
     amount: debt.amount as number,
+    ...(typeof debt.dueDate === 'string' ? { dueDate: debt.dueDate } : {}),
     ...(typeof debt.originalAmount === 'number' ? { originalAmount: debt.originalAmount } : {}),
     ...(typeof debt.settledAt === 'string' ? { settledAt: debt.settledAt } : {}),
     createdAt: debt.createdAt as string,

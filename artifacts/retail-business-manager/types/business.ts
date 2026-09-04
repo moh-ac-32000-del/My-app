@@ -94,6 +94,7 @@ export interface Debt extends BusinessEntity {
   customerId: string;
   currency: CurrencyCode;
   amount: number;
+  dueDate?: string;
   originalAmount?: number;
   settledAt?: string;
 }

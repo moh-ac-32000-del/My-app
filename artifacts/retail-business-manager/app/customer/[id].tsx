@@ -74,6 +74,7 @@ export default function CustomerDetailsScreen() {
   const [isDebtVisible, setIsDebtVisible] = useState<boolean>(false);
   const [isSavingDebt, setIsSavingDebt] = useState<boolean>(false);
   const [debtAmount, setDebtAmount] = useState<string>('');
+  const [debtDueDate, setDebtDueDate] = useState<string>('');
   const [debtCurrency, setDebtCurrency] = useState<CurrencyCode>(profile.currency);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [isSettlementVisible, setIsSettlementVisible] = useState<boolean>(false);
@@ -151,15 +152,25 @@ export default function CustomerDetailsScreen() {
 
     setIsSavingDebt(true);
     try {
-      const debt = createDebt(profile.id, customerId, { amount: parsedAmount, currency: debtCurrency });
+      const dueDate = debtDueDate.trim();
+      const debt = createDebt(profile.id, customerId, {
+        amount: parsedAmount,
+        currency: debtCurrency,
+        ...(dueDate ? { dueDate } : {}),
+      });
       const currentStoreDebts = await loadDebts(profile.id);
       await saveDebts(profile.id, [...currentStoreDebts, debt]);
       setDebts((current) => [debt, ...current].sort((first, second) => Date.parse(second.createdAt) - Date.parse(first.createdAt)));
       setDebtAmount('');
+      setDebtDueDate('');
       setIsDebtVisible(false);
       Alert.alert(t('debtAdded'));
-    } catch {
-      Alert.alert(t('somethingWentWrong'), t('debtSaveError'));
+    } catch (error) {
+      if (error instanceof Error && error.message === 'dueDateInvalid') {
+        Alert.alert(t('debtDueDate'), t('debtDueDateInvalid'));
+      } else {
+        Alert.alert(t('somethingWentWrong'), t('debtSaveError'));
+      }
     } finally {
       setIsSavingDebt(false);
     }
@@ -314,6 +325,7 @@ export default function CustomerDetailsScreen() {
         onPress={() => {
           setDebtCurrency(profile.currency);
           setDebtAmount('');
+             setDebtDueDate('');
           setIsDebtVisible(true);
         }}
         style={({ pressed }) => [styles.addDebtButton, { backgroundColor: colors.accent, borderColor: colors.primary, flexDirection: isRTL ? 'row-reverse' : 'row' }, pressed && styles.pressed]}
