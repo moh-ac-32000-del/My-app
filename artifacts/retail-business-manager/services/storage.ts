@@ -645,6 +645,109 @@ export async function saveDebts(storeId: string, debts: Debt[]): Promise<void> {
   await AsyncStorage.setItem(getDebtsKey(), JSON.stringify([...otherStoreDebts, ...debts]));
 }
 
+export function createReminderId(): string {
+  reminderSequence += 1;
+  return `reminder_${Date.now().toString(36)}_${reminderSequence.toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+}
+
+export function validateReminderInput(input: {
+  id: unknown;
+  storeId: unknown;
+  debtId: unknown;
+  remindAt: unknown;
+  status: unknown;
+  note?: unknown;
+  completedAt?: unknown;
+  createdAt: unknown;
+  updatedAt: unknown;
+}): string | null {
+  if (typeof input.id !== 'string' || input.id.trim().length === 0) {
+    return 'reminderIdRequired';
+  }
+  if (typeof input.storeId !== 'string' || input.storeId.trim().length === 0) {
+    return 'storeIdRequired';
+  }
+  if (typeof input.debtId !== 'string' || input.debtId.trim().length === 0) {
+    return 'debtIdRequired';
+  }
+  if (!isValidIsoTimestamp(input.remindAt)) {
+    return 'remindAtInvalid';
+  }
+  if (input.status !== 'pending' && input.status !== 'completed' && input.status !== 'dismissed') {
+    return 'reminderStatusInvalid';
+  }
+  if (input.note !== undefined && typeof input.note !== 'string') {
+    return 'reminderNoteInvalid';
+  }
+  if (input.completedAt !== undefined && !isValidDateString(input.completedAt)) {
+    return 'completedAtInvalid';
+  }
+  if (!isValidDateString(input.createdAt) || !isValidDateString(input.updatedAt)) {
+    return 'timestampInvalid';
+  }
+  return null;
+}
+
+export function createReminder(
+  storeId: string,
+  debtId: string,
+  draft: {
+    remindAt: string;
+    status?: ReminderStatus;
+    note?: string;
+    completedAt?: string;
+  },
+  now: string = new Date().toISOString(),
+): Reminder {
+  const note = draft.note?.trim();
+  const completedAt = draft.completedAt?.trim();
+  const reminder: Reminder = {
+    id: createReminderId(),
+    storeId: storeId.trim(),
+    debtId: debtId.trim(),
+    remindAt: draft.remindAt.trim(),
+    status: draft.status ?? 'pending',
+    ...(note ? { note } : {}),
+    ...(completedAt ? { completedAt } : {}),
+    createdAt: now,
+    updatedAt: now,
+  };
+  const validation = validateReminderInput(reminder);
+  if (validation) {
+    throw new Error(validation);
+  }
+  return reminder;
+}
+
+export function filterRemindersByDebt(reminders: Reminder[], debtId: string): Reminder[] {
+  return reminders.filter((reminder) => reminder.debtId === debtId);
+}
+
+export async function loadReminders(storeId: string): Promise<Reminder[]> {
+  try {
+    const reminders = await loadAllReminders();
+    return reminders
+      .filter((reminder) => reminder.storeId === storeId)
+      .sort((first, second) => Date.parse(second.createdAt) - Date.parse(first.createdAt));
+  } catch {
+    return [];
+  }
+}
+
+export async function saveReminders(storeId: string, reminders: Reminder[]): Promise<void> {
+  if (reminders.some((reminder) => reminder.storeId !== storeId || !isStoredReminder(reminder))) {
+    throw new Error('All reminders must be valid and belong to the active store');
+  }
+
+  const stored = await readStoredReminders();
+  if (stored.isCorrupted) {
+    throw new Error('Stored reminder data is corrupted');
+  }
+
+  const otherStoreReminders = stored.reminders.filter((reminder) => reminder.storeId !== storeId);
+  await AsyncStorage.setItem(getRemindersKey(), JSON.stringify([...otherStoreReminders, ...reminders]));
+}
+
 export function createPaymentId(): string {
   paymentSequence += 1;
   return `payment_${Date.now().toString(36)}_${paymentSequence.toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
@@ -881,6 +984,13 @@ function isValidDateString(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0 && Number.isFinite(Date.parse(value));
 }
 
+function isValidIsoTimestamp(value: unknown): value is string {
+  return isValidDateString(value)
+    && value === value.trim()
+    && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value)
+    && new Date(value).toISOString() === value;
+}
+
 function isSameLocalDay(value: string, now: Date): boolean {
   const date = new Date(value);
   return date.getFullYear() === now.getFullYear()
@@ -910,6 +1020,10 @@ async function loadAllTransactions(): Promise<Transaction[]> {
 
 async function loadAllDebts(): Promise<Debt[]> {
   return (await readStoredDebts()).debts;
+}
+
+async function loadAllReminders(): Promise<Reminder[]> {
+  return (await readStoredReminders()).reminders;
 }
 
 async function loadAllPayments(): Promise<Payment[]> {
@@ -947,6 +1061,10 @@ function isStoredTransaction(value: unknown): value is Transaction {
 
 function isStoredDebt(value: unknown): value is Debt {
   return normalizeStoredDebt(value) !== null;
+}
+
+function isStoredReminder(value: unknown): value is Reminder {
+  return normalizeStoredReminder(value) !== null;
 }
 
 function normalizeStoredTransaction(value: unknown): Transaction | null {
@@ -1014,6 +1132,31 @@ async function readStoredDebts(): Promise<{ debts: Debt[]; isCorrupted: boolean 
   };
 }
 
+async function readStoredReminders(): Promise<{ reminders: Reminder[]; isCorrupted: boolean }> {
+  const storedReminders = await AsyncStorage.getItem(getRemindersKey());
+  if (!storedReminders) {
+    return { reminders: [], isCorrupted: false };
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(storedReminders) as unknown;
+  } catch {
+    return { reminders: [], isCorrupted: true };
+  }
+
+  if (!Array.isArray(parsed)) {
+    return { reminders: [], isCorrupted: true };
+  }
+
+  return {
+    reminders: parsed
+      .map(normalizeStoredReminder)
+      .filter((reminder): reminder is Reminder => reminder !== null),
+    isCorrupted: false,
+  };
+}
+
 function normalizeStoredDebt(value: unknown): Debt | null {
   if (!isRecord(value)) {
     return null;
@@ -1047,6 +1190,40 @@ function normalizeStoredDebt(value: unknown): Debt | null {
     ...(typeof debt.settledAt === 'string' ? { settledAt: debt.settledAt } : {}),
     createdAt: debt.createdAt as string,
     updatedAt: debt.updatedAt as string,
+  };
+}
+
+function normalizeStoredReminder(value: unknown): Reminder | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const reminder = {
+    id: readOptionalString(value, 'id'),
+    storeId: readOptionalString(value, 'storeId'),
+    debtId: readOptionalString(value, 'debtId'),
+    remindAt: value.remindAt,
+    status: value.status,
+    note: readOptionalString(value, 'note'),
+    completedAt: value.completedAt,
+    createdAt: value.createdAt,
+    updatedAt: value.updatedAt,
+  };
+
+  if (validateReminderInput(reminder)) {
+    return null;
+  }
+
+  return {
+    id: reminder.id as string,
+    storeId: reminder.storeId as string,
+    debtId: reminder.debtId as string,
+    remindAt: reminder.remindAt as string,
+    status: reminder.status as ReminderStatus,
+    ...(reminder.note ? { note: reminder.note } : {}),
+    ...(typeof reminder.completedAt === 'string' ? { completedAt: reminder.completedAt } : {}),
+    createdAt: reminder.createdAt as string,
+    updatedAt: reminder.updatedAt as string,
   };
 }
 
@@ -1599,6 +1776,10 @@ function getDebtsKey(): string {
 
 function getPaymentsKey(): string {
   return getSpaceStorageKey(PAYMENTS_KEY, 'payments');
+}
+
+function getRemindersKey(): string {
+  return getSpaceStorageKey(REMINDERS_KEY, 'reminders');
 }
 
 function getSpaceStorageKey(legacyKey: string, dataName: string): string {
