@@ -11,7 +11,7 @@ import { formatLocalizedDate, formatLocalizedDateTime, type Language, type Trans
 import { useColors } from '@/hooks/useColors';
 import { useI18n } from '@/hooks/useI18n';
 import { useStore } from '@/context/StoreContext';
-import { calculateDebtTotals, createDebt, filterDebtsByCustomer, filterPaymentsByCustomer, loadCustomers, loadDebts, loadPayments, parseLocalizedAmountInput, saveCustomers, saveDebts } from '@/services/storage';
+import { calculateDebtTotals, createDebt, createReminder, filterDebtsByCustomer, filterPaymentsByCustomer, loadCustomers, loadDebts, loadPayments, loadReminders, parseLocalizedAmountInput, saveCustomers, saveDebts, saveReminders } from '@/services/storage';
 import type { Customer, Debt, Payment } from '@/types/business';
 
 function DetailRow({ icon, label, value }: { icon: React.ComponentProps<typeof Ionicons>['name']; label: string; value: string }) {
@@ -81,6 +81,10 @@ export default function CustomerDetailsScreen() {
   const [isSavingSettlement, setIsSavingSettlement] = useState<boolean>(false);
   const [settlementAmount, setSettlementAmount] = useState<string>('');
   const [settlementCurrency, setSettlementCurrency] = useState<CurrencyCode>(profile.currency);
+  const [isReminderVisible, setIsReminderVisible] = useState<boolean>(false);
+  const [isSavingReminder, setIsSavingReminder] = useState<boolean>(false);
+  const [reminderDebt, setReminderDebt] = useState<Debt | null>(null);
+  const [remindAt, setRemindAt] = useState<string>('');
   const settlementInFlightRef = useRef<boolean>(false);
 
   const debtTotals = useMemo(() => calculateDebtTotals(debts), [debts]);
@@ -173,6 +177,45 @@ export default function CustomerDetailsScreen() {
       }
     } finally {
       setIsSavingDebt(false);
+    }
+  };
+
+  const openReminderForm = (debt: Debt) => {
+    if (debt.amount <= 0) {
+      return;
+    }
+    setReminderDebt(debt);
+    setRemindAt('');
+    setIsReminderVisible(true);
+  };
+
+  const saveReminder = async () => {
+    if (isSavingReminder || !reminderDebt || reminderDebt.amount <= 0) {
+      return;
+    }
+    if (!remindAt.trim()) {
+      Alert.alert(t('reminderRemindAt'), t('reminderRemindAtInvalid'));
+      return;
+    }
+
+    setIsSavingReminder(true);
+    try {
+      const reminder = createReminder(profile.id, reminderDebt.id, {
+        remindAt: remindAt.trim(),
+      });
+      const currentReminders = await loadReminders(profile.id);
+      await saveReminders(profile.id, [...currentReminders, reminder]);
+      setIsReminderVisible(false);
+      setReminderDebt(null);
+      setRemindAt('');
+      Alert.alert(t('reminderCreated'));
+    } catch (error) {
+      const message = error instanceof Error && error.message === 'remindAtInvalid'
+        ? t('reminderRemindAtInvalid')
+        : t('reminderSaveError');
+      Alert.alert(t('somethingWentWrong'), message);
+    } finally {
+      setIsSavingReminder(false);
     }
   };
 
@@ -374,6 +417,21 @@ export default function CustomerDetailsScreen() {
                 </Text>
               </View>
             </View>
+            {debt.amount > 0 ? (
+              <Pressable
+                testID={`create-reminder-${debt.id}`}
+                accessibilityRole="button"
+                onPress={() => openReminderForm(debt)}
+                style={({ pressed }) => [
+                  styles.reminderButton,
+                  { borderColor: colors.border, backgroundColor: colors.input, flexDirection: isRTL ? 'row-reverse' : 'row' },
+                  pressed && styles.pressed,
+                ]}
+              >
+                <Ionicons name="alarm-outline" size={17} color={colors.primary} />
+                <Text style={[styles.reminderButtonText, { color: colors.primary }]}>{t('createReminder')}</Text>
+              </Pressable>
+            ) : null}
           </GlassCard>
         ))
       ) : (
@@ -527,6 +585,87 @@ export default function CustomerDetailsScreen() {
                   style={({ pressed }) => [styles.debtPrimaryButton, { backgroundColor: colors.primary }, pressed && styles.pressed]}
                 >
                   {isSavingDebt ? <ActivityIndicator size="small" color={colors.primaryForeground} /> : <Ionicons name="checkmark-circle-outline" size={18} color={colors.primaryForeground} />}
+                  <Text style={[styles.debtPrimaryText, { color: colors.primaryForeground }]}>{t('saveChanges')}</Text>
+                </Pressable>
+              </View>
+            </KeyboardAwareScrollViewCompat>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={isReminderVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => {
+          if (!isSavingReminder) {
+            setIsReminderVisible(false);
+            setReminderDebt(null);
+            setRemindAt('');
+          }
+        }}
+      >
+        <View style={[styles.debtModalBackdrop, { backgroundColor: colors.overlay }]}>
+          <View style={[styles.debtModal, { backgroundColor: colors.glassStrong, borderColor: colors.border, paddingBottom: Math.max(insets.bottom, 16) }]}>
+            <View style={[styles.debtModalHeader, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
+              <View style={[styles.debtModalHeaderCopy, { alignItems: isRTL ? 'flex-end' : 'flex-start' }]}>
+                <Text style={[styles.debtModalTitle, { color: colors.foreground, textAlign: isRTL ? 'right' : 'left' }]}>{t('createReminder')}</Text>
+                <Text style={[styles.debtModalHint, { color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' }]}>{t('reminderFormHint')}</Text>
+              </View>
+              <Pressable
+                testID="close-reminder-form"
+                accessibilityLabel={t('close')}
+                disabled={isSavingReminder}
+                onPress={() => {
+                  setIsReminderVisible(false);
+                  setReminderDebt(null);
+                  setRemindAt('');
+                }}
+                style={({ pressed }) => [styles.debtCloseButton, { borderColor: colors.border, backgroundColor: colors.input }, pressed && styles.pressed]}
+              >
+                <Ionicons name="close" size={20} color={colors.foreground} />
+              </Pressable>
+            </View>
+
+            <KeyboardAwareScrollViewCompat contentContainerStyle={styles.debtFormContent} keyboardShouldPersistTaps="handled" bottomOffset={24} showsVerticalScrollIndicator={false}>
+              <View style={styles.debtField}>
+                <Text style={[styles.debtFieldLabel, { color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' }]}>{t('reminderRemindAt')}</Text>
+                <View style={[styles.debtInputWrap, { backgroundColor: colors.input, borderColor: colors.border, flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
+                  <Ionicons name="alarm-outline" size={18} color={colors.mutedForeground} />
+                  <TextInput
+                    testID="reminder-remind-at-input"
+                    value={remindAt}
+                    onChangeText={setRemindAt}
+                    placeholder={t('reminderRemindAtPlaceholder')}
+                    placeholderTextColor={colors.mutedForeground}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    textAlign={isRTL ? 'right' : 'left'}
+                    style={[styles.debtInput, { color: colors.foreground }]}
+                  />
+                </View>
+              </View>
+
+              <View style={[styles.debtModalActions, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
+                <Pressable
+                  testID="cancel-reminder-form"
+                  disabled={isSavingReminder}
+                  onPress={() => {
+                    setIsReminderVisible(false);
+                    setReminderDebt(null);
+                    setRemindAt('');
+                  }}
+                  style={({ pressed }) => [styles.debtSecondaryButton, { borderColor: colors.border, backgroundColor: colors.input }, pressed && styles.pressed]}
+                >
+                  <Text style={[styles.debtSecondaryText, { color: colors.foreground }]}>{t('cancel')}</Text>
+                </Pressable>
+                <Pressable
+                  testID="save-reminder-form"
+                  disabled={isSavingReminder}
+                  onPress={() => void saveReminder()}
+                  style={({ pressed }) => [styles.debtPrimaryButton, { backgroundColor: colors.primary }, pressed && styles.pressed]}
+                >
+                  {isSavingReminder ? <ActivityIndicator size="small" color={colors.primaryForeground} /> : <Ionicons name="checkmark-circle-outline" size={18} color={colors.primaryForeground} />}
                   <Text style={[styles.debtPrimaryText, { color: colors.primaryForeground }]}>{t('saveChanges')}</Text>
                 </Pressable>
               </View>
@@ -696,6 +835,8 @@ const styles = StyleSheet.create({
   debtHistoryCopy: { flex: 1, gap: 4 },
   debtHistoryAmount: { fontSize: 15, fontFamily: 'Inter_700Bold' },
   debtHistoryDate: { fontSize: 12, fontFamily: 'Inter_400Regular' },
+  reminderButton: { minHeight: 42, borderRadius: 14, borderWidth: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, marginTop: 12 },
+  reminderButtonText: { fontSize: 12, fontFamily: 'Inter_700Bold' },
   debtModalBackdrop: { flex: 1, justifyContent: 'flex-end' },
   debtModal: { maxHeight: '92%', borderTopLeftRadius: 28, borderTopRightRadius: 28, borderWidth: 1, paddingTop: 18 },
   debtModalHeader: { alignItems: 'center', gap: 12, paddingHorizontal: 18, paddingBottom: 12 },
