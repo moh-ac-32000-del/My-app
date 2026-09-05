@@ -2,7 +2,17 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { normalizeAccent } from '@/constants/colors';
 import { normalizeLanguage, type Language } from '@/constants/i18n';
 import { CURRENCY_OPTIONS, isCurrencyCode, normalizeCurrency, normalizeQuickCurrencies, type CurrencyCode } from '@/constants/currencies';
-import type { CashTransactionDraft, Customer, DailyArchive, Debt, Payment, StoreProfile, Transaction } from '@/types/business';
+import type {
+  CashTransactionDraft,
+  Customer,
+  DailyArchive,
+  Debt,
+  Payment,
+  Reminder,
+  ReminderStatus,
+  StoreProfile,
+  Transaction,
+} from '@/types/business';
 
 const PROFILE_KEY = '@retail-business-manager/store-profile';
 const AUTH_KEY = '@retail-business-manager/authenticated';
@@ -11,12 +21,14 @@ const CUSTOMERS_KEY = '@retail-business-manager/customers';
 const TRANSACTIONS_KEY = '@retail-business-manager/transactions';
 const DEBTS_KEY = '@retail-business-manager/debts';
 const PAYMENTS_KEY = '@retail-business-manager/payments';
+const REMINDERS_KEY = '@retail-business-manager/reminders';
 const ARCHIVE_KEY_PREFIX = '@retail-business-manager/daily-archive/';
 export const SPACE_STORAGE_PREFIX = '@retail-business-manager/spaces/';
 
 let transactionSequence = 0;
 let debtSequence = 0;
 let paymentSequence = 0;
+let reminderSequence = 0;
 let settlementQueue: Promise<void> = Promise.resolve();
 let archiveClosingQueue: Promise<void> = Promise.resolve();
 let activeSpaceId: string | null = null;

@@ -102,11 +102,9 @@ export interface Debt extends BusinessEntity {
 export type ReminderStatus = 'pending' | 'completed' | 'dismissed';
 
 export interface Reminder extends BusinessEntity {
-  title: string;
+  debtId: string;
   remindAt: string;
   status: ReminderStatus;
-  customerId?: string;
-  debtId?: string;
   note?: string;
   completedAt?: string;
 }
