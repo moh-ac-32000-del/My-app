@@ -1,0 +1,78 @@
+TASK — FIX POST-LOGIN INITIALIZATION WITHOUT FALSE LOGOUT
+
+Current HEAD: 588d1ed26422aa826e3f70294fe9c2f2291e88ec
+
+We confirmed:
+- Firebase login succeeds.
+- On Expo Go SDK 54, the app still returns to Login afterward.
+- TypeScript passes.
+- Existing relevant tests: 28/28 pass.
+- The current StoreContext catch clears firebaseUser when ANY post-login initialization step fails.
+
+ROOT CAUSE:
+A post-auth initialization/bootstrap failure is incorrectly treated as Firebase sign-out.
+
+GOAL:
+Separate Firebase Authentication from post-login initialization.
+
+Required behavior:
+1. Successful Firebase authentication must remain authenticated.
+2. Failure of bootstrapPrimarySpace or other post-auth initialization must NEVER call setFirebaseUser(null).
+3. Do not redirect an authenticated user to /login because bootstrap failed.
+4. Add a small initialization-error state.
+5. Show a controlled error + Retry instead of silently returning to Login.
+6. Retry must not create another Firebase login or concurrent initialization.
+7. Real Firebase sign-out/authentication failure must still behave normally.
+8. Keep the existing Trusted Backend/Cloud Function for future use; do not redesign or delete it.
+
+Allowed production files:
+- context/StoreContext.tsx
+- app/index.tsx
+- app/login.tsx ONLY if absolutely necessary.
+
+Tests:
+Add regression tests using the existing Vitest setup.
+
+Mandatory regression:
+- authenticated Firebase user
+- bootstrapPrimarySpace() rejects
+- firebaseUser remains non-null
+- initialization error is recorded
+- user is not treated as signed out
+- Retry is available
+
+Also test successful initialization.
+
+Do NOT install packages.
+
+DO NOT modify:
+- services/trustedBootstrap.ts
+- functions/src/bootstrapPrimarySpace.ts
+- functions/src/index.ts
+- firestore.rules
+- Firebase configuration/billing
+- AsyncStorage keys/data
+- StoreProfile.id/storeId
+- Reminder code/UI
+- Expo SDK/dependencies
+
+No broad refactor.
+
+After implementation run:
+- TypeScript typecheck
+- existing relevant tests
+- new regression tests
+- git diff --check
+
+Then report:
+1. exact root cause
+2. exact files changed
+3. behavior before/after
+4. tests added/results
+5. typecheck result
+6. confirmation that Firebase/backend/AsyncStorage/Reminder were not modified.
+
+IMPORTANT:
+Do NOT create a commit.
+Do NOT deploy anything.
+STOP after the report.
