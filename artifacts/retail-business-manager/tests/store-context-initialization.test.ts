@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { User } from 'firebase/auth';
-import { initializePostAuthSession, isFirebaseSessionAuthenticated } from '@/context/StoreContext';
+import {
+  clearFirebaseAuthSession,
+  initializePostAuthSession,
+  isFirebaseSessionAuthenticated,
+} from '@/context/StoreContext';
 
 const getOrCreateSpaceIdentityMock = vi.hoisted(() => vi.fn());
 const bootstrapPrimarySpaceMock = vi.hoisted(() => vi.fn());
@@ -87,7 +91,7 @@ describe('post-auth initialization', () => {
   it('keeps the authenticated user and records a bootstrap error for retry', async () => {
     const callbacks = createCallbacks();
     const initializationError = { value: null as string | null };
-    callbacks.onError.mockImplementation((message: string) => {
+    callbacks.onError.mockImplementation((message: string | null) => {
       initializationError.value = message;
     });
     bootstrapPrimarySpaceMock.mockRejectedValueOnce(new Error('bootstrapUnavailable'));
@@ -98,15 +102,23 @@ describe('post-auth initialization', () => {
     expect(isFirebaseSessionAuthenticated(null)).toBe(false);
     expect(initializationError.value).toBe('bootstrapUnavailable');
     expect(callbacks.onError).toHaveBeenCalledWith('bootstrapUnavailable');
+    expect(callbacks.onError).toHaveBeenNthCalledWith(1, null);
+    expect(callbacks.onError).toHaveBeenNthCalledWith(2, 'bootstrapUnavailable');
     expect(callbacks.onReady).toHaveBeenCalledTimes(1);
-    expect(callbacks.onSpaceIdentity).toHaveBeenCalledWith(null);
+    expect(callbacks.onSpaceIdentity).toHaveBeenCalledWith(identity);
+    expect(callbacks.onActiveSpaceId).toHaveBeenCalledWith(identity.spaceId);
+    expect(callbacks.onCloudSpace).toHaveBeenCalledWith(null);
 
-    initializationError.value = null;
     await initializePostAuthSession(firebaseUser, () => true, callbacks);
 
     expect(initializationError.value).toBeNull();
-    expect(callbacks.onError).toHaveBeenCalledTimes(1);
+    expect(callbacks.onError).toHaveBeenCalledTimes(3);
+    expect(callbacks.onError).toHaveBeenNthCalledWith(3, null);
     expect(callbacks.onSpaceIdentity).toHaveBeenLastCalledWith(identity);
+    expect(callbacks.onActiveSpaceId).toHaveBeenLastCalledWith(identity.spaceId);
+    expect(callbacks.onCloudSpace).toHaveBeenLastCalledWith(bootstrapResponse.space);
+    expect(getOrCreateSpaceIdentityMock).toHaveBeenNthCalledWith(1, firebaseUser.uid);
+    expect(getOrCreateSpaceIdentityMock).toHaveBeenNthCalledWith(2, firebaseUser.uid);
     expect(callbacks.onReady).toHaveBeenCalledTimes(2);
   });
 
@@ -123,7 +135,28 @@ describe('post-auth initialization', () => {
     expect(callbacks.onCloudSpace).toHaveBeenCalledWith(bootstrapResponse.space);
     expect(callbacks.onProfile).toHaveBeenCalledTimes(1);
     expect(callbacks.onSpaceIdentity).toHaveBeenCalledWith(identity);
-    expect(callbacks.onError).not.toHaveBeenCalled();
+    expect(callbacks.onError).toHaveBeenCalledWith(null);
+    expect(callbacks.onError).not.toHaveBeenCalledWith(expect.any(String));
     expect(callbacks.onReady).toHaveBeenCalledTimes(1);
+  });
+
+  it('clears Firebase authentication and session state on real auth loss', () => {
+    const callbacks = {
+      onFirebaseUser: vi.fn(),
+      onSpaceIdentity: vi.fn(),
+      onCloudSpace: vi.fn(),
+      onActiveSpaceId: vi.fn(),
+      onInitializationError: vi.fn(),
+      onFirebaseReady: vi.fn(),
+    };
+
+    clearFirebaseAuthSession(callbacks);
+
+    expect(callbacks.onFirebaseUser).toHaveBeenCalledWith(null);
+    expect(callbacks.onSpaceIdentity).toHaveBeenCalledWith(null);
+    expect(callbacks.onCloudSpace).toHaveBeenCalledWith(null);
+    expect(callbacks.onActiveSpaceId).toHaveBeenCalledWith(null);
+    expect(callbacks.onInitializationError).toHaveBeenCalledWith(null);
+    expect(callbacks.onFirebaseReady).toHaveBeenCalledTimes(1);
   });
 });

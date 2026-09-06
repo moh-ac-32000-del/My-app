@@ -80,21 +80,36 @@ export async function initializePostAuthSession(
     onProfile: (profile: StoreProfile) => void;
     onSpaceIdentity: (identity: SpaceIdentity | null) => void;
     onReady: () => void;
-    onError: (message: string) => void;
+    onError: (message: string | null) => void;
   },
 ): Promise<void> {
+  let identity: SpaceIdentity | null = null;
+  if (!isCurrentTransition()) {
+    return;
+  }
+  callbacks.onError(null);
+
   try {
-    const identity = await getOrCreateSpaceIdentity(user.uid);
+    identity = await getOrCreateSpaceIdentity(user.uid);
     if (!isCurrentTransition()) {
       return;
     }
     callbacks.onActiveSpaceId(identity.spaceId);
+    callbacks.onSpaceIdentity(identity);
 
-    const bootstrapResult = await bootstrapPrimarySpace();
-    if (!isCurrentTransition()) {
-      return;
+    try {
+      const bootstrapResult = await bootstrapPrimarySpace();
+      if (!isCurrentTransition()) {
+        return;
+      }
+      callbacks.onCloudSpace(bootstrapResult.space);
+    } catch (error) {
+      if (!isCurrentTransition()) {
+        return;
+      }
+      callbacks.onCloudSpace(null);
+      callbacks.onError(error instanceof Error ? error.message : 'postAuthInitializationFailed');
     }
-    callbacks.onCloudSpace(bootstrapResult.space);
 
     const storedProfile = await loadStoreProfile();
     if (!isCurrentTransition()) {
@@ -107,15 +122,19 @@ export async function initializePostAuthSession(
     }
 
     callbacks.onProfile(normalizedProfile);
-    callbacks.onSpaceIdentity(identity);
     callbacks.onReady();
   } catch (error) {
     if (!isCurrentTransition()) {
       return;
     }
     callbacks.onCloudSpace(null);
-    callbacks.onSpaceIdentity(null);
-    callbacks.onActiveSpaceId(null);
+    if (identity) {
+      callbacks.onActiveSpaceId(identity.spaceId);
+      callbacks.onSpaceIdentity(identity);
+    } else {
+      callbacks.onSpaceIdentity(null);
+      callbacks.onActiveSpaceId(null);
+    }
     callbacks.onError(error instanceof Error ? error.message : 'postAuthInitializationFailed');
     callbacks.onReady();
   }
@@ -123,6 +142,22 @@ export async function initializePostAuthSession(
 
 export function isFirebaseSessionAuthenticated(user: User | null): boolean {
   return user !== null;
+}
+
+export function clearFirebaseAuthSession(callbacks: {
+  onFirebaseUser: (user: null) => void;
+  onSpaceIdentity: (identity: null) => void;
+  onCloudSpace: (space: null) => void;
+  onActiveSpaceId: (spaceId: null) => void;
+  onInitializationError: (error: null) => void;
+  onFirebaseReady: () => void;
+}): void {
+  callbacks.onFirebaseUser(null);
+  callbacks.onSpaceIdentity(null);
+  callbacks.onCloudSpace(null);
+  callbacks.onActiveSpaceId(null);
+  callbacks.onInitializationError(null);
+  callbacks.onFirebaseReady();
 }
 
 export function StoreProvider({ children }: { children: ReactNode }) {
@@ -244,17 +279,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         authTransitionRef.current += 1;
         firebaseUserRef.current = null;
         initializationInFlightRef.current = null;
-        setFirebaseUser(null);
-        setSpaceIdentity(null);
-        setCloudSpace(null);
-        setActiveSpaceId(null);
-        setInitializationError(null);
+        clearFirebaseAuthSession({
+          onFirebaseUser: setFirebaseUser,
+          onSpaceIdentity: setSpaceIdentity,
+          onCloudSpace: setCloudSpace,
+          onActiveSpaceId: setActiveSpaceId,
+          onInitializationError: setInitializationError,
+          onFirebaseReady: () => setIsFirebaseReady(true),
+        });
         profileRef.current = defaultProfile;
         transactionsRef.current = [];
         transactionLoadPromiseRef.current = Promise.resolve();
         setProfile(defaultProfile);
         setTransactions([]);
-        setIsFirebaseReady(true);
       },
     );
   }, [startPostAuthInitialization]);
