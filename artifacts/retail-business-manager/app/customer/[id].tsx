@@ -6,13 +6,14 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppShell, EmptyState, GlassCard, PageHeader, SectionTitle } from '@/components/AppShell';
 import { CustomerFormModal, type CustomerDraft } from '@/components/CustomerFormModal';
 import { KeyboardAwareScrollViewCompat } from '@/components/KeyboardAwareScrollViewCompat';
+import { ReminderForm } from '@/components/ReminderForm';
 import { CURRENCY_OPTIONS, formatMoney, isCurrencyCode, type CurrencyCode } from '@/constants/currencies';
 import { formatLocalizedDate, formatLocalizedDateTime, type Language, type TranslationKey } from '@/constants/i18n';
 import { useColors } from '@/hooks/useColors';
 import { useI18n } from '@/hooks/useI18n';
 import { useStore } from '@/context/StoreContext';
 import { calculateDebtTotals, createDebt, createReminder, filterDebtsByCustomer, filterPaymentsByCustomer, loadCustomers, loadDebts, loadPayments, loadReminders, parseLocalizedAmountInput, saveCustomers, saveDebts, saveReminders } from '@/services/storage';
-import type { Customer, Debt, Payment } from '@/types/business';
+import type { Customer, Debt, Payment, Reminder } from '@/types/business';
 
 function DetailRow({ icon, label, value }: { icon: React.ComponentProps<typeof Ionicons>['name']; label: string; value: string }) {
   const colors = useColors();
@@ -84,13 +85,17 @@ export default function CustomerDetailsScreen() {
   const [isReminderVisible, setIsReminderVisible] = useState<boolean>(false);
   const [isSavingReminder, setIsSavingReminder] = useState<boolean>(false);
   const [reminderDebt, setReminderDebt] = useState<Debt | null>(null);
-  const [remindAt, setRemindAt] = useState<string>('');
+  const [reminders, setReminders] = useState<Reminder[]>([]);
   const settlementInFlightRef = useRef<boolean>(false);
 
   const debtTotals = useMemo(() => calculateDebtTotals(debts), [debts]);
   const debtCurrencies = useMemo(
     () => CURRENCY_OPTIONS.filter(({ code }) => debtTotals[code] > 0),
     [debtTotals],
+  );
+  const visibleDebtCurrencies = useMemo(
+    () => CURRENCY_OPTIONS.filter(({ code }) => profile.visibleCurrencies.includes(code)),
+    [profile.visibleCurrencies],
   );
 
   useFocusEffect(
@@ -100,11 +105,13 @@ export default function CustomerDetailsScreen() {
       }
       let active = true;
       setIsLoading(true);
-      void Promise.all([loadCustomers(profile.id), loadDebts(profile.id), loadPayments(profile.id)]).then(([customers, storedDebts, storedPayments]) => {
+      void Promise.all([loadCustomers(profile.id), loadDebts(profile.id), loadPayments(profile.id), loadReminders(profile.id)]).then(([customers, storedDebts, storedPayments, storedReminders]) => {
         if (active) {
           setCustomer(customers.find((item) => item.id === customerId) ?? null);
           setDebts(filterDebtsByCustomer(storedDebts, customerId));
           setPayments(filterPaymentsByCustomer(storedPayments, customerId));
+          const customerDebtIds = new Set(storedDebts.filter((debt) => debt.customerId === customerId).map((debt) => debt.id));
+          setReminders(storedReminders.filter((reminder) => customerDebtIds.has(reminder.debtId)));
           setIsLoading(false);
         }
       });
@@ -185,35 +192,24 @@ export default function CustomerDetailsScreen() {
       return;
     }
     setReminderDebt(debt);
-    setRemindAt('');
     setIsReminderVisible(true);
   };
 
-  const saveReminder = async () => {
-    if (isSavingReminder || !reminderDebt || reminderDebt.amount <= 0) {
-      return;
-    }
-    if (!remindAt.trim()) {
-      Alert.alert(t('reminderRemindAt'), t('reminderRemindAtInvalid'));
+  const saveReminder = async (debtId: string, remindAt: string) => {
+    if (isSavingReminder) {
       return;
     }
 
     setIsSavingReminder(true);
     try {
-      const reminder = createReminder(profile.id, reminderDebt.id, {
-        remindAt: remindAt.trim(),
+      const reminder = createReminder(profile.id, debtId, {
+        remindAt,
       });
       const currentReminders = await loadReminders(profile.id);
       await saveReminders(profile.id, [...currentReminders, reminder]);
+      setReminders((current) => [reminder, ...current]);
       setIsReminderVisible(false);
       setReminderDebt(null);
-      setRemindAt('');
-      Alert.alert(t('reminderCreated'));
-    } catch (error) {
-      const message = error instanceof Error && error.message === 'remindAtInvalid'
-        ? t('reminderRemindAtInvalid')
-        : t('reminderSaveError');
-      Alert.alert(t('somethingWentWrong'), message);
     } finally {
       setIsSavingReminder(false);
     }
@@ -366,9 +362,9 @@ export default function CustomerDetailsScreen() {
         testID="add-debt-button"
         accessibilityRole="button"
         onPress={() => {
-          setDebtCurrency(profile.currency);
+          setDebtCurrency(visibleDebtCurrencies.some(({ code }) => code === profile.currency) ? profile.currency : visibleDebtCurrencies[0]?.code ?? profile.currency);
           setDebtAmount('');
-           setDebtDueDate('');
+          setDebtDueDate('');
           setIsDebtVisible(true);
         }}
         style={({ pressed }) => [styles.addDebtButton, { backgroundColor: colors.accent, borderColor: colors.primary, flexDirection: isRTL ? 'row-reverse' : 'row' }, pressed && styles.pressed]}
@@ -436,6 +432,42 @@ export default function CustomerDetailsScreen() {
         ))
       ) : (
         <EmptyState icon="document-text-outline" title={t('debtHistoryEmpty')} hint={t('debtHistoryEmptyHint')} />
+      )}
+
+      <SectionTitle title={t('reminders')} />
+      {reminders.length > 0 ? (
+        reminders.map((reminder) => {
+          const reminderDebtRecord = debts.find((debt) => debt.id === reminder.debtId);
+          const statusKey: TranslationKey = reminder.status === 'completed'
+            ? 'reminderStatusCompleted'
+            : reminder.status === 'dismissed'
+              ? 'reminderStatusDismissed'
+              : 'reminderStatusPending';
+          return (
+            <GlassCard key={reminder.id} style={styles.debtHistoryCard}>
+              <View style={[styles.debtHistoryRow, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
+                <View style={[styles.debtHistoryIcon, { backgroundColor: colors.accent }]}>
+                  <Ionicons name="alarm-outline" size={19} color={colors.primary} />
+                </View>
+                <View style={[styles.debtHistoryCopy, { alignItems: isRTL ? 'flex-end' : 'flex-start' }]}>
+                  <Text style={[styles.debtHistoryAmount, { color: colors.foreground, textAlign: isRTL ? 'right' : 'left' }]}>
+                    {reminderDebtRecord ? formatMoney(reminderDebtRecord.amount, reminderDebtRecord.currency, language) : t('reminderDebtUnavailable')}
+                  </Text>
+                  <Text style={[styles.debtHistoryDate, { color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' }]}>
+                    {formatLocalizedDateTime(new Date(reminder.remindAt), language)}
+                  </Text>
+                </View>
+                <View style={[styles.reminderStatus, { backgroundColor: reminder.status === 'pending' ? colors.accent : colors.input }]}>
+                  <Text style={[styles.reminderStatusText, { color: reminder.status === 'pending' ? colors.primary : colors.mutedForeground }]}>
+                    {t(statusKey)}
+                  </Text>
+                </View>
+              </View>
+            </GlassCard>
+          );
+        })
+      ) : (
+        <EmptyState icon="alarm-outline" title={t('remindersEmpty')} hint={t('remindersEmptyHint')} />
       )}
 
       <SectionTitle title={t('paymentHistory')} />
@@ -544,7 +576,7 @@ export default function CustomerDetailsScreen() {
               <View style={styles.debtField}>
                 <Text style={[styles.debtFieldLabel, { color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' }]}>{t('debtCurrency')}</Text>
                 <View style={styles.debtCurrencyOptions}>
-                  {CURRENCY_OPTIONS.map((option) => {
+                   {visibleDebtCurrencies.map((option) => {
                     const selected = debtCurrency === option.code;
                     return (
                       <Pressable
@@ -601,7 +633,6 @@ export default function CustomerDetailsScreen() {
           if (!isSavingReminder) {
             setIsReminderVisible(false);
             setReminderDebt(null);
-            setRemindAt('');
           }
         }}
       >
@@ -619,7 +650,6 @@ export default function CustomerDetailsScreen() {
                 onPress={() => {
                   setIsReminderVisible(false);
                   setReminderDebt(null);
-                  setRemindAt('');
                 }}
                 style={({ pressed }) => [styles.debtCloseButton, { borderColor: colors.border, backgroundColor: colors.input }, pressed && styles.pressed]}
               >
@@ -627,49 +657,18 @@ export default function CustomerDetailsScreen() {
               </Pressable>
             </View>
 
-            <KeyboardAwareScrollViewCompat contentContainerStyle={styles.debtFormContent} keyboardShouldPersistTaps="handled" bottomOffset={24} showsVerticalScrollIndicator={false}>
-              <View style={styles.debtField}>
-                <Text style={[styles.debtFieldLabel, { color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' }]}>{t('reminderRemindAt')}</Text>
-                <View style={[styles.debtInputWrap, { backgroundColor: colors.input, borderColor: colors.border, flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
-                  <Ionicons name="alarm-outline" size={18} color={colors.mutedForeground} />
-                  <TextInput
-                    testID="reminder-remind-at-input"
-                    value={remindAt}
-                    onChangeText={setRemindAt}
-                    placeholder={t('reminderRemindAtPlaceholder')}
-                    placeholderTextColor={colors.mutedForeground}
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    textAlign={isRTL ? 'right' : 'left'}
-                    style={[styles.debtInput, { color: colors.foreground }]}
-                  />
-                </View>
-              </View>
-
-              <View style={[styles.debtModalActions, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
-                <Pressable
-                  testID="cancel-reminder-form"
-                  disabled={isSavingReminder}
-                  onPress={() => {
-                    setIsReminderVisible(false);
-                    setReminderDebt(null);
-                    setRemindAt('');
-                  }}
-                  style={({ pressed }) => [styles.debtSecondaryButton, { borderColor: colors.border, backgroundColor: colors.input }, pressed && styles.pressed]}
-                >
-                  <Text style={[styles.debtSecondaryText, { color: colors.foreground }]}>{t('cancel')}</Text>
-                </Pressable>
-                <Pressable
-                  testID="save-reminder-form"
-                  disabled={isSavingReminder}
-                  onPress={() => void saveReminder()}
-                  style={({ pressed }) => [styles.debtPrimaryButton, { backgroundColor: colors.primary }, pressed && styles.pressed]}
-                >
-                  {isSavingReminder ? <ActivityIndicator size="small" color={colors.primaryForeground} /> : <Ionicons name="checkmark-circle-outline" size={18} color={colors.primaryForeground} />}
-                  <Text style={[styles.debtPrimaryText, { color: colors.primaryForeground }]}>{t('saveChanges')}</Text>
-                </Pressable>
-              </View>
-            </KeyboardAwareScrollViewCompat>
+            <ReminderForm
+              customers={[customer]}
+              debts={debts}
+              initialCustomerId={customer.id}
+              initialDebtId={reminderDebt?.id}
+              isSaving={isSavingReminder}
+              onClose={() => {
+                setIsReminderVisible(false);
+                setReminderDebt(null);
+              }}
+              onSave={saveReminder}
+            />
           </View>
         </View>
       </Modal>
@@ -835,6 +834,8 @@ const styles = StyleSheet.create({
   debtHistoryCopy: { flex: 1, gap: 4 },
   debtHistoryAmount: { fontSize: 15, fontFamily: 'Inter_700Bold' },
   debtHistoryDate: { fontSize: 12, fontFamily: 'Inter_400Regular' },
+  reminderStatus: { borderRadius: 10, paddingHorizontal: 8, paddingVertical: 5 },
+  reminderStatusText: { fontSize: 10, fontFamily: 'Inter_700Bold' },
   reminderButton: { minHeight: 42, borderRadius: 14, borderWidth: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, marginTop: 12 },
   reminderButtonText: { fontSize: 12, fontFamily: 'Inter_700Bold' },
   debtModalBackdrop: { flex: 1, justifyContent: 'flex-end' },

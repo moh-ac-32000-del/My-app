@@ -15,11 +15,12 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import { KeyboardAwareScrollViewCompat } from '@/components/KeyboardAwareScrollViewCompat';
+import { ReminderForm } from '@/components/ReminderForm';
 import { CURRENCY_OPTIONS, getCurrency, type CurrencyCode } from '@/constants/currencies';
 import type { TranslationKey } from '@/constants/i18n';
 import { useStore } from '@/context/StoreContext';
-import { calculateDebtTotals, filterDebtsByCustomer, loadCustomers, loadDebts, parseLocalizedAmountInput } from '@/services/storage';
-import type { CashTransactionDraft, Customer } from '@/types/business';
+import { calculateDebtTotals, createReminder, filterDebtsByCustomer, loadCustomers, loadDebts, loadReminders, parseLocalizedAmountInput, saveReminders } from '@/services/storage';
+import type { CashTransactionDraft, Customer, Debt } from '@/types/business';
 import { useColors } from '@/hooks/useColors';
 import { useI18n } from '@/hooks/useI18n';
 
@@ -27,7 +28,7 @@ type IconName = React.ComponentProps<typeof Ionicons>['name'];
 type CashAction = 'cash-in' | 'cash-out';
 
 const menuItems: Array<{
-  id: 'cash-in' | 'cash-out' | 'credit' | 'settlement';
+  id: 'cash-in' | 'cash-out' | 'credit' | 'settlement' | 'reminder';
   labelKey: TranslationKey;
   icon: IconName;
 }> = [
@@ -35,6 +36,7 @@ const menuItems: Array<{
   { id: 'cash-out', labelKey: 'quickActionCashOut', icon: 'arrow-up-circle-outline' },
   { id: 'credit', labelKey: 'quickActionCredit', icon: 'time-outline' },
   { id: 'settlement', labelKey: 'quickActionSettlement', icon: 'checkmark-done-circle-outline' },
+  { id: 'reminder', labelKey: 'quickActionReminder', icon: 'alarm-outline' },
 ];
 
 function MenuItem({
@@ -339,6 +341,16 @@ function CustomerCreditSheet({
   const [validation, setValidation] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const saveInFlightRef = useRef<boolean>(false);
+  const visibleDebtCurrencies = useMemo(
+    () => CURRENCY_OPTIONS.filter(({ code }) => profile.visibleCurrencies.includes(code)),
+    [profile.visibleCurrencies],
+  );
+
+  useEffect(() => {
+    if (!visibleDebtCurrencies.some((option) => option.code === selectedCurrency)) {
+      setSelectedCurrency(visibleDebtCurrencies[0]?.code ?? profile.currency);
+    }
+  }, [profile.currency, selectedCurrency, visibleDebtCurrencies]);
 
   useEffect(() => {
     let active = true;
@@ -471,7 +483,7 @@ function CustomerCreditSheet({
           {t('currency')}
         </Text>
         <View style={styles.creditCurrencyOptions}>
-          {CURRENCY_OPTIONS.map((option) => {
+          {visibleDebtCurrencies.map((option) => {
             const selected = selectedCurrency === option.code;
             return (
               <Pressable
@@ -518,6 +530,76 @@ function CustomerCreditSheet({
           </Pressable>
         </View>
       </KeyboardAwareScrollViewCompat>
+    </View>
+  );
+}
+
+function CustomerReminderSheet({ onClose }: { onClose: () => void }) {
+  const colors = useColors();
+  const { profile } = useStore();
+  const { t } = useI18n();
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [debts, setDebts] = useState<Debt[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isSaving, setIsSaving] = useState<boolean>(false);
+  const saveInFlightRef = useRef<boolean>(false);
+  const customersWithDebt = useMemo(
+    () => customers.filter((customer) => debts.some((debt) => debt.customerId === customer.id && debt.amount > 0)),
+    [customers, debts],
+  );
+
+  useEffect(() => {
+    let active = true;
+    void Promise.all([loadCustomers(profile.id), loadDebts(profile.id)]).then(([loadedCustomers, loadedDebts]) => {
+      if (!active) {
+        return;
+      }
+      setCustomers(loadedCustomers);
+      setDebts(loadedDebts);
+      setIsLoading(false);
+    });
+    return () => {
+      active = false;
+    };
+  }, [profile.id]);
+
+  const saveReminder = async (debtId: string, remindAt: string) => {
+    if (isSaving || saveInFlightRef.current) {
+      return;
+    }
+    saveInFlightRef.current = true;
+    setIsSaving(true);
+    try {
+      const reminder = createReminder(profile.id, debtId, { remindAt });
+      const currentReminders = await loadReminders(profile.id);
+      await saveReminders(profile.id, [...currentReminders, reminder]);
+    } finally {
+      saveInFlightRef.current = false;
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <View style={[styles.sheet, { backgroundColor: colors.glassStrong, borderColor: colors.border }]}>
+      <BlurView intensity={65} tint="dark" style={StyleSheet.absoluteFill} />
+      <View style={styles.sheetContent}>
+        <View style={[styles.sheetHandle, { backgroundColor: colors.border }]} />
+        <SheetHeader title={t('createReminder')} subtitle={t('reminderFormHint')} icon="alarm-outline" onClose={onClose} />
+        {isLoading ? (
+          <View style={styles.loadingReminder}>
+            <ActivityIndicator color={colors.primary} />
+          </View>
+        ) : (
+          <ReminderForm
+            customers={customersWithDebt}
+            debts={debts}
+            initialCustomerId={customersWithDebt[0]?.id}
+            isSaving={isSaving}
+            onClose={onClose}
+            onSave={saveReminder}
+          />
+        )}
+      </View>
     </View>
   );
 }
@@ -767,6 +849,7 @@ export function FloatingQuickActions() {
   const [cashAction, setCashAction] = useState<CashAction | null>(null);
   const [isCreditVisible, setIsCreditVisible] = useState<boolean>(false);
   const [isSettlementVisible, setIsSettlementVisible] = useState<boolean>(false);
+  const [isReminderVisible, setIsReminderVisible] = useState<boolean>(false);
   const menuProgress = useRef<Animated.Value>(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -788,6 +871,7 @@ export function FloatingQuickActions() {
     setCashAction(null);
     setIsCreditVisible(false);
     setIsSettlementVisible(false);
+    setIsReminderVisible(false);
     if (!isMenuOpen) {
       setIsMenuMounted(true);
     }
@@ -804,6 +888,7 @@ export function FloatingQuickActions() {
     setCashAction(null);
     setIsCreditVisible(false);
     setIsSettlementVisible(false);
+    setIsReminderVisible(false);
   };
 
   const saveCredit = async (customerId: string, amount: number, currency: CurrencyCode) => {
@@ -816,7 +901,7 @@ export function FloatingQuickActions() {
   const fabAnimatedStyle = {
     transform: [{ rotate: menuProgress.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '45deg'] }) }],
   };
-  const hasSheet = Boolean(cashAction || isCreditVisible || isSettlementVisible);
+  const hasSheet = Boolean(cashAction || isCreditVisible || isSettlementVisible || isReminderVisible);
 
   return (
     <View pointerEvents="box-none" style={[StyleSheet.absoluteFill, styles.floatingLayer]}>
@@ -863,9 +948,12 @@ export function FloatingQuickActions() {
                     } else if (item.id === 'credit') {
                       setIsMenuOpen(false);
                       setIsCreditVisible(true);
-                    } else {
+                    } else if (item.id === 'settlement') {
                       setIsMenuOpen(false);
                       setIsSettlementVisible(true);
+                    } else {
+                      setIsMenuOpen(false);
+                      setIsReminderVisible(true);
                     }
                   }}
                 />
@@ -906,6 +994,7 @@ export function FloatingQuickActions() {
           {cashAction ? <CashTransactionSheet action={cashAction} onClose={closeSheet} onSave={addTransaction} /> : null}
           {isCreditVisible ? <CustomerCreditSheet onClose={closeSheet} onSave={saveCredit} /> : null}
           {isSettlementVisible ? <CustomerSettlementSheet onClose={closeSheet} /> : null}
+          {isReminderVisible ? <CustomerReminderSheet onClose={closeSheet} /> : null}
         </View>
       </Modal>
     </View>
@@ -988,6 +1077,7 @@ const styles = StyleSheet.create({
   sheetTitle: { fontSize: 18, fontFamily: 'Inter_700Bold' },
   sheetSubtitle: { fontSize: 11, fontFamily: 'Inter_400Regular', marginTop: 3 },
   sheetClose: { width: 34, height: 34, alignItems: 'center', justifyContent: 'center' },
+  loadingReminder: { minHeight: 180, alignItems: 'center', justifyContent: 'center' },
   previewBanner: { borderWidth: 1, borderRadius: 15, padding: 11, gap: 8, alignItems: 'center', marginBottom: 17 },
   previewBannerText: { flex: 1, fontSize: 11, fontFamily: 'Inter_500Medium', lineHeight: 17 },
   inputLabel: { fontSize: 12, fontFamily: 'Inter_600SemiBold', marginBottom: 7 },

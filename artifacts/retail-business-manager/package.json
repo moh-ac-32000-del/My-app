@@ -58,7 +58,7 @@
     "zod-validation-error": "^3.4.0"
   },
   "dependencies": {
-    "@react-native-community/datetimepicker": "^9.2.0",
+    "@react-native-community/datetimepicker": "^8.4.4",
     "expo-document-picker": "~14.0.8",
     "expo-file-system": "~19.0.24",
     "expo-sharing": "~14.0.8",
