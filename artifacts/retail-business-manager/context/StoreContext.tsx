@@ -52,6 +52,8 @@ interface StoreContextValue {
   t: (key: TranslationKey) => string;
   isAuthenticated: boolean;
   isReady: boolean;
+  initializationError: string | null;
+  retryInitialization: () => void;
   spaceIdentity: SpaceIdentity | null;
   cloudSpace: Space | null;
   transactions: Transaction[];
@@ -69,6 +71,60 @@ interface StoreContextValue {
 
 const StoreContext = createContext<StoreContextValue | null>(null);
 
+export async function initializePostAuthSession(
+  user: User,
+  isCurrentTransition: () => boolean,
+  callbacks: {
+    onActiveSpaceId: (spaceId: string | null) => void;
+    onCloudSpace: (space: Space | null) => void;
+    onProfile: (profile: StoreProfile) => void;
+    onSpaceIdentity: (identity: SpaceIdentity | null) => void;
+    onReady: () => void;
+    onError: (message: string) => void;
+  },
+): Promise<void> {
+  try {
+    const identity = await getOrCreateSpaceIdentity(user.uid);
+    if (!isCurrentTransition()) {
+      return;
+    }
+    callbacks.onActiveSpaceId(identity.spaceId);
+
+    const bootstrapResult = await bootstrapPrimarySpace();
+    if (!isCurrentTransition()) {
+      return;
+    }
+    callbacks.onCloudSpace(bootstrapResult.space);
+
+    const storedProfile = await loadStoreProfile();
+    if (!isCurrentTransition()) {
+      return;
+    }
+    const normalizedProfile = normalizeStoredStoreProfile(storedProfile, defaultProfile);
+    await saveStoreProfile(normalizedProfile);
+    if (!isCurrentTransition()) {
+      return;
+    }
+
+    callbacks.onProfile(normalizedProfile);
+    callbacks.onSpaceIdentity(identity);
+    callbacks.onReady();
+  } catch (error) {
+    if (!isCurrentTransition()) {
+      return;
+    }
+    callbacks.onCloudSpace(null);
+    callbacks.onSpaceIdentity(null);
+    callbacks.onActiveSpaceId(null);
+    callbacks.onError(error instanceof Error ? error.message : 'postAuthInitializationFailed');
+    callbacks.onReady();
+  }
+}
+
+export function isFirebaseSessionAuthenticated(user: User | null): boolean {
+  return user !== null;
+}
+
 export function StoreProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<StoreProfile>(defaultProfile);
   const [localIsAuthenticated, setLocalIsAuthenticatedState] = useState<boolean>(false);
@@ -77,6 +133,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [spaceIdentity, setSpaceIdentity] = useState<SpaceIdentity | null>(null);
   const [cloudSpace, setCloudSpace] = useState<Space | null>(null);
   const [isFirebaseReady, setIsFirebaseReady] = useState<boolean>(!isFirebaseConfigured);
+  const [initializationError, setInitializationError] = useState<string | null>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [journalRevision, setJournalRevision] = useState<number>(0);
   const profileRef = useRef<StoreProfile>(defaultProfile);
@@ -84,6 +141,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const transactionLoadPromiseRef = useRef<Promise<void>>(Promise.resolve());
   const profileWriteQueueRef = useRef<Promise<void>>(Promise.resolve());
   const authTransitionRef = useRef<number>(0);
+  const firebaseUserRef = useRef<User | null>(null);
+  const initializationInFlightRef = useRef<number | null>(null);
 
   useEffect(() => {
     async function loadLocalState() {
@@ -112,6 +171,43 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     void loadLocalState();
   }, []);
 
+  const startPostAuthInitialization = React.useCallback((user: User, transition: number) => {
+    if (initializationInFlightRef.current === transition) {
+      return;
+    }
+    initializationInFlightRef.current = transition;
+    setInitializationError(null);
+    setIsFirebaseReady(false);
+
+    void initializePostAuthSession(
+      user,
+      () => authTransitionRef.current === transition && firebaseUserRef.current === user,
+      {
+        onActiveSpaceId: setActiveSpaceId,
+        onCloudSpace: setCloudSpace,
+        onProfile: (normalizedProfile) => {
+          profileRef.current = normalizedProfile;
+          setProfile(normalizedProfile);
+        },
+        onSpaceIdentity: setSpaceIdentity,
+        onReady: () => setIsFirebaseReady(true),
+        onError: setInitializationError,
+      },
+    ).finally(() => {
+      if (initializationInFlightRef.current === transition) {
+        initializationInFlightRef.current = null;
+      }
+    });
+  }, []);
+
+  const retryInitialization = React.useCallback(() => {
+    const user = firebaseUserRef.current;
+    if (!user) {
+      return;
+    }
+    startPostAuthInitialization(user, authTransitionRef.current);
+  }, [startPostAuthInitialization]);
+
   useEffect(() => {
     if (!isFirebaseConfigured) {
       return;
@@ -124,9 +220,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       (user) => {
         const transition = authTransitionRef.current + 1;
         authTransitionRef.current = transition;
+        firebaseUserRef.current = user;
         setFirebaseUser(user);
         setSpaceIdentity(null);
         setCloudSpace(null);
+        setInitializationError(null);
         setIsFirebaseReady(false);
         setActiveSpaceId(null);
         profileRef.current = defaultProfile;
@@ -135,52 +233,22 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         setProfile(defaultProfile);
         setTransactions([]);
         if (!user) {
+          initializationInFlightRef.current = null;
           setIsFirebaseReady(true);
           return;
         }
 
-        void getOrCreateSpaceIdentity(user.uid)
-          .then(async (identity) => {
-            if (authTransitionRef.current !== transition) {
-              return;
-            }
-            setActiveSpaceId(identity.spaceId);
-            const bootstrapResult = await bootstrapPrimarySpace();
-            if (authTransitionRef.current !== transition) {
-              return;
-            }
-            setCloudSpace(bootstrapResult.space);
-            const storedProfile = await loadStoreProfile();
-            if (authTransitionRef.current !== transition) {
-              return;
-            }
-            const normalizedProfile = normalizeStoredStoreProfile(storedProfile, defaultProfile);
-            await saveStoreProfile(normalizedProfile);
-            if (authTransitionRef.current !== transition) {
-              return;
-            }
-            profileRef.current = normalizedProfile;
-            setProfile(normalizedProfile);
-            setSpaceIdentity(identity);
-            setIsFirebaseReady(true);
-          })
-          .catch(() => {
-            if (authTransitionRef.current !== transition) {
-              return;
-            }
-            setFirebaseUser(null);
-            setSpaceIdentity(null);
-            setCloudSpace(null);
-            setActiveSpaceId(null);
-            setIsFirebaseReady(true);
-          });
+        startPostAuthInitialization(user, transition);
       },
       () => {
         authTransitionRef.current += 1;
+        firebaseUserRef.current = null;
+        initializationInFlightRef.current = null;
         setFirebaseUser(null);
         setSpaceIdentity(null);
         setCloudSpace(null);
         setActiveSpaceId(null);
+        setInitializationError(null);
         profileRef.current = defaultProfile;
         transactionsRef.current = [];
         transactionLoadPromiseRef.current = Promise.resolve();
@@ -189,11 +257,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         setIsFirebaseReady(true);
       },
     );
-  }, []);
+  }, [startPostAuthInitialization]);
 
   const isReady = isLocalReady && isFirebaseReady;
   const isAuthenticated = isFirebaseConfigured
-    ? firebaseUser !== null && spaceIdentity !== null && cloudSpace !== null
+    ? isFirebaseSessionAuthenticated(firebaseUser)
     : localIsAuthenticated;
 
   useEffect(() => {
@@ -324,6 +392,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       t: (key: TranslationKey) => translate(key, language),
       isAuthenticated,
       isReady,
+      initializationError,
+      retryInitialization,
       spaceIdentity,
       cloudSpace,
       transactions,
@@ -338,7 +408,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       restoreFromLocalBackup,
       resetLocalSession,
     }),
-    [profile, language, rtl, isAuthenticated, isReady, spaceIdentity, cloudSpace, transactions, journalRevision],
+    [profile, language, rtl, isAuthenticated, isReady, initializationError, retryInitialization, spaceIdentity, cloudSpace, transactions, journalRevision],
   );
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;

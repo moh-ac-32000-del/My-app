@@ -17,8 +17,8 @@ import { calculateVisibleCurrencyBalances, loadDailyJournalEvents, type DailyJou
 export default function DashboardScreen() {
   const colors = useColors();
   const router = useRouter();
-  const { profile, isReady, isAuthenticated, transactions, journalRevision } = useStore();
-  const { t, isRTL, language } = useI18n();
+  const { profile, isReady, isAuthenticated, initializationError, retryInitialization, transactions, journalRevision } = useStore();
+  const { t, isRTL, direction, language } = useI18n();
   const insets = useSafeAreaInsets();
   const balances = useMemo(
     () => calculateVisibleCurrencyBalances(transactions, profile.visibleCurrencies),
@@ -60,6 +60,30 @@ export default function DashboardScreen() {
 
   if (!isReady) return <SplashView />;
   if (!isAuthenticated) return <SplashView />;
+  if (initializationError) {
+    return (
+      <View style={[styles.initializationContainer, { backgroundColor: colors.background, direction, paddingTop: insets.top + 20, paddingBottom: Math.max(insets.bottom, 20) }]}>
+        <GlassCard style={styles.initializationCard}>
+          <Ionicons name="cloud-offline-outline" size={36} color={colors.destructive} />
+          <Text style={[styles.initializationTitle, { color: colors.foreground, textAlign: isRTL ? 'right' : 'left' }]}>{t('somethingWentWrong')}</Text>
+          <Text style={[styles.initializationMessage, { color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' }]}>{t('authGenericError')}</Text>
+          <Pressable
+            testID="retry-post-auth-initialization"
+            accessibilityRole="button"
+            onPress={retryInitialization}
+            style={({ pressed }) => [
+              styles.initializationRetryButton,
+              { backgroundColor: colors.primary, flexDirection: isRTL ? 'row-reverse' : 'row' },
+              pressed && styles.pressed,
+            ]}
+          >
+            <Ionicons name="refresh-outline" size={18} color={colors.primaryForeground} />
+            <Text style={[styles.initializationRetryText, { color: colors.primaryForeground }]}>{t('tryAgain')}</Text>
+          </Pressable>
+        </GlassCard>
+      </View>
+    );
+  }
 
   return (
     <AppShell>
@@ -145,6 +169,12 @@ export default function DashboardScreen() {
 }
 
 const styles = StyleSheet.create({
+  initializationContainer: { flex: 1, justifyContent: 'center', paddingHorizontal: 20 },
+  initializationCard: { padding: 24, alignItems: 'center', gap: 14 },
+  initializationTitle: { fontSize: 22, fontFamily: 'Inter_700Bold' },
+  initializationMessage: { fontSize: 14, fontFamily: 'Inter_400Regular', lineHeight: 22 },
+  initializationRetryButton: { minHeight: 48, borderRadius: 16, paddingHorizontal: 22, alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 6 },
+  initializationRetryText: { fontSize: 14, fontFamily: 'Inter_700Bold' },
   profileButton: { width: 42, height: 42, borderRadius: 15, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   profileInitial: { fontSize: 18, fontFamily: 'Inter_700Bold' },
   pressed: { opacity: 0.7 },
