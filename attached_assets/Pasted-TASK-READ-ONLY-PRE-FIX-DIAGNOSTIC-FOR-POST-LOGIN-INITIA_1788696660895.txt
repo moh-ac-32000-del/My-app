@@ -1,0 +1,192 @@
+TASK — READ-ONLY PRE-FIX DIAGNOSTIC FOR POST-LOGIN INITIALIZATION
+
+Objective:
+We are preparing to fix a real login-flow bug where Firebase authentication appears to succeed, but the app returns to the Login screen shortly afterward.
+
+We have decided to use the following architecture direction:
+
+Firebase Authentication must NOT depend on bootstrapPrimarySpace succeeding in order for the user to remain authenticated and access the app.
+
+The Trusted Backend / bootstrapPrimarySpace implementation must remain in the project for future use. We are NOT deleting or redesigning it in this task.
+
+IMPORTANT:
+THIS TASK IS DIAGNOSTIC ONLY.
+DO NOT MODIFY ANY FILE.
+DO NOT CREATE A COMMIT.
+DO NOT INSTALL PACKAGES.
+DO NOT DEPLOY ANYTHING.
+DO NOT CHANGE FIREBASE CONFIGURATION.
+DO NOT CHANGE FIRESTORE RULES.
+DO NOT CHANGE ASYNCSTORAGE KEYS OR DATA.
+DO NOT CHANGE UI.
+DO NOT FIX THE BUG YET.
+
+Current known HEAD:
+0f330f5
+
+Known historical commits relevant to the diagnosis:
+- 970d6f6 = Trusted Backend Foundation
+- 20dd166 = Auth / post-login initialization context predating Reminder
+- 0f330f5 = current Reminder task commit
+
+The purpose of this task is to establish a clean baseline before the actual fix.
+
+==================================================
+1. GIT BASELINE
+==================================================
+
+Run:
+git status --short
+git rev-parse HEAD
+
+Report:
+- whether the working tree is clean
+- exact HEAD hash
+
+If the working tree is not clean, STOP and report it.
+Do not modify or clean anything.
+
+==================================================
+2. INSPECT CURRENT LOGIN FLOW
+==================================================
+
+Read and report the relevant current code from:
+
+- app/login.tsx
+- context/StoreContext.tsx
+- app/index.tsx
+- services/trustedBootstrap.ts
+
+Do not modify them.
+
+Specifically identify and quote the actual current logic showing:
+
+A) Firebase sign-in success.
+B) The post-auth initialization chain.
+C) bootstrapPrimarySpace() invocation.
+D) The broad catch/error handling.
+E) Whether the catch clears firebaseUser / spaceIdentity / cloudSpace / activeSpaceId.
+F) How isAuthenticated is computed.
+G) Why app/index.tsx redirects to /login after the initialization failure.
+
+Do not infer. Use the actual current code.
+
+==================================================
+3. TRACE THE FAILURE PATH
+==================================================
+
+Produce a concise exact flow using the current code:
+
+Login
+→ Firebase Auth
+→ post-auth initialization
+→ bootstrapPrimarySpace
+→ failure
+→ catch
+→ auth/session state changes
+→ isAuthenticated
+→ router redirect
+
+Identify the exact line/file responsible for converting an initialization/bootstrap failure into an unauthenticated state.
+
+==================================================
+4. VERIFY TRUSTED BOOTSTRAP IS SEPARATE
+==================================================
+
+Inspect services/trustedBootstrap.ts.
+
+Confirm:
+- current callable function name
+- request/response handling
+- error handling
+- whether this service itself clears Firebase authentication state
+- whether changing it is actually necessary for the planned fix
+
+DO NOT MODIFY IT.
+
+Also confirm that the planned fix can preserve bootstrapPrimarySpace as a future capability rather than deleting it.
+
+==================================================
+5. CHECK CURRENT TEST COVERAGE
+==================================================
+
+Find existing tests relevant to:
+- Firebase authentication
+- StoreContext initialization
+- trusted bootstrap
+- SpaceIdentity
+- post-login routing/session state
+
+Run only the relevant existing tests.
+
+Also run:
+TypeScript typecheck
+git diff --check
+
+Do NOT install missing dependencies.
+
+If a test cannot run because a dependency/tool is missing:
+- report that fact
+- do not install anything
+- do not change package.json or lockfiles.
+
+==================================================
+6. MANUAL REPRODUCTION
+==================================================
+
+If the existing development environment can be run without configuration changes:
+
+Perform ONE login reproduction using the existing test account/environment.
+
+Do not modify code.
+
+Record only:
+- whether Firebase login reports success
+- whether the app reaches the dashboard
+- whether it subsequently returns to Login
+- any visible error message
+
+Do not attempt to fix anything.
+
+If manual reproduction cannot be performed in the current environment, report that clearly instead of changing configuration.
+
+==================================================
+7. FIREBASE / CLOUD BOUNDARY
+==================================================
+
+Do NOT deploy or modify Firebase.
+
+Do NOT upgrade the Firebase billing plan.
+
+Do NOT change Cloud Functions.
+
+Do NOT change Firestore Rules.
+
+The current Firebase Console inspection showed that the project is on Spark and the Functions section asks for a plan upgrade.
+
+Treat this only as environmental context.
+Do not claim that bootstrapPrimarySpace definitely failed for this reason unless the current code/runtime evidence proves it.
+
+==================================================
+8. FINAL REPORT FORMAT
+==================================================
+
+Return ONLY a diagnostic report with these sections:
+
+1. Git baseline
+2. Current Auth flow
+3. Exact failure path
+4. bootstrapPrimarySpace findings
+5. Existing test results
+6. Manual reproduction result
+7. Files that WOULD need modification for the planned fix
+8. Files that MUST NOT be modified
+9. Any blocker that must be resolved before the fix
+
+IMPORTANT FINAL RULE:
+After producing the report, STOP.
+
+Do not implement the fix.
+Do not create a commit.
+Do not suggest unrelated improvements.
+Do not modify any files.
