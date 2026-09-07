@@ -13,10 +13,14 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
 }));
 
 import {
+  buildDueDateReminderRemindAt,
   createDebt,
   createReminder,
+  DEFAULT_NOTIFICATION_TIME,
   filterRemindersByDebt,
+  loadNotificationTime,
   loadReminders,
+  saveNotificationTime,
   saveDebts,
   saveReminders,
   setActiveSpaceId,
@@ -88,6 +92,210 @@ describe('debt reminders', () => {
       ...reminder(),
       remindAt: '2026-09-01T09:00:00.123Z',
     })).toBeNull();
+  });
+
+  it('accepts a local calendar reminder timestamp without changing its date', () => {
+    expect(validateReminderInput({
+      ...reminder(),
+      remindAt: '2026-09-30T09:00:00',
+    })).toBeNull();
+  });
+
+  it('builds a local due-date reminder timestamp from the debt date and notification time', () => {
+    const debt = createDebt(
+      'store-a',
+      'debt-customer',
+      { amount: 500, currency: 'TRY', dueDate: '2026-09-30' },
+      timestamp,
+    );
+
+    expect(buildDueDateReminderRemindAt(debt, '09:00')).toBe('2026-09-30T09:00:00');
+  });
+
+  it('persists the default and updated global notification time', async () => {
+    await expect(loadNotificationTime()).resolves.toBe(DEFAULT_NOTIFICATION_TIME);
+
+    await saveNotificationTime('store-a', '10:30');
+
+    await expect(loadNotificationTime()).resolves.toBe('10:30');
+  });
+
+  it('creates one pending reminder for a debt with a due date', async () => {
+    const debt = createDebt(
+      'store-a',
+      'customer-a',
+      { amount: 500, currency: 'TRY', dueDate: '2026-09-30' },
+      timestamp,
+    );
+
+    await saveDebts('store-a', [debt]);
+
+    await expect(loadReminders('store-a')).resolves.toMatchObject([
+      {
+        debtId: debt.id,
+        remindAt: '2026-09-30T09:00:00',
+        status: 'pending',
+      },
+    ]);
+  });
+
+  it('does not create a pending reminder for a settled debt', async () => {
+    const settledDebt: Debt = {
+      id: 'settled-debt',
+      storeId: 'store-a',
+      customerId: 'customer-a',
+      currency: 'TRY',
+      amount: 0,
+      dueDate: '2026-09-30',
+      originalAmount: 500,
+      settledAt: timestamp,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    };
+
+    await saveDebts('store-a', [settledDebt]);
+
+    await expect(loadReminders('store-a')).resolves.toEqual([]);
+  });
+
+  it('does not duplicate a pending reminder when the same debt is saved twice', async () => {
+    const dueDebt = createDebt(
+      'store-a',
+      'customer-a',
+      { amount: 500, currency: 'TRY', dueDate: '2026-09-30' },
+      timestamp,
+    );
+
+    await saveDebts('store-a', [dueDebt]);
+    await saveDebts('store-a', [dueDebt]);
+
+    await expect(loadReminders('store-a')).resolves.toHaveLength(1);
+  });
+
+  it('reconciles a pending reminder when the due date changes', async () => {
+    const originalDebt = createDebt(
+      'store-a',
+      'customer-a',
+      { amount: 500, currency: 'TRY', dueDate: '2026-09-30' },
+      timestamp,
+    );
+    const updatedDebt = { ...originalDebt, dueDate: '2026-10-02', updatedAt: timestamp };
+
+    await saveDebts('store-a', [originalDebt]);
+    await saveDebts('store-a', [updatedDebt]);
+
+    await expect(loadReminders('store-a')).resolves.toMatchObject([
+      {
+        debtId: originalDebt.id,
+        remindAt: '2026-10-02T09:00:00',
+        status: 'pending',
+      },
+    ]);
+  });
+
+  it('removes a pending due-date reminder when the due date is removed', async () => {
+    const dueDebt = createDebt(
+      'store-a',
+      'customer-a',
+      { amount: 500, currency: 'TRY', dueDate: '2026-09-30' },
+      timestamp,
+    );
+    const { dueDate: _removedDueDate, ...debtWithoutDueDate } = dueDebt;
+
+    await saveDebts('store-a', [dueDebt]);
+    await saveDebts('store-a', [debtWithoutDueDate]);
+
+    await expect(loadReminders('store-a')).resolves.toEqual([]);
+  });
+
+  it('reconciles pending reminders when the global notification time changes', async () => {
+    const dueDebt = createDebt(
+      'store-a',
+      'customer-a',
+      { amount: 500, currency: 'TRY', dueDate: '2026-09-30' },
+      timestamp,
+    );
+
+    await saveDebts('store-a', [dueDebt]);
+    await saveNotificationTime('store-a', '10:30');
+
+    await expect(loadReminders('store-a')).resolves.toMatchObject([
+      {
+        debtId: dueDebt.id,
+        remindAt: '2026-09-30T10:30:00',
+        status: 'pending',
+      },
+    ]);
+  });
+
+  it('preserves manually-created reminders while reconciling generated reminders', async () => {
+    const manual = createReminder('store-a', 'debt-a', {
+      remindAt: firstRemindAt,
+      note: 'Call customer',
+    }, timestamp);
+    const dueDebt = createDebt(
+      'store-a',
+      'customer-a',
+      { amount: 500, currency: 'TRY', dueDate: '2026-09-30' },
+      timestamp,
+    );
+
+    await saveReminders('store-a', [manual]);
+    await saveDebts('store-a', [dueDebt]);
+
+    await expect(loadReminders('store-a')).resolves.toHaveLength(2);
+    await expect(loadReminders('store-a')).resolves.toContainEqual(manual);
+  });
+
+  it('keeps reminder schedules independent across currencies and debts', async () => {
+    const tryDebt = createDebt(
+      'store-a',
+      'customer-a',
+      { amount: 500, currency: 'TRY', dueDate: '2026-09-30' },
+      timestamp,
+    );
+    const usdDebt = createDebt(
+      'store-a',
+      'customer-b',
+      { amount: 500, currency: 'USD', dueDate: '2026-10-01' },
+      timestamp,
+    );
+
+    await saveDebts('store-a', [tryDebt, usdDebt]);
+
+    await expect(loadReminders('store-a')).resolves.toMatchObject([
+      { debtId: tryDebt.id, remindAt: '2026-09-30T09:00:00' },
+      { debtId: usdDebt.id, remindAt: '2026-10-01T09:00:00' },
+    ]);
+  });
+
+  it('isolates generated reminders by active local space', async () => {
+    const spaceADebt = createDebt(
+      'store-a',
+      'customer-a',
+      { amount: 500, currency: 'TRY', dueDate: '2026-09-30' },
+      timestamp,
+    );
+    const spaceBDebt = createDebt(
+      'store-a',
+      'customer-b',
+      { amount: 500, currency: 'TRY', dueDate: '2026-10-01' },
+      timestamp,
+    );
+
+    setActiveSpaceId('space A');
+    await saveDebts('store-a', [spaceADebt]);
+    setActiveSpaceId('space B');
+    await saveDebts('store-a', [spaceBDebt]);
+
+    await expect(loadReminders('store-a')).resolves.toMatchObject([
+      { debtId: spaceBDebt.id, remindAt: '2026-10-01T09:00:00' },
+    ]);
+
+    setActiveSpaceId('space A');
+    await expect(loadReminders('store-a')).resolves.toMatchObject([
+      { debtId: spaceADebt.id, remindAt: '2026-09-30T09:00:00' },
+    ]);
   });
 
   it('supports multiple reminders for the same debt without reusing the debt id', async () => {

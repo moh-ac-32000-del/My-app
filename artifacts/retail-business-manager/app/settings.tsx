@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Modal, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
@@ -11,6 +12,7 @@ import { accentOptions, type AccentColor } from '@/constants/colors';
 import { CURRENCY_OPTIONS, getCurrency, type CurrencyCode } from '@/constants/currencies';
 import { useI18n } from '@/hooks/useI18n';
 import { createAndShareLocalBackup, pickLocalBackupFile } from '@/services/backupFile';
+import { DEFAULT_NOTIFICATION_TIME, loadNotificationTime, saveNotificationTime } from '@/services/storage';
 
 function SettingInput({ label, value, onChangeText, icon, multiline = false, placeholder }: { label: string; value: string; onChangeText: (value: string) => void; icon: React.ComponentProps<typeof Ionicons>['name']; multiline?: boolean; placeholder?: string }) {
   const colors = useColors();
@@ -24,6 +26,22 @@ function SettingInput({ label, value, onChangeText, icon, multiline = false, pla
       </View>
     </View>
   );
+}
+
+function notificationTimeToDate(value: string): Date {
+  const [hours, minutes] = value.split(':').map(Number);
+  const date = new Date();
+  date.setHours(
+    Number.isFinite(hours) ? hours : 9,
+    Number.isFinite(minutes) ? minutes : 0,
+    0,
+    0,
+  );
+  return date;
+}
+
+function formatNotificationTime(date: Date): string {
+  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
 }
 
 export default function SettingsScreen() {
@@ -51,6 +69,8 @@ export default function SettingsScreen() {
   const [isRestoreBusy, setIsRestoreBusy] = useState<boolean>(false);
   const [pendingRestoreContents, setPendingRestoreContents] = useState<string | null>(null);
   const [backupStatus, setBackupStatus] = useState<{ key: TranslationKey; success: boolean } | null>(null);
+  const [notificationTime, setNotificationTime] = useState<string>(DEFAULT_NOTIFICATION_TIME);
+  const [isNotificationTimePickerOpen, setIsNotificationTimePickerOpen] = useState<boolean>(false);
 
   useEffect(() => {
     if (!isReady || draftInitializedRef.current) {
@@ -63,6 +83,23 @@ export default function SettingsScreen() {
     setAccent(profile.accent);
     draftInitializedRef.current = true;
   }, [isReady, profile]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!isReady) {
+      return () => {
+        cancelled = true;
+      };
+    }
+    void loadNotificationTime().then((value) => {
+      if (!cancelled) {
+        setNotificationTime(value);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [isReady, profile.id]);
 
   const save = async () => {
     if (!isReady || !draftInitializedRef.current) {
@@ -102,6 +139,22 @@ export default function SettingsScreen() {
     setIsLanguagePickerOpen(false);
     await saveProfile({ language: nextLanguage });
     await Haptics.selectionAsync();
+  };
+
+  const handleNotificationTimeChange = async (event: DateTimePickerEvent, value?: Date) => {
+    setIsNotificationTimePickerOpen(false);
+    if (event.type === 'dismissed' || !value) {
+      return;
+    }
+
+    const nextTime = formatNotificationTime(value);
+    try {
+      await saveNotificationTime(profile.id, nextTime);
+      setNotificationTime(nextTime);
+      await Haptics.selectionAsync();
+    } catch {
+      Alert.alert(t('notifications'), t('notificationTimeSaveError'));
+    }
   };
 
   const selectQuickCurrency = async (code: CurrencyCode) => {
@@ -344,11 +397,39 @@ export default function SettingsScreen() {
           </View>
         ) : null}
         <View style={[styles.divider, { backgroundColor: colors.border }]} />
-        <View style={[styles.preferenceRow, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
-          <View style={[styles.preferenceIcon, { backgroundColor: colors.accent }]}><Ionicons name="notifications-outline" size={18} color={colors.primary} /></View>
-          <View style={[styles.preferenceCopy, { alignItems: isRTL ? 'flex-end' : 'flex-start' }]}><Text style={[styles.preferenceTitle, { color: colors.foreground, textAlign: isRTL ? 'right' : 'left' }]}>{t('notifications')}</Text><Text style={[styles.preferenceHint, { color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' }]}>{t('underDevelopment')}</Text></View>
+        <Pressable
+          testID="notification-settings"
+          onPress={() => setIsNotificationTimePickerOpen(true)}
+          style={({ pressed }) => [
+            styles.preferenceRow,
+            { flexDirection: isRTL ? 'row-reverse' : 'row' },
+            pressed && styles.pressed,
+          ]}
+        >
+          <View style={[styles.preferenceIcon, { backgroundColor: colors.accent }]}>
+            <Ionicons name="notifications-outline" size={18} color={colors.primary} />
+          </View>
+          <View style={[styles.preferenceCopy, { alignItems: isRTL ? 'flex-end' : 'flex-start' }]}>
+            <Text style={[styles.preferenceTitle, { color: colors.foreground, textAlign: isRTL ? 'right' : 'left' }]}>
+              {t('notificationTime')}
+            </Text>
+            <Text style={[styles.preferenceHint, { color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' }]}>
+              {t('notificationTimeHint')}
+            </Text>
+          </View>
+          <Text style={[styles.notificationTimeValue, { color: colors.primary }]}>{notificationTime}</Text>
           <Ionicons name={isRTL ? 'chevron-back' : 'chevron-forward'} size={16} color={colors.mutedForeground} />
-        </View>
+        </Pressable>
+        {isNotificationTimePickerOpen ? (
+          <DateTimePicker
+            testID="notification-time-picker"
+            value={notificationTimeToDate(notificationTime)}
+            mode="time"
+            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+            is24Hour
+            onChange={(event, value) => void handleNotificationTimeChange(event, value)}
+          />
+        ) : null}
       </GlassCard>
 
       <GlassCard style={[styles.cloudCard, { borderColor: colors.primary, flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
@@ -508,6 +589,7 @@ const styles = StyleSheet.create({
   preferenceCopy: { flex: 1, alignItems: 'flex-end' },
   preferenceTitle: { fontSize: 13, fontFamily: 'Inter_600SemiBold' },
   preferenceHint: { fontSize: 11, fontFamily: 'Inter_400Regular', marginTop: 3 },
+  notificationTimeValue: { fontSize: 14, fontFamily: 'Inter_700Bold' },
   divider: { height: 1, marginVertical: 14 },
   cloudCard: { flexDirection: 'row-reverse', alignItems: 'center', gap: 11, marginBottom: 18 },
   cloudIcon: { width: 42, height: 42, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },

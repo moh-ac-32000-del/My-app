@@ -17,6 +17,7 @@ import {
   createDebt,
   filterDebtsByCustomer,
   loadDebts,
+  loadReminders,
   parseLocalizedAmountInput,
   saveDebts,
   validateDebtInput,
@@ -98,7 +99,7 @@ describe('customer debts', () => {
     expect((await loadDebts('store-a'))[0]).not.toHaveProperty('dueDate');
   });
 
-  it('does not create reminder fields or reminder records when creating a debt', async () => {
+  it('does not add reminder fields to the debt while scheduling its due-date reminder separately', async () => {
     const created = createDebt(
       'store-a',
       'customer-a',
@@ -111,7 +112,13 @@ describe('customer debts', () => {
     expect(created).not.toHaveProperty('debtId');
 
     await saveDebts('store-a', [created]);
-    expect(storedValues.has('@retail-business-manager/reminders')).toBe(false);
+    await expect(loadReminders('store-a')).resolves.toMatchObject([
+      {
+        debtId: created.id,
+        remindAt: '2026-09-30T09:00:00',
+        status: 'pending',
+      },
+    ]);
   });
 
   it('parses decimal points and decimal commas without changing their value', () => {

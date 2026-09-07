@@ -22,14 +22,18 @@ const TRANSACTIONS_KEY = '@retail-business-manager/transactions';
 const DEBTS_KEY = '@retail-business-manager/debts';
 const PAYMENTS_KEY = '@retail-business-manager/payments';
 const REMINDERS_KEY = '@retail-business-manager/reminders';
+const NOTIFICATION_TIME_KEY = '@retail-business-manager/notification-time';
 const ARCHIVE_KEY_PREFIX = '@retail-business-manager/daily-archive/';
 export const SPACE_STORAGE_PREFIX = '@retail-business-manager/spaces/';
+export const DEFAULT_NOTIFICATION_TIME = '09:00';
+const DUE_DATE_REMINDER_NOTE = 'system:due-date';
 
 let transactionSequence = 0;
 let debtSequence = 0;
 let paymentSequence = 0;
 let reminderSequence = 0;
 let settlementQueue: Promise<void> = Promise.resolve();
+let reminderReconciliationQueue: Promise<void> = Promise.resolve();
 let archiveClosingQueue: Promise<void> = Promise.resolve();
 let activeSpaceId: string | null = null;
 
@@ -56,6 +60,40 @@ export async function loadStoreProfile(): Promise<unknown | null> {
 
 export async function saveStoreProfile(profile: StoreProfile): Promise<void> {
   await AsyncStorage.setItem(getStoreProfileKey(), JSON.stringify(profile));
+}
+
+export function isValidNotificationTime(value: unknown): value is string {
+  if (typeof value !== 'string' || !/^\d{2}:\d{2}$/.test(value)) {
+    return false;
+  }
+  const [hours, minutes] = value.split(':').map(Number);
+  return hours >= 0 && hours <= 23 && minutes >= 0 && minutes <= 59;
+}
+
+export async function loadNotificationTime(): Promise<string> {
+  const storedTime = await AsyncStorage.getItem(getNotificationTimeKey());
+  return isValidNotificationTime(storedTime) ? storedTime : DEFAULT_NOTIFICATION_TIME;
+}
+
+export async function saveNotificationTime(storeId: string, value: string): Promise<void> {
+  if (!isValidNotificationTime(value)) {
+    throw new Error('notificationTimeInvalid');
+  }
+
+  const key = getNotificationTimeKey();
+  const previousValue = await AsyncStorage.getItem(key);
+  await AsyncStorage.setItem(key, value);
+  try {
+    const debts = await loadDebts(storeId);
+    await reconcileDueDateReminders(storeId, debts, value);
+  } catch (error) {
+    if (previousValue === null) {
+      await AsyncStorage.removeItem(key);
+    } else {
+      await AsyncStorage.setItem(key, previousValue);
+    }
+    throw error;
+  }
 }
 
 export async function loadAuthenticatedState(): Promise<boolean> {
@@ -643,6 +681,7 @@ export async function saveDebts(storeId: string, debts: Debt[]): Promise<void> {
 
   const otherStoreDebts = stored.debts.filter((debt) => debt.storeId !== storeId);
   await AsyncStorage.setItem(getDebtsKey(), JSON.stringify([...otherStoreDebts, ...debts]));
+  await reconcileDueDateReminders(storeId, debts);
 }
 
 export function createReminderId(): string {
@@ -746,6 +785,115 @@ export async function saveReminders(storeId: string, reminders: Reminder[]): Pro
 
   const otherStoreReminders = stored.reminders.filter((reminder) => reminder.storeId !== storeId);
   await AsyncStorage.setItem(getRemindersKey(), JSON.stringify([...otherStoreReminders, ...reminders]));
+}
+
+export function buildDueDateReminderRemindAt(debt: Debt, notificationTime: string): string | null {
+  if (
+    debt.amount <= 0
+    || debt.settledAt
+    || !debt.dueDate
+    || !isValidArchiveDate(debt.dueDate)
+    || !isValidNotificationTime(notificationTime)
+  ) {
+    return null;
+  }
+
+  const [year, month, day] = debt.dueDate.split('-').map(Number);
+  const [hours, minutes] = notificationTime.split(':').map(Number);
+  const localDate = new Date(year, month - 1, day, hours, minutes, 0, 0);
+  if (
+    localDate.getFullYear() !== year
+    || localDate.getMonth() !== month - 1
+    || localDate.getDate() !== day
+    || localDate.getHours() !== hours
+    || localDate.getMinutes() !== minutes
+  ) {
+    return null;
+  }
+
+  return `${debt.dueDate}T${notificationTime}:00`;
+}
+
+export function reconcileDueDateReminders(
+  storeId: string,
+  debts: Debt[],
+  notificationTime?: string,
+): Promise<void> {
+  const operation = reminderReconciliationQueue
+    .catch(() => undefined)
+    .then(async () => {
+      const time = notificationTime ?? await loadNotificationTime();
+      await reconcileDueDateRemindersNow(storeId, debts, time);
+    });
+  reminderReconciliationQueue = operation.then(() => undefined, () => undefined);
+  return operation;
+}
+
+async function reconcileDueDateRemindersNow(
+  storeId: string,
+  debts: Debt[],
+  notificationTime: string,
+): Promise<void> {
+  if (!isValidNotificationTime(notificationTime)) {
+    throw new Error('notificationTimeInvalid');
+  }
+
+  const stored = await readStoredReminders();
+  if (stored.isCorrupted) {
+    throw new Error('Stored reminder data is corrupted');
+  }
+
+  const currentStoreReminders = stored.reminders.filter((reminder) => reminder.storeId === storeId);
+  const debtsById = new Map(debts.filter((debt) => debt.storeId === storeId).map((debt) => [debt.id, debt]));
+  const desiredRemindAt = new Map(
+    [...debtsById.values()]
+      .map((debt) => [debt.id, buildDueDateReminderRemindAt(debt, notificationTime)] as const)
+      .filter((entry): entry is readonly [string, string] => entry[1] !== null),
+  );
+  const scheduledKeys = new Set<string>();
+  const retained: Reminder[] = [];
+  const keptPendingKeys = new Set<string>();
+  let changed = false;
+
+  for (const reminder of currentStoreReminders) {
+    if (reminder.note !== DUE_DATE_REMINDER_NOTE) {
+      retained.push(reminder);
+      continue;
+    }
+
+    const desired = desiredRemindAt.get(reminder.debtId);
+    const scheduleKey = `${reminder.debtId}:${reminder.remindAt}`;
+    if (reminder.status !== 'pending') {
+      retained.push(reminder);
+      scheduledKeys.add(scheduleKey);
+      continue;
+    }
+
+    if (desired && reminder.remindAt === desired && !keptPendingKeys.has(scheduleKey)) {
+      retained.push(reminder);
+      keptPendingKeys.add(scheduleKey);
+      scheduledKeys.add(scheduleKey);
+    } else {
+      changed = true;
+    }
+  }
+
+  for (const [debtId, remindAt] of desiredRemindAt) {
+    const scheduleKey = `${debtId}:${remindAt}`;
+    if (scheduledKeys.has(scheduleKey)) {
+      continue;
+    }
+    retained.push(createReminder(storeId, debtId, {
+      remindAt,
+      note: DUE_DATE_REMINDER_NOTE,
+    }));
+    scheduledKeys.add(scheduleKey);
+    changed = true;
+  }
+
+  if (changed) {
+    await saveReminders(storeId, retained);
+  }
 }
 
 export function createPaymentId(): string {
@@ -943,6 +1091,7 @@ async function settleCustomerDebtNow(
     AsyncStorage.getItem(getDebtsKey()),
     AsyncStorage.getItem(getTransactionsKey()),
     AsyncStorage.getItem(getPaymentsKey()),
+    AsyncStorage.getItem(getRemindersKey()),
   ]);
 
   try {
@@ -953,6 +1102,7 @@ async function settleCustomerDebtNow(
     await restoreStorageValue(getDebtsKey(), snapshots[0]);
     await restoreStorageValue(getTransactionsKey(), snapshots[1]);
     await restoreStorageValue(getPaymentsKey(), snapshots[2]);
+    await restoreStorageValue(getRemindersKey(), snapshots[3]);
     throw error;
   }
 
@@ -985,8 +1135,24 @@ function isValidDateString(value: unknown): value is string {
 }
 
 function isValidIsoTimestamp(value: unknown): value is string {
+  if (typeof value !== 'string' || value !== value.trim()) {
+    return false;
+  }
+
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(value)) {
+    const [datePart, timePart] = value.split('T');
+    const [year, month, day] = datePart.split('-').map(Number);
+    const [hours, minutes, seconds] = timePart.split(':').map(Number);
+    const parsed = new Date(year, month - 1, day, hours, minutes, seconds, 0);
+    return parsed.getFullYear() === year
+      && parsed.getMonth() === month - 1
+      && parsed.getDate() === day
+      && parsed.getHours() === hours
+      && parsed.getMinutes() === minutes
+      && parsed.getSeconds() === seconds;
+  }
+
   return isValidDateString(value)
-    && value === value.trim()
     && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value)
     && new Date(value).toISOString() === value;
 }
@@ -1780,6 +1946,10 @@ function getPaymentsKey(): string {
 
 function getRemindersKey(): string {
   return getSpaceStorageKey(REMINDERS_KEY, 'reminders');
+}
+
+function getNotificationTimeKey(): string {
+  return getSpaceStorageKey(NOTIFICATION_TIME_KEY, 'notification-time');
 }
 
 function getSpaceStorageKey(legacyKey: string, dataName: string): string {

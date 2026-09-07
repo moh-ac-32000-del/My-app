@@ -7,3 +7,4 @@
 - [Firestore Space foundation](firestore-space-foundation.md) — cloud stores ownership metadata only; failures must never block local business data.
 - [Tracked handoff outputs](tracked-handoff-outputs.md) — verify tracked ZIP outputs separately; rebuilding one changes Git even when source code is unchanged.
 - [Expo date picker compatibility](expo-date-picker-compatibility.md) — Expo SDK 54 expects datetimepicker 8.4.4; newer versions trigger a compatibility warning.
+- [Due-date reminder reconciliation](due-date-reminder-reconciliation.md) — generated reminders use an internal marker and local calendar timestamps so pending schedules can be safely reconciled.
