@@ -1,0 +1,716 @@
+IMPLEMENTATION TASK A — UNIFY THE DEBT / CREDIT FORM
+
+We have completed a detailed READ-ONLY audit of the current Debt/Credit creation flows.
+
+The audit confirmed that the Home → آجل flow and Customer → إضافة آجل flow currently use two separate forms with duplicated UI/state logic.
+
+The goal of this task is to extract the shared Debt creation UI/state into ONE reusable DebtForm component and make BOTH existing flows use it.
+
+This task must remain tightly scoped.
+
+==================================================
+PRIMARY GOAL
+==================================================
+
+Create:
+
+artifacts/retail-business-manager/components/DebtForm.tsx
+
+and use this same component for:
+
+1. Home → Quick Actions → آجل
+2. Customer → إضافة آجل
+
+The new DebtForm must contain the shared Debt-entry form behavior:
+
+- Customer selection
+- Amount
+- Currency
+- Optional dueDate
+
+The component must use callback-based persistence.
+
+Recommended contract:
+
+onSave: (draft: {
+  customerId: string;
+  amount: number;
+  currency: CurrencyCode;
+  dueDate?: string;
+}) => Promise<void>
+
+The DebtForm must NOT directly access storage.
+
+The DebtForm must NOT contain Firebase logic.
+
+The DebtForm must NOT contain StoreContext persistence logic.
+
+The DebtForm should be responsible for form UI/state/validation and pass the completed draft to its caller.
+
+==================================================
+1. CURRENT HOME FLOW
+==================================================
+
+Current responsible file:
+
+artifacts/retail-business-manager/components/FloatingQuickActions.tsx
+
+Current component:
+
+CustomerCreditSheet
+
+The Home Quick Action with ID:
+
+credit
+
+currently opens CustomerCreditSheet.
+
+The new implementation must replace the duplicated debt-entry UI with DebtForm.
+
+Preserve the existing Home Quick Action behavior:
+
+Home → Quick Actions → آجل
+
+The Home flow must still:
+
+- load customers
+- allow selecting a customer
+- allow entering amount
+- allow selecting currency
+- allow optional dueDate
+- save the resulting Debt
+- use only currencies contained in profile.visibleCurrencies
+
+Do NOT add customer search.
+
+Do NOT add "Add New Customer".
+
+Do NOT change customer management.
+
+Customer search/add-new-customer is explicitly deferred to a later task.
+
+==================================================
+2. CURRENT CUSTOMER FLOW
+==================================================
+
+Current responsible file:
+
+artifacts/retail-business-manager/app/customer/[id].tsx
+
+The current Customer Add Debt form is inline inside CustomerDetailsScreen.
+
+Replace that duplicated form UI/state with the same reusable DebtForm.
+
+For the Customer flow:
+
+- pass the current customer as the available customer list
+- initialize the selected customer using the route customerId
+- the user should not need to select another customer
+- preserve the existing customer-specific save behavior
+- preserve optional dueDate
+- preserve visible currency filtering
+
+The Customer page must continue using the current route customer:
+
+const { id } = useLocalSearchParams<{ id: string }>();
+
+and the resulting Debt must continue to use that customerId.
+
+==================================================
+3. SHARED DEBT FORM FIELDS
+==================================================
+
+DebtForm must contain:
+
+1. Customer
+2. Amount
+3. Currency
+4. Optional Due Date
+
+Do not add:
+
+- Reminder date
+- Reminder time
+- Reminder note
+- Notification controls
+- Installment controls
+- Any new debt fields
+
+The Debt type must NOT be expanded.
+
+==================================================
+4. DUE DATE — THIS TASK
+==================================================
+
+dueDate remains optional.
+
+IMPORTANT:
+
+Do NOT implement the Calendar/date-picker in this task.
+
+The next task will replace the current free-text due-date input with a date-only calendar picker.
+
+For THIS task:
+
+- preserve the existing dueDate string format
+- preserve the existing validation/normalization behavior
+- move the dueDate field into DebtForm
+- pass it through correctly
+- persist it correctly
+
+Do NOT add a time picker.
+
+Do NOT add reminder time to the Debt form.
+
+Do NOT redesign the due-date UI yet.
+
+==================================================
+5. CRITICAL: HOME DUE DATE PERSISTENCE
+==================================================
+
+The READ-ONLY audit found an important existing limitation:
+
+context/StoreContext.tsx
+
+currently defines:
+
+addCustomerDebt(...)
+
+with a draft containing only:
+
+{
+  amount: number;
+  currency: CurrencyCode;
+}
+
+It currently does NOT accept dueDate.
+
+Because the new shared DebtForm contains an optional dueDate and will be used by the Home → آجل flow, this MUST be fixed as part of this task.
+
+You MUST minimally extend addCustomerDebt so its draft accepts:
+
+{
+  amount: number;
+  currency: CurrencyCode;
+  dueDate?: string;
+}
+
+Then pass the optional dueDate through to the existing createDebt(...) call.
+
+This is a required part of this task.
+
+DO NOT silently discard a dueDate entered on Home.
+
+The final data flow must be:
+
+Home DebtForm
+→ save callback
+→ addCustomerDebt(...)
+→ createDebt(...)
+→ Debt.dueDate
+→ existing storage
+
+Existing callers that only provide:
+
+{
+  amount,
+  currency
+}
+
+must continue working unchanged.
+
+Do NOT change the Debt type.
+
+Do NOT change storage keys.
+
+Do NOT introduce another persistence mechanism.
+
+Do NOT refactor StoreContext.
+
+This must be a minimal signature extension only.
+
+If dueDate is undefined or empty:
+
+- preserve current behavior
+- do not store an empty dueDate
+- continue using the existing createDebt behavior
+
+==================================================
+6. CUSTOMER DUE DATE PERSISTENCE
+==================================================
+
+The Customer flow already creates the Debt directly and currently supports:
+
+dueDate?: string
+
+Preserve that behavior.
+
+The DebtForm should provide:
+
+{
+  customerId,
+  amount,
+  currency,
+  dueDate?
+}
+
+The Customer caller should continue persisting that draft using the existing storage path.
+
+Do not introduce a second storage architecture.
+
+==================================================
+7. CURRENCY RESTRICTION
+==================================================
+
+Both DebtForm instances must use only:
+
+profile.visibleCurrencies
+
+Do NOT show currencies that are not enabled in the user's profile.
+
+Preserve the existing CurrencyCode type.
+
+Do NOT change currency architecture.
+
+Do NOT introduce free-text currency entry.
+
+Verify both Home and Customer flows use the same visible-currency restriction.
+
+==================================================
+8. AMOUNT BEHAVIOR
+==================================================
+
+Preserve the current localized amount parsing and validation behavior.
+
+The existing utility:
+
+parseLocalizedAmountInput
+
+should continue to be used.
+
+Do not redesign amount formatting.
+
+Do not change currency-dependent amount behavior.
+
+The resulting value passed to onSave must remain a number.
+
+==================================================
+9. CUSTOMER SELECTION
+==================================================
+
+DebtForm should support both contexts without duplicating the form.
+
+Home:
+
+- receives the loaded customer list
+- allows customer selection
+- preserves the current selectedCustomerId behavior
+
+Customer page:
+
+- receives [currentCustomer]
+- receives initialCustomerId={customerId}
+- does not require the user to choose another customer
+
+Do not add customer creation.
+
+Do not add customer search.
+
+==================================================
+10. REMINDER — STRICTLY OUT OF SCOPE
+==================================================
+
+DO NOT MODIFY:
+
+artifacts/retail-business-manager/components/ReminderForm.tsx
+
+ReminderForm must remain untouched.
+
+Do NOT merge ReminderForm into DebtForm.
+
+Do NOT adapt ReminderForm to create debts.
+
+Do NOT change its onSave contract.
+
+Do NOT change reminder creation.
+
+Do NOT create reminders automatically.
+
+Do NOT add reminder buttons to DebtForm.
+
+Do NOT change Reminder storage.
+
+Do NOT change reminder scheduling.
+
+Do NOT change notification behavior.
+
+Do NOT implement automatic reminders.
+
+Do NOT implement Notification Center.
+
+The current Reminder system must remain behaviorally unchanged.
+
+The reason is architectural:
+
+ReminderForm is designed around:
+
+existing Debt
++
+selecting an outstanding Debt
++
+selecting reminder date/time
++
+creating Reminder linked by debtId
+
+DebtForm is a different domain action:
+
+creating a new Debt.
+
+Do not force these two responsibilities into one component.
+
+==================================================
+11. NO CALENDAR YET
+==================================================
+
+Do NOT install or add any date picker package.
+
+Do NOT modify package.json.
+
+Do NOT modify pnpm-lock.yaml.
+
+The calendar/date-only redesign is a separate next task.
+
+==================================================
+12. VISUAL / UX PRESERVATION
+==================================================
+
+This task is extraction and unification, not a visual redesign.
+
+Preserve the existing visual design as much as practical.
+
+Do not introduce a new design system.
+
+Do not change unrelated screens.
+
+Do not change navigation.
+
+Do not change the Bottom Tab structure.
+
+Do not change AppShell.
+
+Do not change authentication.
+
+==================================================
+13. TEST IDS
+==================================================
+
+Preserve existing useful testIDs whenever practical.
+
+If an element moves from an existing screen into DebtForm, keep the existing testID rather than unnecessarily renaming it.
+
+Do not remove test coverage simply because the UI was extracted.
+
+==================================================
+14. FILE SCOPE
+==================================================
+
+Expected production files that may change:
+
+1. artifacts/retail-business-manager/components/DebtForm.tsx
+   NEW
+
+2. artifacts/retail-business-manager/components/FloatingQuickActions.tsx
+
+3. artifacts/retail-business-manager/app/customer/[id].tsx
+
+4. artifacts/retail-business-manager/context/StoreContext.tsx
+
+Focused tests directly related to this extraction may also be added/modified.
+
+IMPORTANT:
+
+If implementation requires modifying ANY other production file outside this list:
+
+STOP before doing so and report:
+
+- the exact file
+- why it is required
+- what change would be made
+
+Do NOT continue automatically.
+
+==================================================
+15. ABSOLUTELY DO NOT MODIFY
+==================================================
+
+Do NOT modify:
+
+- components/ReminderForm.tsx
+- package.json
+- pnpm-lock.yaml
+- firebase configuration
+- Firestore rules
+- Firebase Auth
+- navigation configuration
+- Backup/Restore
+- StoreProfile.id behavior
+- AsyncStorage keys
+- storeId behavior
+- Debt type
+- Reminder type
+- notification system
+- Notification Center
+- Home customer search/add-new-customer
+- inventory
+- sales
+- purchases
+- capital
+- reports
+- cloud sync
+- outbox/sync infrastructure
+
+Do not perform broad refactoring.
+
+==================================================
+16. STORE CONTEXT RESTRICTION
+==================================================
+
+context/StoreContext.tsx may be modified ONLY for the minimal addCustomerDebt signature/persistence change described above.
+
+Do not reorganize StoreContext.
+
+Do not split StoreContext.
+
+Do not rename unrelated functions.
+
+Do not modify authentication/session initialization.
+
+Do not modify Firebase bootstrap behavior.
+
+Required change only:
+
+Current conceptual signature:
+
+addCustomerDebt(
+  customerId,
+  { amount, currency }
+)
+
+New conceptual signature:
+
+addCustomerDebt(
+  customerId,
+  { amount, currency, dueDate? }
+)
+
+Then forward dueDate to createDebt.
+
+==================================================
+17. PERSISTENCE SAFETY
+==================================================
+
+The following must be true after this task:
+
+Home without dueDate:
+
+customerId
+amount
+currency
+
+→ saved exactly as before.
+
+Home with dueDate:
+
+customerId
+amount
+currency
+dueDate
+
+→ dueDate must actually be persisted.
+
+Customer without dueDate:
+
+customerId
+amount
+currency
+
+→ saved exactly as before.
+
+Customer with dueDate:
+
+customerId
+amount
+currency
+dueDate
+
+→ dueDate must actually be persisted.
+
+There must be NO path where DebtForm accepts dueDate but the caller silently drops it.
+
+==================================================
+18. TEST REQUIREMENTS
+==================================================
+
+Before reporting completion, run the relevant existing tests.
+
+At minimum verify:
+
+1. Home Debt flow creates a Debt.
+2. Customer Debt flow creates a Debt.
+3. Home selected customer is persisted correctly.
+4. Customer route customerId is persisted correctly.
+5. Amount validation still works.
+6. Localized amount parsing still works.
+7. Currency selection still works.
+8. Only profile.visibleCurrencies are offered.
+9. Home dueDate is persisted when supplied.
+10. Customer dueDate is persisted when supplied.
+11. Empty/undefined dueDate remains omitted.
+12. Existing debt creation without dueDate still works.
+13. Existing Reminder tests still pass.
+14. ReminderForm behavior/tests remain unchanged.
+
+If component tests are supported by the existing project setup, add focused DebtForm tests.
+
+Do NOT install a new testing framework.
+
+Do NOT install new packages.
+
+==================================================
+19. REQUIRED VERIFICATION COMMANDS
+==================================================
+
+Run:
+
+- relevant debt tests
+- relevant customer/home tests
+- reminder tests
+- TypeScript/typecheck
+- git diff --check
+
+If a full relevant test suite exists and is reasonably fast, run it.
+
+Report the exact result.
+
+Example:
+
+Test Files: X passed
+Tests: Y passed
+
+Do not report only "tests passed".
+
+==================================================
+20. GIT EVIDENCE
+==================================================
+
+DO NOT create a commit.
+
+At the end, provide direct git evidence:
+
+1. git status --short
+2. git diff --name-only
+3. git diff --stat
+4. git diff --check
+
+Do not claim "no changes" without showing direct evidence.
+
+==================================================
+21. DIRECT CODE EVIDENCE REQUIRED
+==================================================
+
+The final report must include exact file paths and code locations for:
+
+A. DebtForm component contract
+
+B. Home → DebtForm usage
+
+C. Customer → DebtForm usage
+
+D. Home dueDate passing into addCustomerDebt
+
+E. addCustomerDebt accepting dueDate?: string
+
+F. addCustomerDebt forwarding dueDate to createDebt
+
+G. Customer dueDate persistence
+
+H. profile.visibleCurrencies filtering
+
+I. confirmation that ReminderForm.tsx was not modified
+
+==================================================
+22. FINAL REPORT FORMAT
+==================================================
+
+End your response using exactly this structure:
+
+IMPLEMENTATION RESULT
+
+Status:
+[PASS / BLOCKED]
+
+Files changed:
+[list exact files]
+
+Files NOT changed:
+[list critical protected files]
+
+DebtForm:
+[brief description + exact location]
+
+Home flow:
+[brief description + exact location]
+
+Customer flow:
+[brief description + exact location]
+
+DueDate persistence:
+[explicitly explain the complete Home and Customer path]
+
+StoreContext:
+[exact addCustomerDebt change]
+
+Reminder:
+[explicit confirmation that ReminderForm and reminder behavior were untouched]
+
+Tests:
+[exact commands/results]
+
+Typecheck:
+[result]
+
+Git diff check:
+[result]
+
+Git evidence:
+[git status --short]
+[git diff --name-only]
+[git diff --stat]
+
+Scope deviations:
+[None, or explain exact deviation]
+
+==================================================
+FINAL STOP CONDITION
+==================================================
+
+If any of the following occurs:
+
+- a new package appears necessary
+- a file outside the approved scope appears necessary
+- ReminderForm must be changed
+- navigation must be changed
+- Firebase/Auth must be changed
+- storage keys must be changed
+- Debt type must be changed
+- unrelated refactoring appears necessary
+
+STOP and report the blocker.
+
+Do NOT improvise a broader solution.
+
+Do NOT create a commit.
+
+Do NOT proceed to Calendar, Notifications, Notification Center, or any later task.
+
+This task ends when the shared DebtForm is implemented, both existing Debt flows use it, dueDate is not silently lost in Home, tests pass, and direct git evidence is provided.
