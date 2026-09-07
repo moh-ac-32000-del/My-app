@@ -1,0 +1,565 @@
+IMPLEMENTATION TASK #13 — AUTOMATIC DEBT REMINDER SCHEDULE FOUNDATION
+
+GOAL
+
+Connect the existing optional Debt dueDate to the existing Reminder storage foundation.
+
+This task introduces:
+
+1. A global notification/reminder time setting.
+2. Automatic generation of reminder records from a debt's dueDate.
+3. Deterministic reminder scheduling based on the due date and global reminder time.
+
+IMPORTANT:
+
+This task does NOT implement actual Push Notifications.
+
+It does NOT implement Notification Center.
+
+It does NOT implement weekly overdue reminders.
+
+It does NOT implement WhatsApp reminder behavior.
+
+It does NOT implement the 9 PM follow-up flow.
+
+Those will be separate tasks.
+
+The purpose of this task is to create and verify the business/data foundation that determines WHEN reminders should exist.
+
+==================================================
+CURRENT ARCHITECTURE — DO NOT BREAK
+==================================================
+
+The app is local-first.
+
+Financial data remains local.
+
+Existing Reminder storage already exists.
+
+Current Reminder model:
+
+ReminderStatus = 'pending' | 'completed' | 'dismissed'
+
+Reminder:
+
+- debtId: string
+- remindAt: string
+- status: ReminderStatus
+- note?: string
+- completedAt?: string
+
+Reminder records are stored through the existing space-aware storage layer.
+
+Debt currently contains:
+
+- customerId
+- currency
+- amount
+- dueDate?: string
+- originalAmount?
+- settledAt?
+
+Debt dueDate is stored as:
+
+YYYY-MM-DD
+
+Task #12 has already replaced the free-text due-date input with a native date-only calendar picker.
+
+DO NOT REGRESS THAT IMPLEMENTATION.
+
+==================================================
+SCOPE
+==================================================
+
+This task has TWO tightly related parts:
+
+PART A — GLOBAL REMINDER TIME SETTING
+
+Add a local global setting for the default debt-reminder notification time.
+
+Default:
+
+09:00
+
+The setting must be:
+
+- local
+- persistent
+- editable from Settings → Notification Settings
+- represented as a valid 24-hour HH:mm value
+
+IMPORTANT:
+
+This is the DEFAULT TIME used when generating reminder records.
+
+It is NOT a per-debt time.
+
+Do NOT add a time picker to DebtForm.
+
+DebtForm must continue to contain DATE ONLY for due date.
+
+The reminder time belongs to Notification Settings only.
+
+PART B — AUTOMATIC REMINDER GENERATION
+
+When a debt has an optional dueDate, generate the appropriate reminder record(s) automatically according to the agreed reminder rules.
+
+For the current foundation task, implement ONLY the immediate due-date reminder schedule:
+
+- One reminder for the debt's due date.
+- remindAt uses the configured global reminder time.
+- If no dueDate exists, no reminder is generated.
+- If the debt is already settled when the schedule is generated, do not create a pending reminder.
+- The generated Reminder must reference the correct debtId.
+- The generated Reminder must belong to the active local space/store.
+
+Do NOT implement:
+- 3-day-before WhatsApp reminders
+- 3-day Push notifications
+- weekly overdue reminders
+- 9 PM follow-up
+- grouped notifications
+- notification center
+- push permissions
+- Expo Notifications
+- local notifications
+- Firebase notification logic
+
+Those are intentionally outside this task.
+
+==================================================
+IMPORTANT BUSINESS RULE
+==================================================
+
+The due date is the source of truth.
+
+Do NOT introduce a separate reminder date field into Debt.
+
+Do NOT introduce a reminder time field into Debt.
+
+Do NOT modify DebtForm to include time selection.
+
+The relationship must remain:
+
+Debt.dueDate + global notificationTime
+→ Reminder.remindAt
+
+Example:
+
+dueDate:
+2026-09-30
+
+global notification time:
+09:00
+
+generated reminder:
+
+remindAt:
+2026-09-30T09:00:00
+or another internally consistent local-time representation already established by the project's storage conventions.
+
+IMPORTANT:
+
+Before choosing the exact timestamp representation, inspect the existing storage/date conventions.
+
+Do NOT blindly use toISOString() if doing so would convert a local calendar date/time into a UTC date that changes the intended calendar day.
+
+The system must preserve the user's selected local calendar date.
+
+==================================================
+TIME SETTING
+==================================================
+
+First inspect the existing Settings architecture.
+
+There is already a Notifications / Notification Settings area marked as under development.
+
+Reuse the existing settings architecture and localization.
+
+Do NOT redesign Settings.
+
+Do NOT create a new settings screen if an existing Notification Settings section can be extended.
+
+Add only the minimum UI necessary to configure the global reminder time.
+
+Requirements:
+
+- Default: 09:00
+- 24-hour format
+- User can change it.
+- Value persists locally.
+- Arabic / English / Turkish labels.
+- RTL/LTR behavior remains correct.
+
+Use an appropriate native time picker if the project already has an established compatible pattern.
+
+Do NOT modify DebtForm for this.
+
+==================================================
+STORAGE SAFETY
+==================================================
+
+This project has strict storage compatibility requirements.
+
+DO NOT:
+
+- delete AsyncStorage data
+- rename existing storage keys
+- call AsyncStorage.clear()
+- migrate unrelated data
+- change StoreProfile.id
+- change storeId
+- change activeSpaceId behavior
+- move financial data to Firebase
+- introduce Firestore financial storage
+- introduce sync/outbox behavior
+
+If a new setting needs persistence, add the smallest isolated setting storage mechanism compatible with the existing storage architecture.
+
+Prefer reusing existing settings storage if one already exists.
+
+Do not perform broad storage refactoring.
+
+==================================================
+REMINDER GENERATION
+==================================================
+
+Create a small deterministic business function/service responsible for generating the due-date reminder.
+
+It should be easy to test without rendering UI.
+
+Conceptually:
+
+Debt + notification time
+→ optional Reminder draft
+
+Rules:
+
+1. Debt without dueDate:
+   return no reminder.
+
+2. Debt with dueDate and amount > 0:
+   produce one pending reminder for the due date at the global reminder time.
+
+3. Settled debt:
+   do not produce a pending due-date reminder.
+
+4. The reminder must use:
+   debtId = debt.id
+
+5. Do not create duplicate pending reminders for the same debt and same scheduled remindAt.
+
+6. Existing reminders must not be deleted blindly.
+
+7. If the debt's dueDate changes, the old pending due-date reminder must not remain pointing to the old date.
+
+8. If the global notification time changes, future pending due-date reminders should be recalculated only if that is necessary to keep them aligned with the new global setting.
+
+IMPORTANT:
+
+Do not implement a background scheduler in this task.
+
+Do not create timers or intervals.
+
+Do not use setInterval/setTimeout for reminder scheduling.
+
+A Reminder record represents the scheduled business event.
+
+Actual delivery will be implemented later.
+
+==================================================
+WHERE TO TRIGGER GENERATION
+==================================================
+
+Inspect the existing debt creation/update flow.
+
+The implementation must cover the existing shared DebtForm flow:
+
+A. Home → آجل
+B. Customer → إضافة آجل
+
+Both currently use the shared DebtForm and existing debt creation path.
+
+Prefer the smallest single integration point that covers both flows.
+
+Do NOT duplicate reminder-generation logic in Home and Customer screens.
+
+Do NOT modify both screens separately if StoreContext or the existing debt service is the correct shared integration point.
+
+Before changing anything, inspect the actual current implementation and choose the narrowest correct integration point.
+
+==================================================
+UPDATE / DELETE / SETTLEMENT SAFETY
+==================================================
+
+Inspect the existing debt update, settlement, and deletion behavior.
+
+The new reminder foundation must not create stale pending reminders.
+
+At minimum:
+
+- Creating a debt with no dueDate → no reminder.
+- Creating a debt with dueDate → one reminder.
+- Updating a debt from no dueDate → dueDate → create reminder.
+- Changing an existing dueDate → update/reconcile the pending reminder.
+- Removing dueDate → remove/cancel the associated pending due-date reminder.
+- Settling the debt → associated pending due-date reminder must no longer remain pending.
+
+IMPORTANT:
+
+Do not redesign debt settlement.
+
+Do not redesign debt deletion.
+
+Use the existing storage/business flows and make only the minimum reminder reconciliation needed.
+
+Do not delete completed/dismissed historical reminders unnecessarily.
+
+==================================================
+DUPLICATE PROTECTION
+==================================================
+
+Reminder generation must be idempotent.
+
+Calling the generation/reconciliation function twice for the same unchanged debt must NOT create duplicate pending reminders.
+
+Example:
+
+Debt:
+id = debt-123
+dueDate = 2026-09-30
+notification time = 09:00
+
+First reconciliation:
+→ one pending reminder
+
+Second reconciliation:
+→ still one pending reminder
+
+NOT:
+
+→ two reminders
+
+==================================================
+DATE / TIME SAFETY
+==================================================
+
+This is a critical requirement.
+
+Due dates are calendar dates, not UTC timestamps.
+
+Do NOT convert YYYY-MM-DD to a UTC timestamp in a way that can shift the calendar date.
+
+Do not use:
+
+new Date(`${dueDate}T...Z`)
+
+or:
+
+toISOString().slice(0, 10)
+
+for calendar-date persistence.
+
+Use local calendar components where appropriate.
+
+The generated reminder must correspond to the user's intended local date and configured local notification time.
+
+Inspect existing date utilities before introducing a new one.
+
+Avoid duplicate date utilities if an existing safe helper can be reused.
+
+==================================================
+TESTING REQUIREMENTS
+==================================================
+
+Add focused automated tests for the new deterministic reminder scheduling logic.
+
+At minimum test:
+
+1. Debt without dueDate → no reminder.
+
+2. Debt with dueDate → one pending reminder.
+
+3. Correct debtId is stored.
+
+4. Correct notification time is applied.
+
+5. Correct calendar date is preserved.
+
+6. Settled debt → no pending due-date reminder.
+
+7. Running generation twice does not create duplicates.
+
+8. Changing dueDate reconciles the pending reminder.
+
+9. Removing dueDate removes/cancels the pending due-date reminder.
+
+10. Changing notification time does not create duplicate reminders.
+
+11. Multiple debts with different due dates remain independent.
+
+12. Different currencies do not affect reminder scheduling.
+
+13. Different spaces remain isolated.
+
+Use the project's existing test framework and patterns.
+
+Do NOT add a new testing framework.
+
+Do NOT add unnecessary packages.
+
+==================================================
+MANUAL TESTING
+==================================================
+
+After implementation, manually test the actual app in Expo Go.
+
+Test:
+
+1. Open Settings → Notification Settings.
+2. Confirm the default reminder time is 09:00.
+3. Change it to another time, for example 10:30.
+4. Leave Settings and reopen it.
+5. Confirm 10:30 persisted.
+
+Then:
+
+6. Create a debt from Home → آجل with a due date.
+7. Confirm the debt saves correctly.
+8. Create a debt from Customer → إضافة آجل with a due date.
+9. Confirm the debt saves correctly.
+10. Verify the associated reminder data if the existing UI/debug path makes this observable.
+
+Also test:
+
+11. Create a debt without a due date.
+12. Confirm no reminder is generated.
+13. Change a debt's due date if the existing UI supports editing.
+14. Confirm the reminder follows the new date rather than leaving a stale pending reminder.
+
+IMPORTANT:
+
+This task does NOT require a real push notification to appear.
+
+Do NOT claim Push Notification testing passed.
+
+There is no push implementation in this task.
+
+==================================================
+PROTECTED FILES / FEATURES
+==================================================
+
+Do NOT modify unless absolutely required by the narrowest implementation:
+
+- components/DebtForm.tsx
+- components/ReminderForm.tsx
+- app/customer/[id].tsx
+- components/FloatingQuickActions.tsx
+- firestore.rules
+- Firebase functions
+- Firebase authentication
+- Firestore financial data
+- notification center
+- bottom navigation
+- Expo push notification configuration
+- package.json
+- pnpm-lock.yaml
+
+Especially:
+
+DO NOT change DebtForm.
+
+Task #12 is complete and verified.
+
+==================================================
+NO BROAD REFACTORING
+==================================================
+
+Do not:
+
+- reorganize StoreContext
+- redesign Settings
+- redesign reminders
+- redesign debt UI
+- introduce a state-management library
+- introduce a database abstraction
+- introduce synchronization
+- introduce background workers
+- add Firebase functionality
+- install packages unless absolutely required
+
+Keep the implementation minimal and local-first.
+
+==================================================
+VERIFICATION REPORT
+==================================================
+
+After implementation, provide direct evidence for:
+
+1. Exact files changed.
+
+2. Exact protected files that were not changed.
+
+3. TypeScript result.
+
+4. Full relevant test result:
+   Test Files X passed
+   Tests Y passed
+
+5. git diff --check result.
+
+6. git status --short.
+
+7. git diff --stat.
+
+8. Confirm whether package.json changed.
+
+9. Confirm whether pnpm-lock.yaml changed.
+
+10. Show the exact reminder-generation function or relevant code section.
+
+11. Show how the global notification time is persisted.
+
+12. Show the exact date/time construction logic.
+
+13. Confirm no toISOString-based calendar-date conversion was introduced.
+
+14. Confirm no Push Notification implementation was added.
+
+15. Confirm no Notification Center was added.
+
+16. Confirm no changes were made to Task #12 DebtForm behavior.
+
+17. Report the actual Expo Go manual test results separately from automated tests.
+
+If manual Expo Go testing cannot be performed in the environment, state that clearly.
+
+Do NOT claim native testing passed unless it was actually performed.
+
+==================================================
+STOP CONDITIONS
+==================================================
+
+STOP immediately and report instead of expanding scope if the implementation requires:
+
+- changing DebtForm
+- changing the Reminder model unnecessarily
+- changing AsyncStorage keys
+- Firebase/Firestore financial storage
+- Push Notifications
+- Notification Center
+- navigation changes
+- background scheduling
+- new external packages
+- broad StoreContext refactoring
+- migration of existing financial data
+
+This task is ONLY:
+
+GLOBAL REMINDER TIME
++
+AUTOMATIC DUE-DATE REMINDER RECORD GENERATION
+
+Do not continue to the next notification task.
+
+TASK ENDS HERE.
