@@ -5,9 +5,10 @@ import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppShell, EmptyState, GlassCard, PageHeader, SectionTitle } from '@/components/AppShell';
 import { CustomerFormModal, type CustomerDraft } from '@/components/CustomerFormModal';
+import { DebtForm, type DebtDraft } from '@/components/DebtForm';
 import { KeyboardAwareScrollViewCompat } from '@/components/KeyboardAwareScrollViewCompat';
 import { ReminderForm } from '@/components/ReminderForm';
-import { CURRENCY_OPTIONS, formatMoney, isCurrencyCode, type CurrencyCode } from '@/constants/currencies';
+import { CURRENCY_OPTIONS, formatMoney, type CurrencyCode } from '@/constants/currencies';
 import { formatLocalizedDate, formatLocalizedDateTime, type Language, type TranslationKey } from '@/constants/i18n';
 import { useColors } from '@/hooks/useColors';
 import { useI18n } from '@/hooks/useI18n';
@@ -74,9 +75,6 @@ export default function CustomerDetailsScreen() {
   const [debts, setDebts] = useState<Debt[]>([]);
   const [isDebtVisible, setIsDebtVisible] = useState<boolean>(false);
   const [isSavingDebt, setIsSavingDebt] = useState<boolean>(false);
-  const [debtAmount, setDebtAmount] = useState<string>('');
-  const [debtDueDate, setDebtDueDate] = useState<string>('');
-  const [debtCurrency, setDebtCurrency] = useState<CurrencyCode>(profile.currency);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [isSettlementVisible, setIsSettlementVisible] = useState<boolean>(false);
   const [isSavingSettlement, setIsSavingSettlement] = useState<boolean>(false);
@@ -93,11 +91,6 @@ export default function CustomerDetailsScreen() {
     () => CURRENCY_OPTIONS.filter(({ code }) => debtTotals[code] > 0),
     [debtTotals],
   );
-  const visibleDebtCurrencies = useMemo(
-    () => CURRENCY_OPTIONS.filter(({ code }) => profile.visibleCurrencies.includes(code)),
-    [profile.visibleCurrencies],
-  );
-
   useFocusEffect(
     useCallback(() => {
       if (!isReady || !customerId) {
@@ -146,42 +139,23 @@ export default function CustomerDetailsScreen() {
     }
   };
 
-  const addDebt = async () => {
+  const addDebt = async (draft: DebtDraft) => {
     if (isSavingDebt) {
-      return;
-    }
-    if (!debtAmount.trim()) {
-      Alert.alert(t('amount'), t('debtAmountRequired'));
-      return;
-    }
-
-    const parsedAmount = parseLocalizedAmountInput(debtAmount, language);
-    if (parsedAmount === null || !isCurrencyCode(debtCurrency)) {
-      Alert.alert(t('amount'), t('debtAmountInvalid'));
       return;
     }
 
     setIsSavingDebt(true);
     try {
-      const dueDate = debtDueDate.trim();
       const debt = createDebt(profile.id, customerId, {
-        amount: parsedAmount,
-        currency: debtCurrency,
-        ...(dueDate ? { dueDate } : {}),
+        amount: draft.amount,
+        currency: draft.currency,
+        ...(draft.dueDate ? { dueDate: draft.dueDate } : {}),
       });
       const currentStoreDebts = await loadDebts(profile.id);
       await saveDebts(profile.id, [...currentStoreDebts, debt]);
       setDebts((current) => [debt, ...current].sort((first, second) => Date.parse(second.createdAt) - Date.parse(first.createdAt)));
-      setDebtAmount('');
-      setDebtDueDate('');
       setIsDebtVisible(false);
       Alert.alert(t('debtAdded'));
-    } catch (error) {
-      if (error instanceof Error && error.message === 'dueDateInvalid') {
-        Alert.alert(t('debtDueDate'), t('debtDueDateInvalid'));
-      } else {
-        Alert.alert(t('somethingWentWrong'), t('debtSaveError'));
-      }
     } finally {
       setIsSavingDebt(false);
     }
@@ -362,9 +336,6 @@ export default function CustomerDetailsScreen() {
         testID="add-debt-button"
         accessibilityRole="button"
         onPress={() => {
-          setDebtCurrency(visibleDebtCurrencies.some(({ code }) => code === profile.currency) ? profile.currency : visibleDebtCurrencies[0]?.code ?? profile.currency);
-          setDebtAmount('');
-          setDebtDueDate('');
           setIsDebtVisible(true);
         }}
         style={({ pressed }) => [styles.addDebtButton, { backgroundColor: colors.accent, borderColor: colors.primary, flexDirection: isRTL ? 'row-reverse' : 'row' }, pressed && styles.pressed]}
@@ -539,87 +510,18 @@ export default function CustomerDetailsScreen() {
             </View>
 
             <KeyboardAwareScrollViewCompat contentContainerStyle={styles.debtFormContent} keyboardShouldPersistTaps="handled" bottomOffset={24} showsVerticalScrollIndicator={false}>
-              <View style={styles.debtField}>
-                <Text style={[styles.debtFieldLabel, { color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' }]}>{t('amount')}</Text>
-                <View style={[styles.debtInputWrap, { backgroundColor: colors.input, borderColor: colors.border, flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
-                  <Ionicons name="cash-outline" size={18} color={colors.mutedForeground} />
-                  <TextInput
-                    testID="debt-amount-input"
-                    value={debtAmount}
-                    onChangeText={setDebtAmount}
-                    placeholder={t('amount')}
-                    placeholderTextColor={colors.mutedForeground}
-                    keyboardType="decimal-pad"
-                    textAlign={isRTL ? 'right' : 'left'}
-                    style={[styles.debtInput, { color: colors.foreground }]}
-                  />
-                </View>
-              </View>
-
-               <View style={styles.debtField}>
-                 <Text style={[styles.debtFieldLabel, { color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' }]}>{t('debtDueDate')}</Text>
-                 <View style={[styles.debtInputWrap, { backgroundColor: colors.input, borderColor: colors.border, flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
-                   <Ionicons name="calendar-outline" size={18} color={colors.mutedForeground} />
-                   <TextInput
-                     testID="debt-due-date-input"
-                     value={debtDueDate}
-                     onChangeText={setDebtDueDate}
-                     placeholder={t('debtDueDatePlaceholder')}
-                     placeholderTextColor={colors.mutedForeground}
-                     autoCapitalize="none"
-                     textAlign={isRTL ? 'right' : 'left'}
-                     style={[styles.debtInput, { color: colors.foreground }]}
-                   />
-                 </View>
-               </View>
-
-              <View style={styles.debtField}>
-                <Text style={[styles.debtFieldLabel, { color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' }]}>{t('debtCurrency')}</Text>
-                <View style={styles.debtCurrencyOptions}>
-                   {visibleDebtCurrencies.map((option) => {
-                    const selected = debtCurrency === option.code;
-                    return (
-                      <Pressable
-                        key={option.code}
-                        testID={`debt-currency-${option.code}`}
-                        accessibilityRole="radio"
-                        accessibilityState={{ selected }}
-                        onPress={() => setDebtCurrency(option.code)}
-                        style={({ pressed }) => [
-                          styles.debtCurrencyOption,
-                          { backgroundColor: selected ? colors.accent : colors.input, borderColor: selected ? colors.primary : colors.border, flexDirection: isRTL ? 'row-reverse' : 'row' },
-                          pressed && styles.pressed,
-                        ]}
-                      >
-                        <View style={[styles.debtCurrencyMark, { backgroundColor: selected ? colors.primary : colors.glass, borderColor: selected ? colors.primary : colors.border }]}>
-                          {selected ? <Ionicons name="checkmark" size={15} color={colors.primaryForeground} /> : null}
-                        </View>
-                        <Text style={[styles.debtCurrencyOptionText, { color: colors.foreground }]}>{option.code} · {option.symbol}</Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
-              </View>
-
-              <View style={[styles.debtModalActions, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
-                <Pressable
-                  testID="cancel-debt-form"
-                  disabled={isSavingDebt}
-                  onPress={() => setIsDebtVisible(false)}
-                  style={({ pressed }) => [styles.debtSecondaryButton, { borderColor: colors.border, backgroundColor: colors.input }, pressed && styles.pressed]}
-                >
-                  <Text style={[styles.debtSecondaryText, { color: colors.foreground }]}>{t('cancel')}</Text>
-                </Pressable>
-                <Pressable
-                  testID="save-debt-form"
-                  disabled={isSavingDebt}
-                  onPress={() => void addDebt()}
-                  style={({ pressed }) => [styles.debtPrimaryButton, { backgroundColor: colors.primary }, pressed && styles.pressed]}
-                >
-                  {isSavingDebt ? <ActivityIndicator size="small" color={colors.primaryForeground} /> : <Ionicons name="checkmark-circle-outline" size={18} color={colors.primaryForeground} />}
-                  <Text style={[styles.debtPrimaryText, { color: colors.primaryForeground }]}>{t('saveChanges')}</Text>
-                </Pressable>
-              </View>
+              <DebtForm
+                customers={customer ? [customer] : []}
+                visibleCurrencies={profile.visibleCurrencies}
+                initialCustomerId={customerId}
+                initialCurrency={profile.currency}
+                resetKey={isDebtVisible}
+                variant="debt"
+                isSaving={isSavingDebt}
+                parseAmount={parseLocalizedAmountInput}
+                onClose={() => setIsDebtVisible(false)}
+                onSave={addDebt}
+              />
             </KeyboardAwareScrollViewCompat>
           </View>
         </View>

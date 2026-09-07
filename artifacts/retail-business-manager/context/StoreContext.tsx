@@ -59,7 +59,7 @@ interface StoreContextValue {
   transactions: Transaction[];
   journalRevision: number;
   addTransaction: (draft: CashTransactionDraft) => Promise<Transaction>;
-  addCustomerDebt: (customerId: string, draft: { amount: number; currency: CurrencyCode }) => Promise<Debt>;
+  addCustomerDebt: (customerId: string, draft: { amount: number; currency: CurrencyCode; dueDate?: string }) => Promise<Debt>;
   settleCustomerDebt: (customerId: string, draft: SettlementDraft) => Promise<SettlementResult>;
   saveProfile: (updates: Partial<StoreProfile>) => Promise<void>;
   toggleQuickCurrency: (code: CurrencyCode) => Promise<void>;
@@ -364,7 +364,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const addCustomerDebt = async (
     customerId: string,
-    draft: { amount: number; currency: CurrencyCode },
+    draft: { amount: number; currency: CurrencyCode; dueDate?: string },
   ): Promise<Debt> => {
     const storeId = profileRef.current.id;
     const debt = createDebt(storeId, customerId, draft);

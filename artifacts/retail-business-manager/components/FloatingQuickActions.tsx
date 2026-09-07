@@ -14,6 +14,7 @@ import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
+import { DebtForm, type DebtDraft } from '@/components/DebtForm';
 import { KeyboardAwareScrollViewCompat } from '@/components/KeyboardAwareScrollViewCompat';
 import { ReminderForm } from '@/components/ReminderForm';
 import { CURRENCY_OPTIONS, getCurrency, type CurrencyCode } from '@/constants/currencies';
@@ -329,35 +330,19 @@ function CustomerCreditSheet({
   onSave,
 }: {
   onClose: () => void;
-  onSave: (customerId: string, amount: number, currency: CurrencyCode) => Promise<unknown>;
+  onSave: (draft: DebtDraft) => Promise<void>;
 }) {
   const colors = useColors();
   const { profile } = useStore();
-  const { t, language, isRTL } = useI18n();
+  const { t, isRTL } = useI18n();
   const [customers, setCustomers] = useState<Customer[]>([]);
-  const [selectedCustomerId, setSelectedCustomerId] = useState<string>('');
-  const [amount, setAmount] = useState<string>('');
-  const [selectedCurrency, setSelectedCurrency] = useState<CurrencyCode>(profile.currency);
-  const [validation, setValidation] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState<boolean>(false);
-  const saveInFlightRef = useRef<boolean>(false);
-  const visibleDebtCurrencies = useMemo(
-    () => CURRENCY_OPTIONS.filter(({ code }) => profile.visibleCurrencies.includes(code)),
-    [profile.visibleCurrencies],
-  );
-
-  useEffect(() => {
-    if (!visibleDebtCurrencies.some((option) => option.code === selectedCurrency)) {
-      setSelectedCurrency(visibleDebtCurrencies[0]?.code ?? profile.currency);
-    }
-  }, [profile.currency, selectedCurrency, visibleDebtCurrencies]);
 
   useEffect(() => {
     let active = true;
     void loadCustomers(profile.id).then((loadedCustomers) => {
       if (active) {
         setCustomers(loadedCustomers);
-        setSelectedCustomerId(loadedCustomers[0]?.id ?? '');
       }
     });
     return () => {
@@ -365,33 +350,15 @@ function CustomerCreditSheet({
     };
   }, [profile.id]);
 
-  const confirmCredit = async () => {
-    if (isSaving || saveInFlightRef.current) {
+  const save = async (draft: DebtDraft) => {
+    if (isSaving) {
       return;
     }
-    if (!selectedCustomerId) {
-      setValidation(t('selectCustomer'));
-      return;
-    }
-    if (!amount.trim()) {
-      setValidation(t('amountRequired'));
-      return;
-    }
-    const parsedAmount = parseLocalizedAmountInput(amount, language);
-    if (parsedAmount === null) {
-      setValidation(t('amountInvalid'));
-      return;
-    }
-
-    saveInFlightRef.current = true;
     setIsSaving(true);
     try {
-      await onSave(selectedCustomerId, parsedAmount, selectedCurrency);
+      await onSave(draft);
       onClose();
-    } catch {
-      setValidation(t('debtSaveError'));
     } finally {
-      saveInFlightRef.current = false;
       setIsSaving(false);
     }
   };
@@ -412,123 +379,16 @@ function CustomerCreditSheet({
           icon="time-outline"
           onClose={onClose}
         />
-
-        <Text style={[styles.inputLabel, { color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' }]}>
-          {t('selectCustomer')}
-        </Text>
-        {customers.length > 0 ? (
-          <View style={styles.customerOptions}>
-            {customers.map((customer) => {
-              const selected = customer.id === selectedCustomerId;
-              return (
-                <Pressable
-                  key={customer.id}
-                  testID={`credit-customer-${customer.id}`}
-                  accessibilityRole="radio"
-                  accessibilityState={{ selected }}
-                  onPress={() => {
-                    setSelectedCustomerId(customer.id);
-                    setValidation(null);
-                  }}
-                  style={({ pressed }) => [
-                    styles.customerOption,
-                    {
-                      backgroundColor: selected ? colors.accent : colors.input,
-                      borderColor: selected ? colors.primary : colors.border,
-                      flexDirection: isRTL ? 'row-reverse' : 'row',
-                    },
-                    pressed && styles.pressed,
-                  ]}
-                >
-                  <View style={[styles.customerOptionMark, { backgroundColor: selected ? colors.primary : colors.glass, borderColor: selected ? colors.primary : colors.border }]}>
-                    {selected ? <Ionicons name="checkmark" size={15} color={colors.primaryForeground} /> : null}
-                  </View>
-                  <Text style={[styles.customerOptionText, { color: colors.foreground, textAlign: isRTL ? 'right' : 'left' }]}>{customer.name}</Text>
-                </Pressable>
-              );
-            })}
-          </View>
-        ) : (
-          <Text style={[styles.emptyQuickHint, { color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' }]}>
-            {t('noCustomers')}
-          </Text>
-        )}
-
-        <Text style={[styles.inputLabel, { color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' }]}>
-          {t('amount')}
-        </Text>
-        <View style={[styles.amountRow, { backgroundColor: colors.input, borderColor: validation ? colors.destructive : colors.border, flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
-          <TextInput
-            testID="credit-amount-input"
-            value={amount}
-            onChangeText={(value) => {
-              setAmount(value);
-              if (validation) setValidation(null);
-            }}
-            placeholder="0"
-            placeholderTextColor={colors.mutedForeground}
-            keyboardType="decimal-pad"
-            inputMode="decimal"
-            style={[styles.amountInput, { color: colors.foreground, textAlign: isRTL ? 'right' : 'left' }]}
-          />
-          <Text style={[styles.amountCurrency, { color: colors.primary }]}>{selectedCurrency}</Text>
-        </View>
-        {validation ? (
-          <Text testID="credit-validation" style={[styles.validation, { color: colors.destructive, textAlign: isRTL ? 'right' : 'left' }]}>
-            {validation}
-          </Text>
-        ) : null}
-
-        <Text style={[styles.inputLabel, { color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' }]}>
-          {t('currency')}
-        </Text>
-        <View style={styles.creditCurrencyOptions}>
-          {visibleDebtCurrencies.map((option) => {
-            const selected = selectedCurrency === option.code;
-            return (
-              <Pressable
-                key={option.code}
-                testID={`credit-currency-${option.code}`}
-                accessibilityRole="radio"
-                accessibilityState={{ selected }}
-                onPress={() => setSelectedCurrency(option.code)}
-                style={({ pressed }) => [
-                  styles.creditCurrencyOption,
-                  {
-                    backgroundColor: selected ? colors.accent : colors.input,
-                    borderColor: selected ? colors.primary : colors.border,
-                    flexDirection: isRTL ? 'row-reverse' : 'row',
-                  },
-                  pressed && styles.pressed,
-                ]}
-              >
-                <Text style={[styles.creditCurrencyText, { color: colors.foreground }]}>{option.code} · {option.symbol}</Text>
-                {selected ? <Ionicons name="checkmark-circle" size={17} color={colors.primary} /> : null}
-              </Pressable>
-            );
-          })}
-        </View>
-
-        <View style={[styles.sheetButtons, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
-          <Pressable
-            testID="credit-cancel"
-            accessibilityRole="button"
-            onPress={onClose}
-            style={({ pressed }) => [styles.secondaryButton, { borderColor: colors.border }, pressed && styles.pressed]}
-          >
-            <Text style={[styles.secondaryButtonText, { color: colors.foreground }]}>{t('cancel')}</Text>
-          </Pressable>
-          <Pressable
-            testID="credit-confirm"
-            accessibilityRole="button"
-            onPress={() => void confirmCredit()}
-            disabled={isSaving || customers.length === 0}
-            style={({ pressed }) => [styles.primaryButton, { backgroundColor: colors.primary }, pressed && styles.pressed]}
-          >
-            {isSaving ? <ActivityIndicator size="small" color={colors.primaryForeground} /> : <Ionicons name="checkmark" size={18} color={colors.primaryForeground} />}
-            <Text style={[styles.primaryButtonText, { color: colors.primaryForeground }]}>{t('confirm')}</Text>
-          </Pressable>
-        </View>
+        <DebtForm
+          customers={customers}
+          visibleCurrencies={profile.visibleCurrencies}
+          initialCurrency={profile.currency}
+          variant="credit"
+          isSaving={isSaving}
+          parseAmount={parseLocalizedAmountInput}
+          onClose={onClose}
+          onSave={save}
+        />
       </KeyboardAwareScrollViewCompat>
     </View>
   );
@@ -891,8 +751,12 @@ export function FloatingQuickActions() {
     setIsReminderVisible(false);
   };
 
-  const saveCredit = async (customerId: string, amount: number, currency: CurrencyCode) => {
-    return addCustomerDebt(customerId, { amount, currency });
+  const saveCredit = async (draft: DebtDraft) => {
+    await addCustomerDebt(draft.customerId, {
+      amount: draft.amount,
+      currency: draft.currency,
+      ...(draft.dueDate ? { dueDate: draft.dueDate } : {}),
+    });
   };
 
   const menuAnimatedStyle = {
