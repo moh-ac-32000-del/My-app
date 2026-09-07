@@ -1,18 +1,48 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
+import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { Ionicons } from '@expo/vector-icons';
 import { CURRENCY_OPTIONS, type CurrencyCode } from '@/constants/currencies';
-import type { Language } from '@/constants/i18n';
+import { formatLocalizedDate, type Language } from '@/constants/i18n';
 import { useColors } from '@/hooks/useColors';
 import { useI18n } from '@/hooks/useI18n';
 import type { Customer } from '@/types/business';
+
+function formatDateOnly(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function parseDateOnly(value: string): Date {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim());
+  if (match) {
+    const year = Number(match[1]);
+    const month = Number(match[2]);
+    const day = Number(match[3]);
+    const parsed = new Date(year, month - 1, day);
+    if (
+      parsed.getFullYear() === year
+      && parsed.getMonth() === month - 1
+      && parsed.getDate() === day
+    ) {
+      return parsed;
+    }
+  }
+
+  const fallback = new Date();
+  fallback.setHours(12, 0, 0, 0);
+  return fallback;
+}
 
 export interface DebtDraft {
   customerId: string;
@@ -63,6 +93,7 @@ export function DebtForm({
   const [selectedCurrency, setSelectedCurrency] = useState<CurrencyCode | undefined>(initialSelectedCurrency);
   const [dueDate, setDueDate] = useState<string>(initialDueDate);
   const [validation, setValidation] = useState<string | null>(null);
+  const [isDueDatePickerVisible, setIsDueDatePickerVisible] = useState<boolean>(false);
   const saveInFlightRef = useRef<boolean>(false);
 
   useEffect(() => {
@@ -71,6 +102,7 @@ export function DebtForm({
     setSelectedCurrency(initialSelectedCurrency);
     setDueDate(initialDueDate);
     setValidation(null);
+    setIsDueDatePickerVisible(false);
   }, [initialDueDate, initialSelectedCurrency, initialSelectedCustomerId, resetKey]);
 
   useEffect(() => {
@@ -84,6 +116,15 @@ export function DebtForm({
   const selectedCustomer = customers.find((customer) => customer.id === selectedCustomerId);
   const amountRequiredKey = isCreditVariant ? 'amountRequired' : 'debtAmountRequired';
   const amountInvalidKey = isCreditVariant ? 'amountInvalid' : 'debtAmountInvalid';
+
+  const handleDueDateChange = (event: DateTimePickerEvent, value?: Date) => {
+    setIsDueDatePickerVisible(false);
+    if (event.type === 'dismissed' || !value) {
+      return;
+    }
+    setDueDate(formatDateOnly(value));
+    setValidation(null);
+  };
 
   const save = async () => {
     if (isSaving || saveInFlightRef.current) {
@@ -218,45 +259,48 @@ export function DebtForm({
         ) : null}
       </View>
 
-      {!isCreditVariant ? (
-        <View style={styles.field}>
-          <Text style={[styles.inputLabel, { color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' }]}>
-            {t('debtDueDate')}
-          </Text>
-          <View style={[styles.debtInputWrap, { backgroundColor: colors.input, borderColor: colors.border, flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
-            <Ionicons name="calendar-outline" size={18} color={colors.mutedForeground} />
-            <TextInput
-              testID="debt-due-date-input"
-              value={dueDate}
-              onChangeText={setDueDate}
-              placeholder={t('debtDueDatePlaceholder')}
-              placeholderTextColor={colors.mutedForeground}
-              autoCapitalize="none"
-              textAlign={isRTL ? 'right' : 'left'}
-              style={[styles.debtInput, { color: colors.foreground }]}
-            />
-          </View>
+      <View style={styles.field}>
+        <Text style={[styles.inputLabel, { color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' }]}>
+          {t('debtDueDate')}
+        </Text>
+        <View style={[styles.debtInputWrap, { backgroundColor: colors.input, borderColor: colors.border, flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
+          <Ionicons name="calendar-outline" size={18} color={colors.mutedForeground} />
+          <Pressable
+            testID={`${isCreditVariant ? 'credit' : 'debt'}-due-date-button`}
+            accessibilityRole="button"
+            accessibilityLabel={t('debtDueDate')}
+            onPress={() => setIsDueDatePickerVisible(true)}
+            style={({ pressed }) => [styles.dueDateButton, pressed && styles.pressed]}
+          >
+            <Text style={[styles.dueDateText, { color: dueDate ? colors.foreground : colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' }]}>
+              {dueDate ? formatLocalizedDate(parseDateOnly(dueDate), language) : t('debtDueDatePlaceholder')}
+            </Text>
+          </Pressable>
+          {dueDate ? (
+            <Pressable
+              testID={`${isCreditVariant ? 'credit' : 'debt'}-clear-due-date`}
+              accessibilityRole="button"
+              accessibilityLabel={`${t('debtDueDate')} ${t('cancel')}`}
+              onPress={() => {
+                setDueDate('');
+                setValidation(null);
+              }}
+              style={({ pressed }) => [styles.clearDueDateButton, pressed && styles.pressed]}
+            >
+              <Ionicons name="close-circle" size={20} color={colors.mutedForeground} />
+            </Pressable>
+          ) : null}
         </View>
-      ) : (
-        <View style={styles.field}>
-          <Text style={[styles.inputLabel, { color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' }]}>
-            {t('debtDueDate')}
-          </Text>
-          <View style={[styles.debtInputWrap, { backgroundColor: colors.input, borderColor: colors.border, flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
-            <Ionicons name="calendar-outline" size={18} color={colors.mutedForeground} />
-            <TextInput
-              testID="credit-due-date-input"
-              value={dueDate}
-              onChangeText={setDueDate}
-              placeholder={t('debtDueDatePlaceholder')}
-              placeholderTextColor={colors.mutedForeground}
-              autoCapitalize="none"
-              textAlign={isRTL ? 'right' : 'left'}
-              style={[styles.debtInput, { color: colors.foreground }]}
-            />
-          </View>
-        </View>
-      )}
+        {isDueDatePickerVisible ? (
+          <DateTimePicker
+            testID={`${isCreditVariant ? 'credit' : 'debt'}-due-date-picker`}
+            value={parseDateOnly(dueDate)}
+            mode="date"
+            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+            onChange={handleDueDateChange}
+          />
+        ) : null}
+      </View>
 
       <View style={styles.field}>
         <Text style={[styles.inputLabel, { color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' }]}>
@@ -341,6 +385,9 @@ const styles = StyleSheet.create({
   amountCurrency: { fontSize: 13, fontFamily: 'Inter_700Bold' },
   debtInputWrap: { minHeight: 49, borderWidth: 1, borderRadius: 15, alignItems: 'center', gap: 9, paddingHorizontal: 13 },
   debtInput: { flex: 1, minHeight: 46, fontSize: 14, fontFamily: 'Inter_400Regular' },
+  dueDateButton: { flex: 1, minHeight: 46, justifyContent: 'center' },
+  dueDateText: { fontSize: 14, fontFamily: 'Inter_400Regular' },
+  clearDueDateButton: { width: 32, minHeight: 46, alignItems: 'center', justifyContent: 'center' },
   validation: { fontSize: 11, fontFamily: 'Inter_500Medium', marginTop: 5, marginBottom: 8 },
   creditCurrencyOptions: { gap: 7, marginBottom: 18 },
   creditCurrencyOption: { minHeight: 42, borderWidth: 1, borderRadius: 13, alignItems: 'center', justifyContent: 'space-between', gap: 8, paddingHorizontal: 11 },
