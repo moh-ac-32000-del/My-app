@@ -1,0 +1,469 @@
+TASK: CLOUD + WORKSPACE CURRENT-STATE AUDIT — PART A
+READ ONLY — NO CODE CHANGES
+
+IMPORTANT:
+This is a READ-ONLY AUDIT.
+
+DO NOT:
+- modify any file
+- create/delete files
+- install/update/remove packages
+- change package.json or lockfiles
+- change Firebase configuration
+- change Firestore Rules
+- deploy anything
+- write/delete Firestore data
+- migrate/delete AsyncStorage data
+- change navigation
+- refactor code
+- implement features
+- change .replit or workflows
+
+Only READ, SEARCH, and perform safe read-only checks.
+
+==================================================
+PROJECT DECISION
+==================================================
+
+The FINAL application will be CLOUD-FIRST.
+
+Non-negotiable:
+
+- Firebase/Firestore will be the source of truth for business/financial data.
+- Real Workspaces/Spaces are required before public release.
+- Private and Shared Workspaces must actually work.
+- Multiple devices must access the same cloud data.
+- AsyncStorage must NOT remain the authoritative financial database.
+- AsyncStorage may remain only for cache, UI preferences, temporary/session state, or drafts.
+- Current local/test financial data is disposable.
+- No migration of current experimental data is required.
+- Do not design around preserving current local financial data.
+- Do not publish before Cloud + Workspace architecture is implemented and tested.
+- Maximum intended users: approximately 90.
+
+==================================================
+AUDIT SCOPE — CURRENT STATE ONLY
+==================================================
+
+Audit ONLY these 8 areas:
+
+1. DATA INVENTORY
+2. ASYNCSTORAGE
+3. IDENTITY / SPACE
+4. WORKSPACE / MULTI-SPACE
+5. FIREBASE AUTH
+6. FIRESTORE
+7. FIRESTORE RULES
+8. CLOUD FUNCTIONS
+
+DO NOT design the future Firestore schema yet.
+DO NOT create a roadmap yet.
+DO NOT implement anything.
+
+The goal is to establish the ACTUAL CURRENT STATE.
+
+==================================================
+1. DATA INVENTORY
+==================================================
+
+Identify every important business/financial entity currently used.
+
+At minimum inspect:
+
+- StoreProfile
+- Space
+- Membership
+- Customers
+- Debts
+- Payments
+- Transactions
+- Cash In
+- Cash Out
+- Daily Closing / Daily Archive
+- Reminders
+- Notification-related data
+- Backup/Restore data
+- Settings
+- Currency configuration
+- OperationReceipt
+- Audit-related data
+- any other financial/business entity
+
+For each, report:
+
+- type/interface
+- file path
+- current storage mechanism
+- AsyncStorage key if applicable
+- Firestore path if applicable
+- main creation/update/delete functions
+- important relationships
+- whether it is currently authoritative
+
+Use a table.
+
+==================================================
+2. ASYNCSTORAGE AUDIT
+==================================================
+
+Search the entire repository for:
+
+AsyncStorage
+getItem
+setItem
+removeItem
+clear
+storage keys
+space-aware storage
+StoreContext storage logic
+
+Determine:
+
+- What is stored locally?
+- Which local records are financial/business data?
+- Which data is currently the source of truth?
+- Which data is cache/session/UI state?
+- Does startup ever create a new SpaceIdentity?
+- Can a new space make old financial data appear to disappear?
+- Can two devices have different financial data because of local storage?
+- Are there any dangerous clear/delete/migration behaviors?
+
+Do not change anything.
+
+==================================================
+3. IDENTITY / SPACE AUDIT
+==================================================
+
+Trace the actual relationship between:
+
+Firebase Auth UID
+↓
+SpaceIdentity
+↓
+spaceId
+↓
+StoreProfile
+↓
+storeId
+↓
+financial data
+
+Specifically inspect:
+
+- Firebase UID
+- spaceId
+- storeId
+- StoreProfile.id
+- activeSpaceId
+- primarySpaceId
+- memberships
+- cloudSpace
+- local SpaceIdentity
+
+Determine exactly what the code currently does.
+
+Do NOT assume any IDs are equal.
+
+For each relationship say whether it is:
+
+IMPLEMENTED
+PARTIAL
+CONTRACT ONLY
+NOT IMPLEMENTED
+
+==================================================
+4. WORKSPACE / MULTI-SPACE STATUS
+==================================================
+
+Audit what is actually implemented today.
+
+Check:
+
+- Space contracts
+- Membership
+- Owner
+- primarySpaceId
+- additional spaces
+- active space
+- discovery
+- switching
+- invitations
+- invitation acceptance/rejection
+- membership management
+- owner/partner/employee roles
+- permissions
+- private workspace isolation
+- shared workspace access
+- multi-device workspace access
+
+IMPORTANT:
+
+A TypeScript contract/type does NOT count as a completed feature.
+
+Clearly classify every capability:
+
+IMPLEMENTED
+PARTIAL
+CONTRACT ONLY
+NOT IMPLEMENTED
+
+==================================================
+5. FIREBASE AUTH AUDIT
+==================================================
+
+Inspect the actual Firebase Authentication implementation.
+
+Determine:
+
+- provider
+- login
+- logout
+- session restoration
+- auth state listener
+- currentUser handling
+- behavior after app restart
+- UID flow into application logic
+- behavior when Firebase/network fails
+- behavior after authentication failure
+- whether client-supplied UID can influence privileged operations
+- whether authentication and workspace initialization are properly separated
+
+Identify concrete risks only when supported by code.
+
+==================================================
+6. FIRESTORE AUDIT
+==================================================
+
+Inspect all current Firestore usage.
+
+Search for:
+
+- firestore initialization
+- getDoc
+- getDocs
+- setDoc
+- addDoc
+- updateDoc
+- deleteDoc
+- collection
+- doc
+- query
+- where
+- orderBy
+- limit
+- onSnapshot
+- transactions
+- batched writes
+- Firestore converters
+
+Determine:
+
+- what Firestore currently stores
+- what is only a contract
+- what is actually read
+- what is actually written
+- existing collection/document paths
+- whether financial data currently uses Firestore
+- whether multiple devices currently share financial data
+
+Do not design the future schema yet.
+
+==================================================
+7. FIRESTORE RULES AUDIT
+==================================================
+
+Read the current firestore.rules completely.
+
+Determine exactly:
+
+- authenticated read permissions
+- authenticated write permissions
+- Space access checks
+- Membership checks
+- users/{uid} access
+- users/{uid}/memberships access
+- Space member access
+- financial collection permissions
+- role-based authorization
+- owner protection
+- non-member protection
+- cross-space protection
+
+For each important rule classify:
+
+IMPLEMENTED
+PARTIAL
+NOT IMPLEMENTED
+
+Also identify any concrete security weakness.
+
+Do not modify Rules.
+
+==================================================
+8. CLOUD FUNCTIONS AUDIT
+==================================================
+
+Inspect the entire functions directory and configuration.
+
+Determine:
+
+- existing Functions
+- exported Functions
+- their triggers
+- authentication checks
+- use of Firebase Admin SDK
+- transactions
+- idempotency
+- error handling
+- current Workspace/bootstrap behavior
+- whether Functions are deployed or only present in source
+- whether any Function currently handles financial data
+- whether any Function currently handles invitations
+- whether any Function currently handles notifications
+
+Do NOT deploy anything.
+
+==================================================
+EVIDENCE REQUIREMENT
+==================================================
+
+This section is NON-NEGOTIABLE.
+
+Do NOT write claims such as:
+
+"probably exists"
+"likely implemented"
+"cloud-ready"
+"already supported"
+"should work"
+
+unless the repository directly proves it.
+
+For every major conclusion provide:
+
+FILE PATH
+FUNCTION / TYPE / RULE
+WHAT THE CODE ACTUALLY DOES
+
+Every capability must be classified as exactly one of:
+
+IMPLEMENTED
+PARTIAL
+CONTRACT ONLY
+NOT IMPLEMENTED
+
+Important:
+
+- Types/interfaces/contracts alone = CONTRACT ONLY.
+- A UI button without working persistence/business logic = PARTIAL.
+- Code that exists but is not connected to the application = PARTIAL or CONTRACT ONLY as appropriate.
+- Do not count future plans/comments as implementation.
+- Do not infer implementation from filenames.
+
+If something cannot be verified:
+
+NOT VERIFIED FROM CURRENT REPOSITORY
+
+==================================================
+OUTPUT FORMAT
+==================================================
+
+# CLOUD + WORKSPACE CURRENT-STATE AUDIT — PART A
+
+## 1. Executive Summary
+
+Maximum 10 bullets.
+
+## 2. Data Inventory
+
+Table with:
+Entity | File | Storage | Current Authority | Status
+
+## 3. AsyncStorage Audit
+
+Separate:
+- Financial data
+- Cache/UI/session data
+- Identity/space data
+- Risks
+
+## 4. Identity / Space Audit
+
+Show the actual identity chain and relationships.
+
+## 5. Workspace / Multi-Space Status
+
+Use:
+IMPLEMENTED
+PARTIAL
+CONTRACT ONLY
+NOT IMPLEMENTED
+
+## 6. Firebase Auth Audit
+
+Actual implementation + concrete findings.
+
+## 7. Firestore Audit
+
+Actual current usage only.
+
+## 8. Firestore Rules Audit
+
+Actual permissions and security findings.
+
+## 9. Cloud Functions Audit
+
+Actual Functions and behavior.
+
+## 10. Critical Findings
+
+Only evidence-backed findings.
+
+Prioritize:
+CRITICAL
+HIGH
+MEDIUM
+LOW
+
+## 11. What Is NOT Implemented
+
+Explicitly list the important missing pieces.
+
+## 12. Files Inspected
+
+List the important files/directories actually inspected.
+
+==================================================
+FINAL SAFETY CHECK
+==================================================
+
+Before finishing, verify:
+
+1. No files were modified.
+2. No packages were installed.
+3. No Firebase data was written.
+4. No Firebase deployment occurred.
+5. No Firestore Rules were changed.
+6. No AsyncStorage migration occurred.
+7. Git working tree is unchanged.
+
+Report the result explicitly.
+
+==================================================
+STOP
+==================================================
+
+STOP AFTER THIS AUDIT.
+
+DO NOT:
+- design the future schema
+- estimate costs
+- create an implementation roadmap
+- implement Cloud Sync
+- implement Workspace switching
+- implement invitations
+- implement Notification Center
+- implement Push Notifications
+- fix any discovered issue
+
+Those will be handled only after this Part A report is reviewed and approved.
