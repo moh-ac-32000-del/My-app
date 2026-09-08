@@ -1,0 +1,345 @@
+PHASE 3A — CUSTOMER FIRESTORE AUTHORIZATION RULES
+
+GOAL
+
+Design, implement, and verify the MINIMUM secure Firestore Rules required to allow authenticated Workspace members to access Customer documents under:
+
+`spaces/{spaceId}/customers/{customerId}`
+
+This phase is ONLY about Firestore authorization for Customers.
+
+Do NOT implement Customer CRUD.
+Do NOT modify Customer screens.
+Do NOT modify StoreContext.
+Do NOT add Firestore Customer repository code.
+Do NOT migrate AsyncStorage data.
+Do NOT write financial data.
+Do NOT implement any other business collection.
+
+--------------------------------------------------
+1. BEFORE EDITING — INSPECT
+--------------------------------------------------
+
+Read and inspect:
+
+- `firestore.rules`
+- existing Firestore Rules tests
+- `types/space.ts`
+- `data/firestoreWorkspace.ts`
+- current Customer model/type
+- existing membership/Workspace authorization helpers
+- existing role definitions
+
+Determine exactly:
+
+- how `isActiveMember(spaceId)` currently works
+- how Workspace status is represented
+- how membership status is represented
+- what membership roles currently exist
+- whether Customer documents have an `id` field
+- which Customer fields actually exist
+
+Do not invent fields.
+
+--------------------------------------------------
+2. REQUIRED CUSTOMER PATH
+--------------------------------------------------
+
+Customer documents are ONLY:
+
+`spaces/{spaceId}/customers/{customerId}`
+
+There must be no authorization for:
+
+`customers/{customerId}`
+
+The existing top-level financial deny must remain unchanged.
+
+--------------------------------------------------
+3. SECURITY MODEL
+--------------------------------------------------
+
+Customer access must require:
+
+1. authenticated Firebase user
+2. valid Workspace
+3. active membership in that Workspace
+
+Do NOT authorize using:
+
+- client-supplied UID
+- ownerUserId from request data
+- client-supplied role
+- StoreProfile.id
+- storeId
+- local SpaceIdentity
+
+The Workspace `spaceId` is the authorization/data boundary.
+
+Use the existing authoritative membership structure:
+
+`spaces/{spaceId}/members/{uid}`
+
+Do not create another membership system.
+
+--------------------------------------------------
+4. CUSTOMER READ
+--------------------------------------------------
+
+Allow an authenticated active Workspace member to:
+
+- read the Customer collection/documents within that Workspace
+- read an individual Customer document
+
+A member of Workspace A must NOT be able to read Customers from Workspace B.
+
+Unauthenticated users must be denied.
+
+Non-members must be denied.
+
+Inactive members must be denied.
+
+--------------------------------------------------
+5. CUSTOMER CREATE / UPDATE
+--------------------------------------------------
+
+Customer writes must be restricted to active Workspace members.
+
+For create:
+
+- Require active membership.
+- Validate that the document ID and any existing Customer `id` field cannot contradict each other.
+- Validate only fields that are actually part of the existing Customer model.
+- Reject unexpected/unknown fields if practical and safe.
+- Do not trust client-supplied authorization fields.
+
+For update:
+
+- Require active membership.
+- Prevent changing the Customer document identity.
+- Prevent changing Workspace ownership/boundary.
+- Validate the resulting document.
+- Do not allow a client to elevate its own authorization through Customer fields.
+
+Do NOT invent a new Customer schema.
+
+--------------------------------------------------
+6. CUSTOMER DELETE
+--------------------------------------------------
+
+Do NOT automatically allow unrestricted deletion.
+
+First inspect the existing application behavior and Customer model.
+
+If deletion is currently supported, implement the minimum secure rule required for that existing behavior.
+
+If role-based restriction is needed but the current product decision does not define the exact Customer deletion role, STOP and report the ambiguity instead of inventing a policy.
+
+Do not redesign deletion semantics in this phase.
+
+--------------------------------------------------
+7. ROLE POLICY
+--------------------------------------------------
+
+Do not invent new roles.
+
+Use only the existing roles from `types/space.ts`.
+
+If current roles are:
+
+OWNER
+PARTNER
+EMPLOYEE
+
+do not create additional roles.
+
+If the existing architecture does not yet define Customer-specific role permissions, use the narrowest policy consistent with the current MVP and clearly document it.
+
+Do not expand this phase into complete role management.
+
+--------------------------------------------------
+8. FIELD VALIDATION
+--------------------------------------------------
+
+Inspect the real Customer model before writing validation.
+
+Rules must not assume fields that do not exist.
+
+At minimum, protect:
+
+- document identity
+- Workspace boundary
+- authorization-related fields
+
+If the Customer model contains fields such as:
+
+`id`
+`storeId`
+`name`
+`phone`
+`address`
+`notes`
+etc.
+
+only validate fields that actually exist.
+
+Do NOT modify the TypeScript Customer model to make Rules easier.
+
+If robust field validation would require a major Customer schema redesign, STOP and report it.
+
+--------------------------------------------------
+9. IMPORTANT — NO FINANCIAL AUTHORIZATION
+--------------------------------------------------
+
+Do not open access to:
+
+- debts
+- payments
+- cashTransactions
+- dailyClosings
+- reminders
+- notificationRecords
+- operationReceipts
+- auditEvents
+
+Those remain denied/not implemented for now.
+
+Do not modify their authorization.
+
+--------------------------------------------------
+10. TESTING
+--------------------------------------------------
+
+Update/add ONLY Firestore Rules tests required for Customer authorization.
+
+Tests must cover at minimum:
+
+A. Unauthenticated:
+- Customer read denied
+- Customer create denied
+- Customer update denied
+- Customer delete denied
+
+B. Active member:
+- Customer read allowed
+- Customer create allowed if valid
+- Customer update allowed if valid
+- Customer delete according to the approved existing policy
+
+C. Non-member:
+- Customer read denied
+- Customer write denied
+
+D. Inactive member:
+- Customer read denied
+- Customer write denied
+
+E. Cross-Workspace isolation:
+- Member of Workspace A cannot access Workspace B Customers.
+
+F. Identity protection:
+- Client cannot create/update a Customer with a contradictory document ID.
+- Client cannot alter authorization/Workspace boundary fields.
+
+G. Top-level isolation:
+- `customers/{id}` remains denied.
+
+H. Other financial collections:
+- remain denied.
+
+IMPORTANT:
+
+If the Rules Unit Testing library is missing and the project currently does not have a usable emulator test environment, do NOT install packages without approval.
+
+Instead:
+- perform static Rules verification
+- run syntax/checks available in the existing project
+- report that runtime Rules tests are blocked by the missing test environment
+
+Do not pretend runtime tests passed.
+
+--------------------------------------------------
+11. MANUAL FIREBASE CONSOLE TEST
+--------------------------------------------------
+
+If runtime testing is unavailable, do NOT create fake production data.
+
+Do not write test data to production Firestore merely to prove the rule.
+
+If a real Workspace/member document already exists naturally, report which tests can safely be performed.
+
+Otherwise, leave runtime verification pending until the actual Workspace exists.
+
+--------------------------------------------------
+12. STRICTLY FORBIDDEN
+--------------------------------------------------
+
+Do NOT change:
+
+- Customer UI
+- Customer service/repository
+- StoreContext
+- AsyncStorage
+- financial storage
+- migration logic
+- sync
+- outbox
+- Cloud Functions
+- Workspace switching
+- invitations
+- membership management
+- notifications
+- package.json
+- lockfiles
+
+Do NOT add dependencies.
+
+Do NOT change the Phase 2 schema contract.
+
+Do NOT redesign all Firestore Rules.
+
+Only add the minimum Customer-specific authorization required.
+
+--------------------------------------------------
+13. STOP CONDITIONS
+--------------------------------------------------
+
+STOP WITHOUT EDITING if:
+
+- Customer model is ambiguous.
+- Current membership helper is insufficient to securely authorize Customers.
+- Workspace status cannot be checked safely.
+- Role policy requires a product decision.
+- Customer deletion policy is ambiguous.
+- Field validation requires a major schema redesign.
+- Rules require broad restructuring.
+- Runtime testing requires installing a missing dependency.
+- Any financial collection would need to be opened.
+
+Report the exact issue and wait for approval.
+
+--------------------------------------------------
+14. FINAL REPORT
+--------------------------------------------------
+
+After implementation/verification, report:
+
+A. Exact files changed
+B. Exact Customer Rule added/changed
+C. Authorization logic
+D. Role policy used
+E. Customer field validation performed
+F. Cross-Workspace isolation
+G. Top-level customer denial status
+H. Other financial collection denial status
+I. Runtime Rules test status
+J. Static/syntax verification
+K. TypeScript result if applicable
+L. `git diff --check`
+M. `git status --short`
+N. Exact test results
+O. Final verdict: PASS / FAIL / BLOCKED
+
+Do NOT start Phase 3 Customer Firestore CRUD.
+
+STOP after the report.

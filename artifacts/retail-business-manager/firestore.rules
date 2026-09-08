@@ -34,6 +34,37 @@ service cloud.firestore {
       allow create, update, delete: if false;
     }
 
+    match /spaces/{spaceId}/customers/{customerId} {
+      allow read, delete: if isActiveMember(spaceId);
+      allow create: if isActiveMember(spaceId)
+        && isValidCustomerDocument(spaceId, customerId, request.resource.data)
+        && (
+          !request.resource.data.keys().hasAny(['createdByUserId'])
+          || request.resource.data.createdByUserId == request.auth.uid
+        );
+      allow update: if isActiveMember(spaceId)
+        && isValidCustomerDocument(spaceId, customerId, request.resource.data)
+        && request.resource.data.id == resource.data.id
+        && (
+          !resource.data.keys().hasAny(['workspaceId'])
+          || (
+            request.resource.data.keys().hasAny(['workspaceId'])
+            && request.resource.data.workspaceId == resource.data.workspaceId
+          )
+        )
+        && (
+          (
+            !resource.data.keys().hasAny(['createdByUserId'])
+            && !request.resource.data.keys().hasAny(['createdByUserId'])
+          )
+          || (
+            resource.data.keys().hasAny(['createdByUserId'])
+            request.resource.data.keys().hasAny(['createdByUserId'])
+            && request.resource.data.createdByUserId == resource.data.createdByUserId
+          )
+        );
+    }
+
     match /customers/{document=**} {
       allow read, write: if false;
     }
@@ -102,6 +133,33 @@ service cloud.firestore {
         && request.resource.data.updatedAt is string;
 
       allow delete: if false;
+    }
+
+    function isValidCustomerDocument(spaceId, customerId, customer) {
+      return customer.keys().hasOnly([
+          'id',
+          'storeId',
+          'workspaceId',
+          'createdByUserId',
+          'name',
+          'phone',
+          'address',
+          'notes',
+          'isActive',
+          'createdAt',
+          'updatedAt'
+        ])
+        && customer.id == customerId
+        && customer.storeId is string
+        && customer.name is string
+        && customer.isActive is bool
+        && customer.createdAt is string
+        && customer.updatedAt is string
+        && (!customer.keys().hasAny(['workspaceId']) || customer.workspaceId == spaceId)
+        && (!customer.keys().hasAny(['createdByUserId']) || customer.createdByUserId is string)
+        && (!customer.keys().hasAny(['phone']) || customer.phone is string)
+        && (!customer.keys().hasAny(['address']) || customer.address is string)
+        && (!customer.keys().hasAny(['notes']) || customer.notes is string);
     }
   }
 }

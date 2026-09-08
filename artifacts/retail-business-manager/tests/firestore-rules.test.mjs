@@ -36,12 +36,12 @@ function legacySpaceDocument(spaceId, ownerUserId) {
   };
 }
 
-function membershipDocument(spaceId, userId, role) {
+function membershipDocument(spaceId, userId, role, status = 'active') {
   return {
     spaceId,
     userId,
     role,
-    status: 'active',
+    status,
     createdAt: '2026-08-30T10:00:00.000Z',
     updatedAt: '2026-08-30T10:00:00.000Z',
     joinedAt: '2026-08-30T10:00:00.000Z',
@@ -84,6 +84,29 @@ function membershipIndexReference(context, uid, spaceId) {
   return doc(context.firestore(), 'users', uid, 'memberships', spaceId);
 }
 
+function customerReference(context, spaceId, customerId) {
+  return doc(context.firestore(), 'spaces', spaceId, 'customers', customerId);
+}
+
+function topLevelCustomerReference(context, customerId) {
+  return doc(context.firestore(), 'customers', customerId);
+}
+
+function customerDocument(customerId, overrides = {}) {
+  return {
+    id: customerId,
+    storeId: 'store-A',
+    name: 'Customer A',
+    phone: '+905001234567',
+    address: 'Istanbul',
+    notes: 'VIP',
+    isActive: true,
+    createdAt: '2026-08-30T10:00:00.000Z',
+    updatedAt: '2026-08-30T10:00:00.000Z',
+    ...overrides,
+  };
+}
+
 function userReference(context, uid) {
   return doc(context.firestore(), 'users', uid);
 }
@@ -106,7 +129,10 @@ async function seedMultiSpace(spaceId, ownerUserId, members = []) {
     const firestore = context.firestore();
     await setDoc(multiSpaceReference(context, spaceId), spaceDocument(spaceId, ownerUserId));
     for (const member of members) {
-      await setDoc(memberReference(context, spaceId, member.uid), membershipDocument(spaceId, member.uid, member.role));
+      await setDoc(
+        memberReference(context, spaceId, member.uid),
+        membershipDocument(spaceId, member.uid, member.role, member.status ?? 'active'),
+      );
       await setDoc(
         membershipIndexReference(context, member.uid, spaceId),
         membershipIndexDocument(spaceId, member.role),
@@ -322,6 +348,171 @@ try {
       () => deleteDoc(memberReference(userA, 'space-A', 'user-A')),
       'DENY',
     );
+
+    await clearFirestore();
+    await seedMultiSpace('space-A', 'user-A', [
+      { uid: 'user-A', role: 'owner' },
+      { uid: 'user-C', role: 'viewer' },
+      { uid: 'user-D', role: 'viewer', status: 'suspended' },
+    ]);
+    await seedMultiSpace('space-B', 'user-B', [
+      { uid: 'user-B', role: 'owner' },
+    ]);
+    await testEnvironment.withSecurityRulesDisabled(async (context) => {
+      await setDoc(
+        customerReference(context, 'space-A', 'customer-A'),
+        customerDocument('customer-A', { workspaceId: 'space-A' }),
+      );
+    });
+    const userCForCustomers = testEnvironment.authenticatedContext('user-C');
+    const userDForCustomers = testEnvironment.authenticatedContext('user-D');
+    try {
+      await runCase(
+        'Customer — active owner can read',
+        () => getDoc(customerReference(userA, 'space-A', 'customer-A')),
+        'ALLOW',
+      );
+      await runCase(
+        'Customer — active member can read',
+        () => getDoc(customerReference(userCForCustomers, 'space-A', 'customer-A')),
+        'ALLOW',
+      );
+      await runCase(
+        'Customer — active member can list its Workspace',
+        () => getDocs(collection(userCForCustomers.firestore(), 'spaces', 'space-A', 'customers')),
+        'ALLOW',
+      );
+      await runCase(
+        'Customer — active member can create a valid document',
+        () => setDoc(
+          customerReference(userCForCustomers, 'space-A', 'customer-C'),
+          customerDocument('customer-C', { workspaceId: 'space-A' }),
+        ),
+        'ALLOW',
+      );
+      await runCase(
+        'Customer — active member can update a valid document',
+        () => updateDoc(
+          customerReference(userCForCustomers, 'space-A', 'customer-A'),
+          { name: 'Updated Customer' },
+        ),
+        'ALLOW',
+      );
+      await runCase(
+        'Customer — active member can delete a document',
+        () => deleteDoc(customerReference(userCForCustomers, 'space-A', 'customer-C')),
+        'ALLOW',
+      );
+      await runCase(
+        'Customer — cross-Workspace read is denied',
+        () => getDoc(customerReference(userA, 'space-B', 'customer-B')),
+        'DENY',
+      );
+      await runCase(
+        'Customer — inactive member read is denied',
+        () => getDoc(customerReference(userDForCustomers, 'space-A', 'customer-A')),
+        'DENY',
+      );
+      await runCase(
+        'Customer — inactive member create is denied',
+        () => setDoc(
+          customerReference(userDForCustomers, 'space-A', 'customer-D'),
+          customerDocument('customer-D'),
+        ),
+        'DENY',
+      );
+      await runCase(
+        'Customer — unauthenticated read is denied',
+        () => getDoc(customerReference(anonymous, 'space-A', 'customer-A')),
+        'DENY',
+      );
+      await runCase(
+        'Customer — unauthenticated create is denied',
+        () => setDoc(
+          customerReference(anonymous, 'space-A', 'customer-E'),
+          customerDocument('customer-E'),
+        ),
+        'DENY',
+      );
+      await runCase(
+        'Customer — unauthenticated update is denied',
+        () => updateDoc(
+          customerReference(anonymous, 'space-A', 'customer-A'),
+          { name: 'Anonymous Update' },
+        ),
+        'DENY',
+      );
+      await runCase(
+        'Customer — unauthenticated delete is denied',
+        () => deleteDoc(customerReference(anonymous, 'space-A', 'customer-A')),
+        'DENY',
+      );
+      await runCase(
+        'Customer — contradictory document ID on create is denied',
+        () => setDoc(
+          customerReference(userA, 'space-A', 'customer-id'),
+          customerDocument('different-id'),
+        ),
+        'DENY',
+      );
+      await runCase(
+        'Customer — contradictory document ID on update is denied',
+        () => updateDoc(
+          customerReference(userA, 'space-A', 'customer-A'),
+          { id: 'different-id' },
+        ),
+        'DENY',
+      );
+      await runCase(
+        'Customer — contradictory Workspace boundary on create is denied',
+        () => setDoc(
+          customerReference(userA, 'space-A', 'customer-boundary'),
+          customerDocument('customer-boundary', { workspaceId: 'space-B' }),
+        ),
+        'DENY',
+      );
+      await runCase(
+        'Customer — changing Workspace boundary on update is denied',
+        () => updateDoc(
+          customerReference(userA, 'space-A', 'customer-A'),
+          { workspaceId: 'space-B' },
+        ),
+        'DENY',
+      );
+      await runCase(
+        'Customer — unknown field is denied',
+        () => setDoc(
+          customerReference(userA, 'space-A', 'customer-unknown'),
+          customerDocument('customer-unknown', { role: 'owner' }),
+        ),
+        'DENY',
+      );
+      await runCase(
+        'Customer — top-level customer path remains denied',
+        () => getDoc(topLevelCustomerReference(userA, 'customer-A')),
+        'DENY',
+      );
+
+      for (const collectionName of [
+        'debts',
+        'payments',
+        'cashTransactions',
+        'dailyClosings',
+        'reminders',
+        'notificationRecords',
+        'operationReceipts',
+        'auditEvents',
+      ]) {
+        await runCase(
+          `Nested financial deny — ${collectionName}`,
+          () => getDoc(doc(userA.firestore(), 'spaces', 'space-A', collectionName, 'record-A')),
+          'DENY',
+        );
+      }
+    } finally {
+      await userCForCustomers.cleanup();
+      await userDForCustomers.cleanup();
+    }
 
     for (const collectionName of [
       'customers',
