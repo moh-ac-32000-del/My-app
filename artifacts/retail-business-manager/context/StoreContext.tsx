@@ -8,7 +8,6 @@ import { normalizeAccent, type AccentColor } from '@/constants/colors';
 import { isFirebaseConfigured } from '@/services/firebase';
 import { signOutFromFirebase, subscribeToFirebaseAuth } from '@/services/firebaseAuth';
 import { getOrCreateSpaceIdentity } from '@/services/spaceIdentity';
-import { bootstrapPrimarySpace } from '@/services/trustedBootstrap';
 import type { Space } from '@/types/space';
 import {
   clearLegacyLanguage,
@@ -71,12 +70,10 @@ interface StoreContextValue {
 
 const StoreContext = createContext<StoreContextValue | null>(null);
 
-export async function initializePostAuthSession(
+export async function initializePostAuthLocalSession(
   user: User,
   isCurrentTransition: () => boolean,
   callbacks: {
-    onActiveSpaceId: (spaceId: string | null) => void;
-    onCloudSpace: (space: Space | null) => void;
     onProfile: (profile: StoreProfile) => void;
     onSpaceIdentity: (identity: SpaceIdentity | null) => void;
     onReady: () => void;
@@ -90,21 +87,6 @@ export async function initializePostAuthSession(
   callbacks.onError(null);
 
   try {
-    const bootstrapResult = await bootstrapPrimarySpace();
-    if (!isCurrentTransition()) {
-      return;
-    }
-
-    const canonicalSpaceId = bootstrapResult.primarySpaceId.trim();
-    if (!canonicalSpaceId || bootstrapResult.space.spaceId !== canonicalSpaceId) {
-      throw new Error('invalidBootstrapResponse');
-    }
-
-    callbacks.onCloudSpace(bootstrapResult.space);
-    callbacks.onActiveSpaceId(canonicalSpaceId);
-
-    // SpaceIdentity is retained as local compatibility metadata only. The
-    // cloud bootstrap response is the canonical active Workspace identity.
     try {
       identity = await getOrCreateSpaceIdentity(user.uid);
     } catch {
@@ -131,9 +113,7 @@ export async function initializePostAuthSession(
     if (!isCurrentTransition()) {
       return;
     }
-    callbacks.onCloudSpace(null);
     callbacks.onSpaceIdentity(null);
-    callbacks.onActiveSpaceId(null);
     callbacks.onError(error instanceof Error ? error.message : 'postAuthInitializationFailed');
     callbacks.onReady();
   }
@@ -205,7 +185,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     void loadLocalState();
   }, []);
 
-  const startPostAuthInitialization = React.useCallback((user: User, transition: number) => {
+  const startPostAuthLocalInitialization = React.useCallback((user: User, transition: number) => {
     if (initializationInFlightRef.current === transition) {
       return;
     }
@@ -213,12 +193,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setInitializationError(null);
     setIsFirebaseReady(false);
 
-    void initializePostAuthSession(
+    void initializePostAuthLocalSession(
       user,
       () => authTransitionRef.current === transition && firebaseUserRef.current === user,
       {
-        onActiveSpaceId: setActiveSpaceId,
-        onCloudSpace: setCloudSpace,
         onProfile: (normalizedProfile) => {
           profileRef.current = normalizedProfile;
           setProfile(normalizedProfile);
@@ -239,8 +217,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     if (!user) {
       return;
     }
-    startPostAuthInitialization(user, authTransitionRef.current);
-  }, [startPostAuthInitialization]);
+    startPostAuthLocalInitialization(user, authTransitionRef.current);
+  }, [startPostAuthLocalInitialization]);
 
   useEffect(() => {
     if (!isFirebaseConfigured) {
@@ -272,7 +250,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           return;
         }
 
-        startPostAuthInitialization(user, transition);
+        startPostAuthLocalInitialization(user, transition);
       },
       () => {
         authTransitionRef.current += 1;
@@ -293,7 +271,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         setTransactions([]);
       },
     );
-  }, [startPostAuthInitialization]);
+  }, [startPostAuthLocalInitialization]);
 
   const isReady = isLocalReady && isFirebaseReady;
   const isAuthenticated = isFirebaseConfigured
