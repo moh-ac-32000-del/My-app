@@ -8,6 +8,6 @@ initializeApp();
 const firestore = getFirestore();
 const runtime = createDefaultBootstrapRuntime(firestore);
 
-export const bootstrapPrimarySpace = onCall(async (request) => (
+export const bootstrapPrimarySpace = onCall({ invoker: 'public' }, async (request) => (
   bootstrapPrimarySpaceHandler(request, runtime)
 ));
