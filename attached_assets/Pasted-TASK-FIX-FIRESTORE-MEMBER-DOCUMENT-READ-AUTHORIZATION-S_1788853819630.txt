@@ -1,0 +1,168 @@
+TASK: FIX FIRESTORE MEMBER-DOCUMENT READ AUTHORIZATION
+
+SCOPE: ONE SECURITY FIX ONLY
+READ/WRITE SCOPE MUST BE STRICTLY LIMITED
+
+We confirmed a real authorization bug in:
+
+firestore.rules
+
+Current rule:
+
+match /spaces/{spaceId}/members/{uid} {
+  allow read: if isActiveMember(spaceId);
+  allow create, update, delete: if false;
+}
+
+PROBLEM:
+
+The read rule checks only whether the requesting user is an active member
+of the Space.
+
+It does NOT verify that the requested {uid} equals request.auth.uid.
+
+Therefore, an active member could read another member's document inside
+the same Space.
+
+==================================================
+REQUIRED FIX
+==================================================
+
+Change ONLY the member-document read condition so that a user can read
+the member document only when:
+
+1. the user is authenticated
+2. the user is an active member of the Space
+3. the requested member document UID equals request.auth.uid
+
+The resulting condition must enforce:
+
+isActiveMember(spaceId) && uid == request.auth.uid
+
+Keep create/update/delete denied.
+
+==================================================
+STRICT SCOPE
+==================================================
+
+DO NOT:
+
+- modify any other Firestore Rule
+- modify users/{uid} rules
+- modify Space rules
+- modify financial rules
+- modify legacy stores rules
+- change membership schema
+- change TypeScript types
+- change application code
+- change Functions
+- change Firebase configuration
+- install packages
+- update packages
+- change navigation
+- refactor anything
+- add new authorization features
+- redesign the Rules
+
+This task is ONLY the member-document read authorization fix.
+
+==================================================
+TESTING
+==================================================
+
+Update/add ONLY the minimum necessary Rules test coverage.
+
+The test must verify at minimum:
+
+1. Authenticated active member reading THEIR OWN member document
+   → ALLOW
+
+2. Authenticated active member reading ANOTHER MEMBER'S document
+   → DENY
+
+3. Unauthenticated user reading a member document
+   → DENY
+
+4. Existing cross-Space/non-member protection remains intact
+   → DENY
+
+5. Client create/update/delete of membership documents remains denied
+   → DENY
+
+IMPORTANT:
+
+Do not weaken or remove existing tests.
+
+If the Firebase Rules Emulator dependencies are not already available:
+
+- DO NOT install them.
+- DO NOT change package.json.
+- Do not pretend runtime Rules tests were executed.
+
+Instead:
+- perform safe static validation
+- report that runtime Rules tests could not be executed
+
+==================================================
+EVIDENCE REQUIREMENT
+==================================================
+
+Before making the change, inspect the exact current rule.
+
+After making the change, verify the exact diff.
+
+Report:
+
+1. Exact file changed
+2. Exact rule changed
+3. Why the previous rule was vulnerable
+4. How the new rule prevents cross-member reads
+5. Tests executed
+6. Tests passed/failed/not executable
+7. git diff --check result
+8. git status result
+9. Confirmation that no other files were intentionally changed
+
+Do NOT claim the vulnerability is fixed unless the resulting rule
+directly proves it.
+
+==================================================
+MANDATORY STOP CONDITION
+==================================================
+
+STOP immediately after this fix and its verification.
+
+Do NOT continue to:
+
+- Cloud architecture
+- Firestore schema
+- Financial migration
+- Workspace switching
+- Invitations
+- Notifications
+- Push notifications
+- Cost analysis
+- Roadmap
+
+Those belong to the next separate task.
+
+FINAL OUTPUT:
+
+## SECURITY FIX RESULT
+
+### Before
+Show the relevant old rule.
+
+### After
+Show the relevant new rule.
+
+### Verification
+List exact tests/checks and results.
+
+### Files Changed
+List only files actually changed.
+
+### Scope Confirmation
+Confirm that no unrelated code/configuration was changed.
+
+STOP.

@@ -283,6 +283,11 @@ try {
       'DENY',
     );
     await runCase(
+      'Additional — anonymous cannot read a member document',
+      () => getDoc(memberReference(anonymous, 'space-A', 'user-A')),
+      'DENY',
+    );
+    await runCase(
       'Test 20 — user A reads own membership discovery index',
       () => getDoc(membershipIndexReference(userA, 'user-A', 'space-A')),
       'ALLOW',

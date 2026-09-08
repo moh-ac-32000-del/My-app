@@ -17,7 +17,7 @@ service cloud.firestore {
       allow create, update, delete: if false;
 
       match /members/{uid} {
-        allow read: if isActiveMember(spaceId);
+        allow read: if isActiveMember(spaceId) && uid == request.auth.uid;
         allow create, update, delete: if false;
       }
     }
