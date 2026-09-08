@@ -1,0 +1,96 @@
+TASK: Deploy ONLY the existing Firebase Cloud Function bootstrapPrimarySpace
+
+Context:
+- Firebase project ID: retail-business-manager
+- Firebase project has already been upgraded to Blaze.
+- The existing backend Function is:
+  functions/src/bootstrapPrimarySpace.ts
+- The exported callable Function name is:
+  bootstrapPrimarySpace
+- Current verified Replit project commit: 3ec0d22
+- The working tree was verified clean before this task.
+
+GOAL:
+Deploy the EXISTING bootstrapPrimarySpace Function to the Firebase project
+retail-business-manager.
+
+STRICT SCOPE:
+This is a DEPLOY-ONLY task.
+Do not implement, refactor, or modify application functionality.
+
+Before deploying:
+1. Verify the current working directory is the Retail Business Manager project.
+2. Verify firebase.json exists.
+3. Verify functions/src/bootstrapPrimarySpace.ts exists.
+4. Verify the Firebase project ID is retail-business-manager.
+5. Verify the current git working tree is clean.
+6. Inspect the existing Functions configuration and determine the safest available
+   Firebase deployment command/tool in the current Replit environment.
+
+DEPLOY:
+- Deploy ONLY bootstrapPrimarySpace.
+- Use Firebase partial deployment, equivalent to:
+  firebase deploy --only functions:bootstrapPrimarySpace
+  or the appropriate currently available equivalent.
+- Do NOT deploy all Functions.
+- Do NOT deploy Firestore rules.
+- Do NOT deploy Hosting.
+- Do NOT deploy Storage.
+- Do NOT deploy any other Firebase resource.
+
+ABSOLUTE NO-CHANGE RULES:
+Do NOT:
+- modify application source code
+- modify bootstrapPrimarySpace.ts
+- modify firebase.json
+- modify firestore.rules
+- modify package.json
+- modify pnpm-lock.yaml
+- install new dependencies
+- update dependencies
+- run git push
+- run git pull
+- change GitHub
+- create new Functions
+- create new Firebase projects
+- create new Firestore data
+- migrate financial data
+- change AsyncStorage
+- change StoreContext
+- change authentication
+- change UI/navigation
+- change Workspace architecture
+
+If the deployment tool requires authentication:
+- Do not create or request credentials/tokens.
+- Do not modify Git configuration.
+- Do not ask the user to paste a password or token into the shell.
+- Stop and report the exact authentication requirement.
+
+If Firebase CLI is unavailable:
+- Do NOT install packages or alter project dependencies just to work around it.
+- Check whether Replit provides an existing Firebase deployment integration/tool.
+- If no safe deployment mechanism is available, STOP and report the blocker.
+
+If deployment fails:
+- Do not modify code to "fix" the problem.
+- Do not retry repeatedly.
+- Report the exact error and the command/tool used.
+
+After a successful deployment:
+1. Confirm the deployed Firebase project ID.
+2. Confirm that bootstrapPrimarySpace was successfully deployed.
+3. Report the deployed region if available.
+4. Report the resulting Function URL/identifier if available.
+5. Run only a read-only verification that the Function exists.
+6. Run the existing relevant tests only if they do not require installing packages or modifying files.
+7. Show git status and confirm that no project files were changed.
+
+IMPORTANT:
+Do NOT claim success unless Firebase actually confirms the deployment.
+Do NOT say "already deployed" based only on source code existing locally.
+We need evidence of an actual deployment to the live Firebase project.
+
+STOP after this task.
+Do not proceed to Customer Cloud, Firestore data migration, Notifications,
+Workspace switching, Invitations, or any other Phase 3 work.
