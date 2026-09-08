@@ -1,0 +1,476 @@
+PHASE 2 — FIRESTORE WORKSPACE DATA SCHEMA
+
+ROLE
+
+You are working on the existing Retail Business Manager Expo/React Native/
+TypeScript project.
+
+This is a tightly scoped ARCHITECTURE + DATA CONTRACT task.
+
+The goal is to define and implement the minimal Firestore schema/path
+contracts required for the approved Cloud-first Workspace architecture.
+
+THIS PHASE MUST NOT MIGRATE FINANCIAL DATA.
+
+==================================================
+APPROVED FINAL MODEL
+==================================================
+
+The application uses:
+
+Firebase Auth UID
+        ↓
+Workspace Memberships
+        ↓
+Active Workspace (`spaceId`)
+        ↓
+Workspace-owned Firestore data
+
+A user may belong to multiple Workspaces.
+
+Each Workspace is an independent data/security boundary.
+
+Current MVP relationship:
+
+Workspace = Store (1:1)
+
+Do NOT implement multi-store-within-one-workspace.
+
+Example future state:
+
+USER A
+ ├── PRIVATE WORKSPACE A
+ └── SHARED WORKSPACE X
+
+USER B
+ ├── PRIVATE WORKSPACE B
+ └── SHARED WORKSPACE X
+
+Workspace X has ONE `spaceId`.
+
+Both authorized users access the same Workspace data through that same
+`spaceId`.
+
+==================================================
+PHASE 2 SCOPE
+==================================================
+
+Implement/define ONLY the Firestore data schema and path contracts.
+
+This includes:
+
+1. Workspace document path.
+2. Authoritative membership document path.
+3. User Workspace discovery/index path.
+4. Workspace Store Profile path.
+5. Canonical future paths for Workspace-owned business collections.
+6. TypeScript contracts/constants/helpers needed to represent those paths
+   safely and consistently.
+7. Focused tests for path/schema correctness.
+
+Do NOT implement actual financial data migration.
+
+Do NOT copy existing AsyncStorage financial data into Firestore.
+
+Do NOT create fake customers/debts/payments in production Firestore.
+
+==================================================
+CANONICAL PATH MODEL
+==================================================
+
+Use `spaceId` as the Workspace boundary.
+
+The canonical structure should follow this conceptual model:
+
+`spaces/{spaceId}`
+
+    Workspace metadata
+
+`spaces/{spaceId}/members/{uid}`
+
+    Authoritative membership
+
+`users/{uid}/memberships/{spaceId}`
+
+    User-side discovery/index only
+
+`users/{uid}`
+
+    User account metadata such as primarySpaceId
+
+Workspace-owned data should be under:
+
+`spaces/{spaceId}/...`
+
+Do NOT create top-level financial collections such as:
+
+`customers/{id}`
+`debts/{id}`
+`payments/{id}`
+
+for the new Cloud architecture.
+
+Financial/business data must eventually be Workspace-scoped.
+
+==================================================
+WORKSPACE DOCUMENT
+==================================================
+
+Define the minimal canonical Workspace representation needed by the current
+architecture.
+
+It should remain compatible with the existing `Space` model and should not
+duplicate unrelated business data.
+
+At minimum preserve the established concepts:
+
+- spaceId
+- name
+- mode
+- status
+- ownerUserId
+- timestamps
+- version where already established/appropriate
+
+Do not invent unnecessary fields.
+
+==================================================
+MEMBERSHIP DOCUMENT
+==================================================
+
+The authoritative membership remains:
+
+`spaces/{spaceId}/members/{uid}`
+
+It must remain capable of representing multiple members in one Workspace.
+
+Preserve the existing role/status model.
+
+Do NOT implement role-management behavior in this phase.
+
+Do NOT add custom permissions.
+
+Do NOT add Partner/Employee UI.
+
+==================================================
+USER DISCOVERY INDEX
+==================================================
+
+Keep:
+
+`users/{uid}/memberships/{spaceId}`
+
+as the user's Workspace discovery/index representation.
+
+It must support MULTIPLE membership documents.
+
+Do not replace it with a single Workspace field.
+
+`users/{uid}.primarySpaceId` means primary/default Workspace only.
+
+It does NOT mean the user's only Workspace.
+
+==================================================
+STORE PROFILE
+==================================================
+
+The approved architecture keeps:
+
+- Firebase UID
+- `spaceId`
+- `StoreProfile.id`
+- `StoreProfile.storeId`
+
+as separate identities.
+
+Define the future Workspace-owned Store Profile path as:
+
+`spaces/{spaceId}/storeProfile/profile`
+
+The Store Profile must retain the separate business `storeId`.
+
+Do NOT make `storeId` equal to `spaceId`.
+
+Do NOT redesign StoreProfile unnecessarily.
+
+Do NOT migrate the current local StoreProfile in this phase.
+
+==================================================
+FUTURE BUSINESS DATA PATHS
+==================================================
+
+Define canonical path contracts for future Workspace-owned collections.
+
+Use the approved architecture as the basis:
+
+`spaces/{spaceId}/customers/{customerId}`
+
+`spaces/{spaceId}/debts/{debtId}`
+
+`spaces/{spaceId}/payments/{paymentId}`
+
+`spaces/{spaceId}/cashTransactions/{transactionId}`
+
+`spaces/{spaceId}/dailyClosings/{closingId}`
+
+`spaces/{spaceId}/reminders/{reminderId}`
+
+`spaces/{spaceId}/notificationRecords/{notificationId}`
+
+`spaces/{spaceId}/operationReceipts/{receiptId}`
+
+`spaces/{spaceId}/auditEvents/{eventId}`
+
+Only define the schema/path contracts required for this phase.
+
+Do NOT implement CRUD or migration for these collections.
+
+Do NOT add unnecessary fields or indexes unless required by the schema
+contract.
+
+==================================================
+CRITICAL SPACE ISOLATION RULE
+==================================================
+
+Every Workspace-owned business document must be addressable by its
+canonical `spaceId`.
+
+The schema must make this possible:
+
+Workspace A:
+`spaces/SPACE-A/customers/...`
+
+Workspace B:
+`spaces/SPACE-B/customers/...`
+
+Shared Workspace X:
+`spaces/SPACE-X/customers/...`
+
+If Mohammad and Ahmed are members of SPACE-X, they must eventually read the
+same documents under SPACE-X.
+
+Mohammad's private Workspace data must remain under Mohammad's private
+`spaceId` and must not be mixed with SPACE-X.
+
+==================================================
+NO TOP-LEVEL BUSINESS DATA
+==================================================
+
+Do NOT introduce new top-level financial/business collections.
+
+Do NOT create a schema where authorization depends on a client-provided
+`storeId`.
+
+The Workspace boundary is `spaceId`.
+
+`storeId` remains a separate business identity.
+
+==================================================
+NO FINANCIAL MIGRATION
+==================================================
+
+Absolutely do NOT:
+
+- read existing local customers and upload them
+- read existing local debts and upload them
+- read existing payments and upload them
+- migrate cash transactions
+- migrate daily closings
+- migrate reminders
+- delete AsyncStorage data
+- rename AsyncStorage keys
+- clear AsyncStorage
+- create a migration engine
+- create a sync engine
+- create an outbox
+
+Current local/test data remains untouched.
+
+==================================================
+NO RULES REDESIGN
+==================================================
+
+Do not redesign Firestore Rules in this phase.
+
+Rules/authorization hardening remains a separate phase.
+
+Do not weaken the existing Workspace/member security rules.
+
+==================================================
+NO CLOUD FINANCIAL FUNCTIONS
+==================================================
+
+Do NOT create financial Cloud Functions.
+
+Do NOT implement:
+
+- create payment Function
+- settle debt Function
+- cash transaction Function
+- customer financial Function
+- daily closing Function
+- financial transaction/idempotency system
+
+Those belong to later phases.
+
+==================================================
+NO UI
+==================================================
+
+Do not implement:
+
+- Workspace selector
+- My Workspaces screen
+- Shared Workspace creation
+- invitation UI
+- member management UI
+- new navigation
+- new settings screens
+
+This phase is data architecture only.
+
+==================================================
+IMPLEMENTATION GUIDELINES
+==================================================
+
+First inspect the current project and existing:
+
+- `types/space.ts`
+- `types/business.ts`
+- `types/trustedBootstrap.ts`
+- `services/firestore.ts`
+- `services/trustedBootstrap.ts`
+- `context/StoreContext.tsx`
+- `firestore.rules`
+- relevant tests
+
+Reuse existing types and naming where appropriate.
+
+Do not duplicate existing domain contracts unnecessarily.
+
+Prefer a small centralized path/schema contract rather than scattering
+hard-coded Firestore collection names throughout the application.
+
+Do not introduce a large Firestore abstraction layer yet.
+
+Do not add a new dependency.
+
+Do not modify package.json or lockfile.
+
+If a dependency appears necessary:
+
+STOP and report it before making changes.
+
+==================================================
+TEST REQUIREMENTS
+==================================================
+
+Add focused tests proving:
+
+1. Workspace path uses `spaceId`.
+
+2. Membership path uses both `spaceId` and `uid`.
+
+3. User membership discovery supports multiple Workspace IDs.
+
+4. `primarySpaceId` remains primary/default, not the only Workspace.
+
+5. Store Profile is under the Workspace boundary.
+
+6. StoreProfile `storeId` remains distinct from `spaceId`.
+
+7. Customer/debt/payment/cash/daily-closing future paths are Workspace-scoped.
+
+8. No new top-level financial collection path was introduced.
+
+9. Workspace A and Workspace B produce different canonical paths.
+
+10. A shared Workspace uses the same `spaceId` for all authorized members.
+
+11. No AsyncStorage financial migration was introduced.
+
+12. Existing relevant tests continue to pass.
+
+If a Firestore emulator/integration test environment is unavailable, do not
+fake runtime Firestore results.
+
+Use unit/contract tests and clearly report what was not runtime-tested.
+
+==================================================
+VALIDATION
+==================================================
+
+Run:
+
+- focused Phase 2 tests
+- relevant existing tests
+- TypeScript typecheck
+- `git diff --check`
+
+Do not install packages.
+
+Do not modify unrelated files.
+
+==================================================
+CHANGE BOUNDARY
+==================================================
+
+At the end report:
+
+1. Exact files changed.
+2. Why each file changed.
+3. Files not changed.
+4. Tests run and results.
+5. TypeScript result.
+6. `git diff --check` result.
+7. Whether any Firestore data was actually written.
+8. Whether any AsyncStorage financial data was touched.
+9. Whether any Rules were changed.
+10. Whether any Cloud Functions were added/changed.
+11. `git diff --stat`
+12. `git status --short`
+
+==================================================
+STOP CONDITIONS
+==================================================
+
+STOP immediately and report if:
+
+- financial data migration becomes necessary
+- Firestore financial writes become necessary
+- Rules redesign becomes necessary
+- a Cloud Function becomes necessary
+- a new package becomes necessary
+- Workspace switching becomes necessary
+- invitation logic becomes necessary
+- StoreContext requires broad refactoring
+- a sync/outbox system becomes necessary
+- existing financial storage must be changed
+
+Do not expand the task to solve those issues.
+
+==================================================
+SUCCESS CRITERIA
+==================================================
+
+Phase 2 is PASS only if:
+
+- Firestore Workspace paths are canonical and Workspace-scoped.
+- Multiple memberships remain supported.
+- `primarySpaceId` remains primary/default only.
+- `spaceId` is the Workspace/data boundary.
+- `storeId` remains separate.
+- Future financial collections are clearly Workspace-scoped.
+- No financial data was migrated.
+- No financial Firestore writes were introduced.
+- No Rules redesign occurred.
+- No financial Cloud Functions were introduced.
+- No UI was added.
+- No new dependencies were added.
+- Focused tests pass.
+- TypeScript passes.
+- `git diff --check` passes.
+
+At the end, STOP.
+
+Do not automatically start Phase 3.
