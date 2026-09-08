@@ -1,13 +1,13 @@
 import { collection, doc, getDoc, getDocs, getFirestore, setDoc, type Firestore } from 'firebase/firestore';
-import { FIREBASE_COLLECTIONS, type SpaceDocument } from '@/data/collections';
+import type { SpaceDocument } from '@/data/collections';
+import {
+  FIRESTORE_WORKSPACE_COLLECTIONS,
+} from '@/data/firestoreWorkspace';
 import { getFirebaseApp, isFirebaseConfigured } from '@/services/firebase';
 import type { SpaceDiscoveryResult, SpaceIdentity } from '@/types/space';
 import type { MembershipDiscoveryIndexEntry } from '@/types/trustedBootstrap';
 
 const LEGACY_LOCAL_STORE_ID = 'local-store';
-const USERS_COLLECTION = 'users';
-const MEMBERSHIPS_COLLECTION = 'memberships';
-
 export async function discoverUserSpaces(uid: string): Promise<SpaceDiscoveryResult> {
   const normalizedUid = uid.trim();
   if (!normalizedUid) {
@@ -16,8 +16,13 @@ export async function discoverUserSpaces(uid: string): Promise<SpaceDiscoveryRes
 
   const database = getFirestoreInstance();
   const [userSnapshot, membershipsSnapshot] = await Promise.all([
-    getDoc(doc(database, USERS_COLLECTION, normalizedUid)),
-    getDocs(collection(database, USERS_COLLECTION, normalizedUid, MEMBERSHIPS_COLLECTION)),
+    getDoc(doc(database, FIRESTORE_WORKSPACE_COLLECTIONS.users, normalizedUid)),
+    getDocs(collection(
+      database,
+      FIRESTORE_WORKSPACE_COLLECTIONS.users,
+      normalizedUid,
+      FIRESTORE_WORKSPACE_COLLECTIONS.memberships,
+    )),
   ]);
   const userData = userSnapshot.exists() ? userSnapshot.data() : undefined;
   const primarySpaceId = typeof userData?.primarySpaceId === 'string'
@@ -40,7 +45,11 @@ let firestore: Firestore | null = null;
 export async function ensureCloudSpace(identity: SpaceIdentity): Promise<SpaceDocument> {
   const spaceId = normalizeSpaceId(identity.spaceId);
   const ownerUserId = normalizeOwnerUserId(identity.uid);
-  const spaceReference = doc(getFirestoreInstance(), FIREBASE_COLLECTIONS.stores, spaceId);
+  const spaceReference = doc(
+    getFirestoreInstance(),
+    FIRESTORE_WORKSPACE_COLLECTIONS.spaces,
+    spaceId,
+  );
   const existingSnapshot = await getDoc(spaceReference);
 
   if (existingSnapshot.exists()) {

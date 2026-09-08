@@ -67,6 +67,11 @@ describe('Firestore Space foundation', () => {
       ownerUserId: 'firebase-user-a',
     });
 
+    expect(firestoreState.doc).toHaveBeenCalledWith(
+      { name: 'test-firestore' },
+      'spaces',
+      'space_A',
+    );
     expect(firestoreState.documents.get('space_A')).toMatchObject({
       spaceId: 'space_A',
       ownerUserId: 'firebase-user-a',
