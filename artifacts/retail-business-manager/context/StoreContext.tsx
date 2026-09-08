@@ -90,26 +90,30 @@ export async function initializePostAuthSession(
   callbacks.onError(null);
 
   try {
-    identity = await getOrCreateSpaceIdentity(user.uid);
+    const bootstrapResult = await bootstrapPrimarySpace();
     if (!isCurrentTransition()) {
       return;
     }
-    callbacks.onActiveSpaceId(identity.spaceId);
-    callbacks.onSpaceIdentity(identity);
 
-    try {
-      const bootstrapResult = await bootstrapPrimarySpace();
-      if (!isCurrentTransition()) {
-        return;
-      }
-      callbacks.onCloudSpace(bootstrapResult.space);
-    } catch (error) {
-      if (!isCurrentTransition()) {
-        return;
-      }
-      callbacks.onCloudSpace(null);
-      callbacks.onError(error instanceof Error ? error.message : 'postAuthInitializationFailed');
+    const canonicalSpaceId = bootstrapResult.primarySpaceId.trim();
+    if (!canonicalSpaceId || bootstrapResult.space.spaceId !== canonicalSpaceId) {
+      throw new Error('invalidBootstrapResponse');
     }
+
+    callbacks.onCloudSpace(bootstrapResult.space);
+    callbacks.onActiveSpaceId(canonicalSpaceId);
+
+    // SpaceIdentity is retained as local compatibility metadata only. The
+    // cloud bootstrap response is the canonical active Workspace identity.
+    try {
+      identity = await getOrCreateSpaceIdentity(user.uid);
+    } catch {
+      identity = null;
+    }
+    if (!isCurrentTransition()) {
+      return;
+    }
+    callbacks.onSpaceIdentity(identity);
 
     const storedProfile = await loadStoreProfile();
     if (!isCurrentTransition()) {
@@ -128,13 +132,8 @@ export async function initializePostAuthSession(
       return;
     }
     callbacks.onCloudSpace(null);
-    if (identity) {
-      callbacks.onActiveSpaceId(identity.spaceId);
-      callbacks.onSpaceIdentity(identity);
-    } else {
-      callbacks.onSpaceIdentity(null);
-      callbacks.onActiveSpaceId(null);
-    }
+    callbacks.onSpaceIdentity(null);
+    callbacks.onActiveSpaceId(null);
     callbacks.onError(error instanceof Error ? error.message : 'postAuthInitializationFailed');
     callbacks.onReady();
   }
@@ -302,7 +301,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     : localIsAuthenticated;
 
   useEffect(() => {
-    if (!isReady) {
+    if (!isReady || initializationError || (isFirebaseConfigured && !cloudSpace)) {
       return;
     }
 
@@ -319,7 +318,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return () => {
       isActive = false;
     };
-  }, [isReady, profile.id, spaceIdentity?.spaceId]);
+  }, [cloudSpace, initializationError, isReady, profile.id, spaceIdentity?.spaceId]);
 
   const saveProfile = async (updates: Partial<StoreProfile>) => {
     const currentProfile = profileRef.current;

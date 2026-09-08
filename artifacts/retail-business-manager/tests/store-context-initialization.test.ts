@@ -50,7 +50,7 @@ vi.mock('@/services/storage', () => ({
 const firebaseUser = { uid: 'firebase-user', email: 'owner@example.com' } as User;
 const identity = {
   uid: firebaseUser.uid,
-  spaceId: 'space-primary',
+  spaceId: 'device-local-space',
   createdAt: '2026-09-05T12:00:00.000Z',
 };
 const bootstrapResponse = {
@@ -105,9 +105,11 @@ describe('post-auth initialization', () => {
     expect(callbacks.onError).toHaveBeenNthCalledWith(1, null);
     expect(callbacks.onError).toHaveBeenNthCalledWith(2, 'bootstrapUnavailable');
     expect(callbacks.onReady).toHaveBeenCalledTimes(1);
-    expect(callbacks.onSpaceIdentity).toHaveBeenCalledWith(identity);
-    expect(callbacks.onActiveSpaceId).toHaveBeenCalledWith(identity.spaceId);
+    expect(callbacks.onSpaceIdentity).toHaveBeenCalledWith(null);
+    expect(callbacks.onActiveSpaceId).toHaveBeenCalledWith(null);
     expect(callbacks.onCloudSpace).toHaveBeenCalledWith(null);
+    expect(loadStoreProfileMock).not.toHaveBeenCalled();
+    expect(saveStoreProfileMock).not.toHaveBeenCalled();
 
     await initializePostAuthSession(firebaseUser, () => true, callbacks);
 
@@ -115,10 +117,10 @@ describe('post-auth initialization', () => {
     expect(callbacks.onError).toHaveBeenCalledTimes(3);
     expect(callbacks.onError).toHaveBeenNthCalledWith(3, null);
     expect(callbacks.onSpaceIdentity).toHaveBeenLastCalledWith(identity);
-    expect(callbacks.onActiveSpaceId).toHaveBeenLastCalledWith(identity.spaceId);
+    expect(callbacks.onActiveSpaceId).toHaveBeenLastCalledWith(bootstrapResponse.primarySpaceId);
     expect(callbacks.onCloudSpace).toHaveBeenLastCalledWith(bootstrapResponse.space);
-    expect(getOrCreateSpaceIdentityMock).toHaveBeenNthCalledWith(1, firebaseUser.uid);
-    expect(getOrCreateSpaceIdentityMock).toHaveBeenNthCalledWith(2, firebaseUser.uid);
+    expect(getOrCreateSpaceIdentityMock).toHaveBeenCalledTimes(1);
+    expect(getOrCreateSpaceIdentityMock).toHaveBeenCalledWith(firebaseUser.uid);
     expect(callbacks.onReady).toHaveBeenCalledTimes(2);
   });
 
@@ -131,13 +133,58 @@ describe('post-auth initialization', () => {
     expect(bootstrapPrimarySpaceMock).toHaveBeenCalledTimes(1);
     expect(loadStoreProfileMock).toHaveBeenCalledTimes(1);
     expect(saveStoreProfileMock).toHaveBeenCalledTimes(1);
-    expect(callbacks.onActiveSpaceId).toHaveBeenCalledWith(identity.spaceId);
+    expect(callbacks.onActiveSpaceId).toHaveBeenCalledWith(bootstrapResponse.primarySpaceId);
     expect(callbacks.onCloudSpace).toHaveBeenCalledWith(bootstrapResponse.space);
     expect(callbacks.onProfile).toHaveBeenCalledTimes(1);
     expect(callbacks.onSpaceIdentity).toHaveBeenCalledWith(identity);
     expect(callbacks.onError).toHaveBeenCalledWith(null);
     expect(callbacks.onError).not.toHaveBeenCalledWith(expect.any(String));
     expect(callbacks.onReady).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses the cloud primary Space when local identity is absent or unrelated', async () => {
+    const callbacks = createCallbacks();
+    getOrCreateSpaceIdentityMock.mockResolvedValueOnce({
+      uid: firebaseUser.uid,
+      spaceId: 'different-device-local-space',
+      createdAt: '2026-09-05T12:00:00.000Z',
+    });
+
+    await initializePostAuthSession(firebaseUser, () => true, callbacks);
+
+    expect(callbacks.onActiveSpaceId).toHaveBeenCalledWith(bootstrapResponse.primarySpaceId);
+    expect(callbacks.onActiveSpaceId).not.toHaveBeenCalledWith('different-device-local-space');
+    expect(callbacks.onCloudSpace).toHaveBeenCalledWith(bootstrapResponse.space);
+  });
+
+  it('rejects an invalid cloud identity without activating a local namespace', async () => {
+    const callbacks = createCallbacks();
+    bootstrapPrimarySpaceMock.mockResolvedValueOnce({
+      ...bootstrapResponse,
+      primarySpaceId: '',
+    });
+
+    await initializePostAuthSession(firebaseUser, () => true, callbacks);
+
+    expect(callbacks.onError).toHaveBeenLastCalledWith('invalidBootstrapResponse');
+    expect(callbacks.onActiveSpaceId).toHaveBeenLastCalledWith(null);
+    expect(callbacks.onSpaceIdentity).toHaveBeenLastCalledWith(null);
+    expect(callbacks.onCloudSpace).toHaveBeenLastCalledWith(null);
+    expect(getOrCreateSpaceIdentityMock).not.toHaveBeenCalled();
+    expect(loadStoreProfileMock).not.toHaveBeenCalled();
+    expect(saveStoreProfileMock).not.toHaveBeenCalled();
+  });
+
+  it('keeps StoreProfile identity separate from the cloud Space identity', async () => {
+    const callbacks = createCallbacks();
+    const storeProfile = { id: 'store-profile-id' };
+    loadStoreProfileMock.mockResolvedValueOnce(storeProfile);
+
+    await initializePostAuthSession(firebaseUser, () => true, callbacks);
+
+    expect(callbacks.onActiveSpaceId).toHaveBeenCalledWith(bootstrapResponse.primarySpaceId);
+    expect(callbacks.onProfile).toHaveBeenCalledWith(storeProfile);
+    expect(storeProfile.id).not.toBe(bootstrapResponse.primarySpaceId);
   });
 
   it('clears Firebase authentication and session state on real auth loss', () => {

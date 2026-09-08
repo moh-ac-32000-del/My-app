@@ -35,7 +35,7 @@ export default function DashboardScreen() {
   }, [isReady, isAuthenticated, router]);
 
   useEffect(() => {
-    if (!isReady) {
+    if (!isReady || initializationError) {
       return;
     }
     let active = true;
@@ -47,7 +47,7 @@ export default function DashboardScreen() {
     return () => {
       active = false;
     };
-  }, [isReady, journalRevision, journalRefreshKey, profile.id]);
+  }, [initializationError, isReady, journalRevision, journalRefreshKey, profile.id]);
 
   const getJournalTitle = (event: DailyJournalEvent): string => {
     if (event.type === 'cash_in') return t('cashIn');
