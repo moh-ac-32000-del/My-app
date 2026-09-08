@@ -1,0 +1,949 @@
+TASK: CLOUD + WORKSPACE ARCHITECTURE DESIGN — PART B
+DESIGN / AUDIT ONLY — NO CODE CHANGES
+
+IMPORTANT:
+Part A has already been completed and reviewed.
+
+Part A established the following CURRENT STATE:
+
+1. Customers, Debts, Payments, Cash Transactions, Daily Journals,
+   Daily Archives, Reminders, and StoreProfile are currently authoritative
+   in AsyncStorage.
+
+2. Firestore currently contains only Workspace/account foundation metadata.
+   Financial Firestore persistence is NOT IMPLEMENTED.
+
+3. Firebase Email/Password Authentication is implemented.
+
+4. A trusted callable Function exists:
+   bootstrapPrimarySpace
+
+5. Cloud primarySpaceId and local SpaceIdentity.spaceId are currently
+   separate and not unified.
+
+6. Additional Spaces, switching, invitations, membership management,
+   shared financial data, and multi-device financial sharing are NOT IMPLEMENTED.
+
+7. Firestore Rules currently deny financial collections.
+
+8. A real authorization issue in:
+   /spaces/{spaceId}/members/{uid}
+   was fixed by requiring:
+   isActiveMember(spaceId) && uid == request.auth.uid
+
+9. Runtime Rules Emulator verification is not currently available.
+
+10. Current local/test financial data is DISPOSABLE.
+    We do NOT need to migrate it.
+
+11. FINAL PRODUCT REQUIREMENT:
+    The application MUST be CLOUD-FIRST before public release.
+
+12. Firestore must become the authoritative source of truth for business
+    and financial data.
+
+13. AsyncStorage may remain only as cache, UI/session state, preferences,
+    drafts, or other non-authoritative local state.
+
+14. Real Workspaces/Spaces are mandatory before public release.
+
+15. Private and Shared Workspaces must actually work.
+
+16. Multiple devices must access the same Workspace and financial data.
+
+17. Maximum intended users: approximately 90.
+
+==================================================
+THIS TASK IS DESIGN ONLY
+==================================================
+
+DO NOT:
+
+- modify source files
+- create files
+- delete files
+- install packages
+- change package.json
+- change lockfiles
+- change Firestore Rules
+- change Firebase configuration
+- deploy Firebase
+- create Firestore data
+- delete Firestore data
+- migrate AsyncStorage
+- implement Cloud Sync
+- implement Workspace switching
+- implement invitations
+- implement notifications
+- implement financial persistence
+- refactor application code
+- change navigation
+- change UI
+
+You may READ the repository and perform safe read-only analysis.
+
+STOP after producing the architecture report.
+
+==================================================
+CORE OBJECTIVE
+==================================================
+
+Design the FINAL CLOUD-FIRST + WORKSPACE architecture based on the
+actual findings from Part A.
+
+Do not blindly preserve the current local architecture.
+
+Do not design a migration of current disposable test data.
+
+The goal is to define the correct final architecture first, then later
+implement it in controlled phases.
+
+==================================================
+1. EXECUTIVE ARCHITECTURE DECISION
+==================================================
+
+Answer clearly:
+
+What should be the final authoritative architecture?
+
+Explain the relationship between:
+
+Firebase UID
+    ↓
+Workspace / Space
+    ↓
+Membership
+    ↓
+Firestore
+    ↓
+Customers / Debts / Payments / Transactions / Closings / Reminders
+
+Explicitly determine whether:
+
+- Firebase UID
+- spaceId
+- StoreProfile.id
+- storeId
+
+remain separate identifiers.
+
+If they remain separate, explain why.
+
+If any relationship must change, explain exactly why.
+
+Do NOT make changes.
+
+==================================================
+2. FINAL WORKSPACE MODEL
+==================================================
+
+Design the final Workspace model supporting:
+
+- private Workspace
+- shared Workspace
+- owner
+- partner
+- employee
+- membership status
+- role
+- multiple Workspaces per user
+- primary Workspace
+- active Workspace
+- invitations
+- member removal
+- member suspension
+- role changes
+- Workspace switching
+
+Clearly distinguish:
+
+DISCOVERY DATA
+AUTHORIZATION DATA
+BUSINESS DATA
+
+Important:
+
+The authoritative authorization relationship must be inside the
+Workspace membership model, not merely a client-side activeSpaceId.
+
+==================================================
+3. PROPOSED FIRESTORE SCHEMA
+==================================================
+
+Design the concrete Firestore schema.
+
+Show exact paths.
+
+For example, only as a format reference:
+
+spaces/{spaceId}
+spaces/{spaceId}/members/{uid}
+spaces/{spaceId}/customers/{customerId}
+
+Do NOT blindly copy the example.
+
+Determine the actual schema required for this application.
+
+At minimum consider:
+
+- users
+- spaces
+- memberships
+- invitations
+- customers
+- debts
+- payments
+- transactions
+- dailyClosings
+- reminders
+- notification records
+- operation receipts
+- audit events
+
+For each collection/document specify:
+
+- purpose
+- document ID
+- important fields
+- relationships
+- ownership
+- authorization
+- expected query patterns
+- whether it should be subcollection or top-level
+- whether denormalization is useful
+
+==================================================
+4. FINANCIAL DATA MODEL
+==================================================
+
+Design how the following should work in Firestore:
+
+Customer
+Debt
+Payment
+Cash In
+Cash Out
+Daily Closing
+Reminder
+
+Determine:
+
+- source of truth
+- references
+- balance calculation
+- settled/unsettled state
+- due date
+- currency
+- timestamps
+- createdBy
+- updatedBy
+- deleted/archived state if required
+
+Do NOT implement.
+
+==================================================
+5. FINANCIAL OPERATION SAFETY
+==================================================
+
+Design protections for:
+
+- duplicate payment
+- duplicate debt
+- duplicate cash transaction
+- duplicate daily close
+- retry after network failure
+- double tap
+- request succeeds but response is lost
+- app killed during write
+- two devices performing the same operation
+- two devices editing the same record
+
+Determine where to use:
+
+- Firestore transactions
+- batched writes
+- server-side Cloud Functions
+- idempotency keys
+- OperationReceipt
+- server timestamps
+- optimistic concurrency/version fields
+
+Do not implement any of these.
+
+==================================================
+6. CLIENT VS CLOUD RESPONSIBILITY
+==================================================
+
+For each important operation classify:
+
+DIRECT FIRESTORE
+CLOUD FUNCTION REQUIRED
+EITHER
+NOT YET DECIDED
+
+Operations include:
+
+- create Workspace
+- create additional Workspace
+- switch Workspace
+- invite member
+- accept invitation
+- reject invitation
+- remove member
+- change role
+- create customer
+- edit customer
+- delete customer
+- create debt
+- edit debt
+- settle debt
+- create payment
+- create Cash In
+- create Cash Out
+- daily close
+- create reminder
+- cancel reminder
+
+Explain WHY for each.
+
+Avoid using Cloud Functions unnecessarily.
+
+==================================================
+7. FIRESTORE SECURITY RULES ARCHITECTURE
+==================================================
+
+Design the FINAL Rules model.
+
+Do not modify the current Rules.
+
+Define how authorization should work for:
+
+- Workspace reads
+- Workspace writes
+- own membership
+- other membership
+- owner operations
+- partner operations
+- employee operations
+- viewer operations
+- invitations
+- customers
+- debts
+- payments
+- transactions
+- daily closings
+- reminders
+- operation receipts
+- audit events
+
+Explicitly define:
+
+- authentication check
+- membership check
+- membership status
+- Workspace status
+- role authorization
+- cross-Workspace isolation
+- ownership
+- client-controlled fields that must never be trusted
+
+Also explain how the recently fixed member-document vulnerability
+should remain prevented in the final Rules architecture.
+
+==================================================
+8. ROLE / PERMISSION MODEL
+==================================================
+
+Design the permission model for:
+
+OWNER
+PARTNER
+EMPLOYEE
+
+If you believe additional roles are necessary, explain why.
+
+Do not add roles simply for completeness.
+
+For each role specify access to:
+
+- Workspace settings
+- members
+- customers
+- debts
+- payments
+- cash transactions
+- daily closing
+- reminders
+- reports
+- backup/restore
+
+Clearly separate:
+
+READ
+CREATE
+UPDATE
+DELETE
+ADMINISTRATIVE
+
+==================================================
+9. MULTI-DEVICE ARCHITECTURE
+==================================================
+
+Design expected behavior:
+
+Device A
+↓
+Firestore
+
+Device B
+↓
+same Workspace
+↓
+same Firestore data
+
+Explain:
+
+- initial load
+- refresh
+- listeners
+- offline behavior
+- reconnect
+- cache
+- conflict behavior
+- stale data
+- simultaneous writes
+
+Important:
+
+The final architecture must NOT make AsyncStorage the financial authority.
+
+==================================================
+10. LOCAL CACHE STRATEGY
+==================================================
+
+Classify current local data into:
+
+KEEP LOCAL
+CACHE ONLY
+SESSION ONLY
+MOVE TO FIRESTORE
+REMOVE FROM LOCAL AUTHORITY
+
+Consider:
+
+- customers
+- debts
+- payments
+- transactions
+- daily archives
+- reminders
+- StoreProfile
+- activeSpaceId
+- language
+- currency
+- notification settings
+- drafts
+
+Explain cache invalidation at a high level.
+
+Do NOT implement.
+
+==================================================
+11. WORKSPACE DISCOVERY AND SWITCHING
+==================================================
+
+Design:
+
+Firebase UID
+→ user discovery
+→ memberships
+→ Workspace list
+→ selected active Workspace
+
+Determine whether active Workspace should be:
+
+- local only
+- persisted in user profile
+- stored in Firestore
+- both local preference + server validation
+
+Explain why.
+
+Do not implement switching.
+
+==================================================
+12. INVITATION ARCHITECTURE
+==================================================
+
+Design invitation flow:
+
+Owner/authorized member
+→ invitation
+→ recipient
+→ accept/reject
+→ membership
+→ access
+
+Consider:
+
+- invitation ID
+- target user/email
+- target role
+- target Workspace
+- expiration
+- status
+- replay prevention
+- cancellation
+- duplicate invitations
+- authorization
+
+Determine whether invitations should use Cloud Functions.
+
+Do not implement.
+
+==================================================
+13. NOTIFICATIONS ARCHITECTURE
+==================================================
+
+Do NOT implement notifications.
+
+Design only the future architecture based on the agreed requirements:
+
+- optional debt due date
+- automatic due-date reminder
+- 3 days before
+- due date
+- 9 PM follow-up
+- weekly overdue reminder
+- due-date changes
+- settlement
+- deletion
+- multiple devices
+- Notification Center
+- WhatsApp action
+
+Determine:
+
+- Firestore reminder data
+- notification state
+- FCM
+- Expo Notifications
+- scheduled Cloud Functions
+- notification deduplication
+- device token storage
+- multiple-device delivery
+- timezone handling
+- consumed 3-day WhatsApp action
+
+Clearly distinguish what is:
+
+CURRENTLY IMPLEMENTED
+FUTURE DESIGN
+
+==================================================
+14. BACKUP / RESTORE WITH CLOUD
+==================================================
+
+The existing local Backup/Restore feature is considered complete.
+
+Do not redesign it unnecessarily.
+
+Design how it should coexist with Firestore.
+
+Answer:
+
+- What should the backup contain?
+- Is local export still useful?
+- How is Workspace identity protected?
+- How do we prevent restoring Workspace A into Workspace B accidentally?
+- What happens to reminders?
+- What happens to notification settings?
+- What happens after restore?
+
+==================================================
+15. FIRESTORE COST MODEL
+==================================================
+
+Maximum intended users: approximately 90.
+
+Create three usage scenarios:
+
+LOW
+NORMAL
+HIGH
+
+Estimate conceptually:
+
+- reads
+- writes
+- deletes
+- storage
+- listeners
+- Functions
+- notification-related operations
+
+IMPORTANT:
+
+Do not assume every app opening reads every document.
+
+Design efficient query patterns using:
+
+- limit
+- pagination
+- selective queries
+- appropriate listeners
+- denormalization where useful
+
+Identify expensive patterns to avoid.
+
+If exact current Firebase prices are not available from repository evidence,
+DO NOT invent prices.
+
+You may provide formulas or clearly label exact pricing as requiring
+current external verification.
+
+==================================================
+16. FIREBASE SERVICES / BLAZE
+==================================================
+
+Classify:
+
+REQUIRED FOR CLOUD WORKSPACE
+REQUIRED FOR FINANCIAL OPERATIONS
+REQUIRED FOR NOTIFICATIONS
+RECOMMENDED SECURITY
+OPTIONAL
+
+Consider:
+
+- Firestore
+- Authentication
+- Cloud Functions
+- FCM
+- App Check
+- scheduled Functions
+
+Do not upgrade anything.
+
+==================================================
+17. SECURITY ARCHITECTURE
+==================================================
+
+Design the final security model.
+
+Address:
+
+- client-controlled UID
+- client-controlled spaceId
+- client-controlled role
+- cross-Workspace access
+- member access
+- owner protection
+- financial writes
+- idempotency
+- App Check
+- sensitive logs
+- backup files
+- deep links
+- service account credentials
+- Admin SDK
+- authorization based on local state
+
+Identify which protections belong in:
+
+CLIENT
+FIRESTORE RULES
+CLOUD FUNCTIONS
+
+==================================================
+18. DATA CONSISTENCY STRATEGY
+==================================================
+
+Define how the final system should maintain consistency between:
+
+Customer
+Debt
+Payment
+Cash
+Daily Closing
+Reminder
+
+Pay special attention to:
+
+Payment settlement.
+
+For example, if a payment is recorded:
+
+- payment record
+- debt balance
+- cash balance
+- reminder state
+
+must remain consistent.
+
+Determine whether this requires a transaction or trusted server operation.
+
+Do not implement.
+
+==================================================
+19. FINAL ARCHITECTURE DIAGRAM
+==================================================
+
+Provide a concise diagram showing:
+
+Firebase Auth
+      ↓
+UID
+      ↓
+Workspace discovery
+      ↓
+Workspace
+      ↓
+Membership / Role
+      ↓
+Firestore
+      ↓
+Financial data
+
+And separately:
+
+Firestore
+      ↓
+Cloud Functions
+      ↓
+FCM
+      ↓
+Devices
+
+Also show where AsyncStorage exists as CACHE/SESSION only.
+
+==================================================
+20. IMPLEMENTATION PHASES
+==================================================
+
+Based on the final architecture, propose SMALL implementation phases.
+
+Do NOT implement them.
+
+Each phase must contain:
+
+PHASE
+PURPOSE
+FILES/AREAS LIKELY TO CHANGE
+WHAT MUST NOT CHANGE
+TESTS
+MANUAL TEST
+STOP CONDITION
+RISK
+DEPENDENCIES
+
+Prioritize:
+
+1. Final cloud identity/workspace foundation
+2. Firestore schema
+3. Security Rules
+4. Cloud financial persistence
+5. Multi-device behavior
+6. Workspace switching
+7. Invitations/membership
+8. Notifications
+9. Backup/cloud compatibility
+10. Final security/release testing
+
+Do not combine the entire project into one huge implementation task.
+
+==================================================
+21. COST / RISK TRADEOFFS
+==================================================
+
+For major architectural decisions explain:
+
+OPTION A
+OPTION B
+RECOMMENDATION
+WHY
+
+Especially for:
+
+- direct Firestore vs Functions
+- subcollections vs top-level collections
+- stored balances vs calculated balances
+- listeners vs explicit refresh
+- local cache strategy
+- transaction vs Function
+- invitation implementation
+- notification scheduling
+
+Avoid unnecessary complexity for a product with approximately 90 users.
+
+==================================================
+22. FINAL DECISION TABLE
+==================================================
+
+Create a final table:
+
+Area | Recommended Architecture | Reason | Risk | Complexity
+
+Include:
+
+- Identity
+- Workspace
+- Membership
+- Firestore
+- Financial data
+- Payments
+- Transactions
+- Daily Closing
+- Reminders
+- Notifications
+- Cache
+- Backup
+- Security
+- Functions
+- Cost
+
+==================================================
+EVIDENCE REQUIREMENT
+==================================================
+
+This is mandatory.
+
+Part A established the current state.
+
+For every recommendation in Part B:
+
+1. Reference the Part A finding that caused the recommendation.
+2. Explain the architectural reasoning.
+3. Clearly distinguish:
+
+CURRENT FACT
+RECOMMENDATION
+TRADE-OFF
+ASSUMPTION
+
+Do NOT claim that a proposed architecture is already implemented.
+
+Use:
+
+IMPLEMENTED
+PARTIAL
+CONTRACT ONLY
+NOT IMPLEMENTED
+
+only when describing current repository state.
+
+For future architecture use:
+
+RECOMMENDED
+OPTIONAL
+NOT RECOMMENDED
+REQUIRES DECISION
+
+If something cannot be determined:
+
+NOT DETERMINED FROM CURRENT REPOSITORY
+
+==================================================
+IMPORTANT ARCHITECTURAL CONSTRAINTS
+==================================================
+
+Do NOT:
+
+- force local SpaceIdentity to equal Firebase UID
+- force spaceId to equal StoreProfile.id
+- force storeId to equal spaceId without justification
+- make client activeSpaceId an authorization mechanism
+- make users/{uid}/memberships the sole authorization source
+- trust client-provided role
+- trust client-provided ownerUserId
+- trust client-provided UID
+- introduce an unnecessary offline-sync/outbox system
+- preserve disposable test data
+- redesign completed Backup/Restore unnecessarily
+- add inventory
+- add unrelated product features
+- over-engineer for more than approximately 90 users
+
+==================================================
+REQUIRED OUTPUT
+==================================================
+
+# CLOUD + WORKSPACE ARCHITECTURE DESIGN — PART B
+
+## 1. Executive Decision
+
+## 2. Current Facts Used From Part A
+
+## 3. Final Identity Architecture
+
+## 4. Final Workspace Architecture
+
+## 5. Proposed Firestore Schema
+
+## 6. Financial Data Architecture
+
+## 7. Financial Operation Safety
+
+## 8. Client vs Cloud Responsibility
+
+## 9. Final Firestore Rules Architecture
+
+## 10. Roles and Permissions
+
+## 11. Multi-Device Architecture
+
+## 12. Local Cache Strategy
+
+## 13. Workspace Discovery / Switching
+
+## 14. Invitation Architecture
+
+## 15. Notifications Future Architecture
+
+## 16. Backup / Restore with Cloud
+
+## 17. Firestore Cost Model
+
+## 18. Firebase Services / Blaze
+
+## 19. Security Architecture
+
+## 20. Data Consistency
+
+## 21. Final Architecture Diagram
+
+## 22. Implementation Phases
+
+## 23. Cost / Risk Tradeoffs
+
+## 24. Final Decision Table
+
+## 25. Release Blockers
+
+==================================================
+FINAL SAFETY CHECK
+==================================================
+
+Before finishing verify:
+
+- No files modified
+- No files created
+- No files deleted
+- No packages installed
+- No Firebase data written
+- No Firestore data written
+- No deployment
+- No Rules changes
+- No AsyncStorage migration
+- No navigation changes
+- No application implementation
+
+Report exact git status.
+
+==================================================
+STOP
+==================================================
+
+STOP AFTER THE ARCHITECTURE REPORT.
+
+Do NOT implement anything from your recommendations.
