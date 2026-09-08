@@ -1,0 +1,494 @@
+PHASE 1 — CANONICAL CLOUD IDENTITY
+
+ROLE
+
+You are working on the existing Retail Business Manager Expo/React Native/TypeScript project.
+
+This is a tightly scoped architecture task.
+
+The goal of this phase is ONLY to establish and verify the canonical cloud identity
+boundary for the currently active Workspace.
+
+DO NOT implement the full Cloud migration.
+
+DO NOT implement financial Firestore persistence.
+
+DO NOT implement Workspace switching UI.
+
+DO NOT implement additional Workspace creation.
+
+DO NOT implement invitations.
+
+DO NOT implement notifications.
+
+DO NOT implement Partner/Employee permission systems.
+
+DO NOT implement offline financial outbox.
+
+DO NOT perform broad refactoring.
+
+DO NOT modify unrelated features.
+
+==================================================
+APPROVED FINAL WORKSPACE MODEL
+==================================================
+
+The final product model is:
+
+Firebase Auth Identity
+        ↓
+User's Workspace Memberships
+        ↓
+Private Workspace + Shared Workspaces
+        ↓
+Currently Active Workspace
+        ↓
+Workspace-owned Firestore data
+
+A user may belong to MULTIPLE Workspaces.
+
+Example:
+
+Mohammad
+ ├── Mohammad's private Workspace
+ └── Shared Workspace with Ahmed
+
+Ahmed
+ ├── Ahmed's private Workspace
+ └── Shared Workspace with Mohammad
+
+A Workspace is an independent data/security boundary.
+
+A shared Workspace has its own data, and all authorized members see the
+same Workspace data.
+
+A user's private Workspace is separate from any shared Workspace.
+
+IMPORTANT:
+Phase 1 does NOT implement the UI or behavior for creating additional
+Workspaces or switching between Workspaces.
+
+Those remain separate future phases.
+
+==================================================
+CRITICAL MULTI-WORKSPACE CONSTRAINT
+==================================================
+
+DO NOT hardcode or assume that a user can belong to only one Workspace.
+
+The existing path:
+
+`users/{uid}/memberships/{spaceId}`
+
+is a SUBCOLLECTION and inherently supports multiple Workspace memberships.
+
+Therefore:
+
+- Do not redesign it as a single Workspace field.
+- Do not create a one-Workspace-per-user abstraction.
+- Do not introduce code that assumes `primarySpaceId` is the user's only Workspace.
+- Do not remove or bypass the existing memberships collection.
+- Do not implement additional Workspace creation in this phase.
+- Do not implement Workspace switching in this phase.
+
+`primarySpaceId` may continue to represent the user's primary/default Workspace,
+but it MUST NOT be interpreted as the user's only Workspace.
+
+Phase 1 only needs to correctly establish/validate the CURRENT canonical
+Workspace identity used by the authenticated session.
+
+==================================================
+CANONICAL IDENTITY RULES
+==================================================
+
+1. Firebase Auth UID is the authenticated user identity.
+
+2. Workspace/Space is the canonical authorization and data boundary.
+
+3. `spaceId` is independent from:
+   - Firebase Auth UID
+   - StoreProfile.id
+   - StoreProfile.storeId
+
+4. For the current MVP:
+   Workspace = Store (1:1).
+
+   Do NOT introduce multi-store-within-one-workspace behavior.
+
+5. Authoritative membership is:
+
+   `spaces/{spaceId}/members/{uid}`
+
+6. User membership discovery is:
+
+   `users/{uid}/memberships/{spaceId}`
+
+   This is a discovery/index representation and must not replace
+   authoritative membership.
+
+7. `users/{uid}.primarySpaceId` identifies the user's primary/default Workspace.
+
+   It does NOT mean the user can belong to only one Workspace.
+
+8. Local `activeSpaceId` is a device preference/cache only.
+
+   It is NOT proof of authorization.
+
+9. The client must never trust a client-supplied UID as the authenticated identity.
+
+10. The client must not become the authority for Workspace ownership or membership.
+
+==================================================
+ADMIN SDK SECURITY RULE
+==================================================
+
+IMPORTANT ARCHITECTURAL CONSTRAINT FOR THIS PROJECT:
+
+Firebase Admin SDK bypasses Firestore Security Rules.
+
+Therefore, any Cloud Function using Admin SDK for a protected operation MUST
+independently enforce:
+
+- request.auth exists
+- authenticated UID comes from `request.auth.uid`
+- Workspace membership is verified
+- role/authorization is verified where applicable
+- business invariants are validated
+- sensitive writes use the appropriate trusted transaction/idempotency design
+
+NEVER rely on Firestore Rules as authorization inside an Admin SDK Function.
+
+Follow the established trusted pattern in:
+
+`functions/src/bootstrapPrimarySpace.ts`
+
+including the existing authentication assertion pattern such as:
+
+`assertAuthenticated`
+
+Do not weaken this security model.
+
+NOTE:
+Phase 1 is NOT a financial Cloud Function phase.
+Do not expand `bootstrapPrimarySpace` into financial functionality.
+
+==================================================
+CURRENT IMPLEMENTATION TO PRESERVE
+==================================================
+
+The project already contains:
+
+- Firebase email/password authentication
+- Firebase Auth session handling
+- `SpaceIdentity`
+- `bootstrapPrimarySpace`
+- trusted backend bootstrap foundation
+- Firestore Workspace/member Rules
+- read-only Workspace discovery
+- `primarySpaceId`
+- local active Workspace handling
+- `users/{uid}/memberships/{spaceId}`
+
+Before changing anything, inspect the existing implementation and tests.
+
+Do not recreate existing concepts under different names.
+
+==================================================
+PHASE 1 OBJECTIVE
+==================================================
+
+Establish the canonical cloud identity for the currently active Workspace.
+
+After Firebase authentication/session restoration:
+
+1. Obtain the Firebase Auth UID from the trusted Firebase Auth session.
+
+2. Resolve the user's canonical primary/default Workspace using the existing
+   trusted cloud bootstrap/discovery architecture.
+
+3. Resolve the corresponding cloud `spaceId`.
+
+4. Ensure the active Workspace identity is based on the cloud identity rather
+   than an arbitrary local financial namespace.
+
+5. Preserve the distinction between:
+
+   - Firebase UID
+   - cloud `spaceId`
+   - StoreProfile.id
+   - StoreProfile.storeId
+
+6. Preserve the fact that the user may have multiple Workspace memberships.
+
+7. Do NOT implement Workspace switching yet.
+
+8. Do NOT implement additional Workspace creation yet.
+
+==================================================
+IMPORTANT DATA SAFETY
+==================================================
+
+Current local financial/test data is disposable for the eventual Cloud migration,
+but DO NOT delete or migrate it in Phase 1.
+
+Do not call:
+
+- AsyncStorage.clear()
+- removeItem() against existing financial keys
+- financial storage migration
+- customer/debt/payment conversion
+- Firestore financial writes
+
+Do not modify existing financial storage keys.
+
+Do not silently create a new financial namespace because cloud identity
+resolution fails.
+
+If cloud identity cannot be resolved, surface a clear initialization error
+that can be retried safely.
+
+Do not silently switch the user to another Workspace.
+
+==================================================
+SAME ACCOUNT / MULTIPLE DEVICES
+==================================================
+
+For Phase 1, the important requirement is:
+
+The same Firebase Auth UID must resolve to the same canonical PRIMARY/DEFAULT
+Workspace across devices.
+
+Example:
+
+Device A:
+Firebase UID = USER-A
+primarySpaceId = SPACE-A
+
+Device B:
+Firebase UID = USER-A
+primarySpaceId = SPACE-A
+
+Both resolve the same canonical default Workspace.
+
+However, this MUST NOT be implemented as:
+
+"one user can only ever have one Workspace."
+
+The architecture must remain compatible with:
+
+USER-A
+ ├── SPACE-A (private/default)
+ └── SPACE-SHARED (shared)
+
+This phase only establishes the current/default Workspace.
+It does not implement selecting SPACE-SHARED yet.
+
+==================================================
+DIFFERENT USERS
+==================================================
+
+Example:
+
+User A:
+Firebase UID = USER-A
+primarySpaceId = SPACE-A
+
+User B:
+Firebase UID = USER-B
+primarySpaceId = SPACE-B
+
+Expected:
+
+User A → SPACE-A
+User B → SPACE-B
+
+Neither user may inherit the other's Workspace identity.
+
+==================================================
+DO NOT OVER-IMPLEMENT
+==================================================
+
+Do NOT implement:
+
+- Workspace selector UI
+- "My Workspaces" screen
+- Additional Workspace creation
+- Shared Workspace creation
+- invitations
+- invitation tokens
+- email hashing
+- role management
+- Partner role
+- Employee management
+- Notification Center
+- Push notifications
+- Device tokens
+- Audit event system
+- Cloud backup
+- Firestore financial collections
+- financial Cloud Functions
+- financial transactions
+- optimistic financial concurrency
+- Offline Financial Outbox
+- sync engine
+- migration engine
+- App Check enforcement
+- broad StoreContext refactor
+
+These belong to later phases.
+
+==================================================
+TEST REQUIREMENTS
+==================================================
+
+Add or update focused tests for the identity behavior.
+
+At minimum test:
+
+1. Firebase UID remains the authenticated identity.
+
+2. Existing cloud primary/default Workspace is resolved correctly.
+
+3. Same Firebase UID resolves the same cloud `spaceId` when local identity
+   is absent.
+
+4. Different Firebase UID does not inherit another user's Workspace identity.
+
+5. Missing/invalid cloud identity does not silently create a replacement
+   financial namespace.
+
+6. `StoreProfile.id` and `StoreProfile.storeId` remain independent from
+   cloud `spaceId`.
+
+7. Local `activeSpaceId` is not treated as authorization.
+
+8. Existing bootstrap behavior remains intact.
+
+9. The membership model remains capable of representing multiple memberships
+   through:
+
+   `users/{uid}/memberships/{spaceId}`
+
+10. No code introduced by this task assumes that a user can belong to only
+    one Workspace.
+
+11. Existing relevant tests continue to pass.
+
+If a true Firebase integration test is unavailable, do NOT fake a successful
+production Firebase result.
+
+Use focused unit/contract tests and clearly report what was not runtime-tested.
+
+==================================================
+VALIDATION
+==================================================
+
+Run:
+
+- focused identity/cloud tests
+- existing relevant tests
+- TypeScript typecheck
+- `git diff --check`
+
+Do not install packages unless absolutely necessary.
+
+Do not modify package.json or lockfile unless strictly required.
+
+If a package change appears necessary:
+
+STOP and report it before proceeding.
+
+==================================================
+MANUAL TEST
+==================================================
+
+If practical in Expo Go, manually verify:
+
+1. Sign in with an existing Firebase account.
+
+2. Confirm the session resolves the existing canonical primary/default
+   Workspace.
+
+3. Sign out.
+
+4. Sign in with another Firebase account.
+
+5. Confirm the cloud identity follows the second Firebase UID.
+
+6. If local SpaceIdentity is missing/empty, confirm the application does not
+   silently create a replacement financial namespace when cloud identity
+   resolution is available.
+
+Do NOT create fake Firestore production data merely for testing.
+
+If required Workspace/member records do not yet exist, report the limitation.
+
+==================================================
+CHANGE BOUNDARY
+==================================================
+
+Before finishing, report EXACTLY:
+
+1. Files changed.
+2. Why each file changed.
+3. Files NOT changed.
+4. Tests run and results.
+5. TypeScript result.
+6. `git diff --check` result.
+7. Manual test result, if performed.
+8. Any unresolved limitation.
+
+Also provide:
+
+- `git diff --stat`
+- `git status --short`
+
+Do not make unrelated commits.
+
+==================================================
+STOP CONDITIONS
+==================================================
+
+STOP immediately and report instead of expanding scope if:
+
+- Firestore financial data would need to be modified.
+- AsyncStorage financial data would need migration/deletion.
+- A new package is required.
+- Firebase Rules need broad redesign.
+- `bootstrapPrimarySpace` needs substantial redesign.
+- Workspace switching UI becomes necessary.
+- Additional Workspace creation becomes necessary.
+- invitations/roles become necessary.
+- a broad StoreContext refactor appears necessary.
+- the task starts becoming a Cloud Sync implementation.
+- the task requires an Offline Financial Outbox.
+- you discover a security issue outside the Phase 1 identity boundary that
+  cannot be safely fixed within this narrow scope.
+
+==================================================
+SUCCESS CRITERIA
+==================================================
+
+Phase 1 is PASS only if:
+
+- Firebase UID is the trusted user identity.
+- Cloud `spaceId` is the canonical Workspace identity.
+- Same Firebase UID can resolve the same primary/default Workspace across devices.
+- The architecture does NOT assume one Workspace per user.
+- Existing `users/{uid}/memberships/{spaceId}` remains compatible with
+  multiple Workspace memberships.
+- Local `activeSpaceId` is not trusted as authorization.
+- `StoreProfile.id/storeId` remain separate.
+- Existing financial/local data is untouched.
+- No financial Cloud migration occurred.
+- No Workspace switching or additional Workspace creation was implemented.
+- No unrelated feature was added.
+- Focused tests pass.
+- TypeScript passes.
+- `git diff --check` passes.
+
+Do not claim PASS if any of the above is unverified.
+
+At the end, STOP.
+
+Do not automatically start Phase 2.
