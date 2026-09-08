@@ -59,7 +59,7 @@ service cloud.firestore {
           )
           || (
             resource.data.keys().hasAny(['createdByUserId'])
-            request.resource.data.keys().hasAny(['createdByUserId'])
+            && request.resource.data.keys().hasAny(['createdByUserId'])
             && request.resource.data.createdByUserId == resource.data.createdByUserId
           )
         );
