@@ -10,10 +10,11 @@ import { KeyboardAwareScrollViewCompat } from '@/components/KeyboardAwareScrollV
 import { ReminderForm } from '@/components/ReminderForm';
 import { CURRENCY_OPTIONS, formatMoney, type CurrencyCode } from '@/constants/currencies';
 import { formatLocalizedDate, formatLocalizedDateTime, type Language, type TranslationKey } from '@/constants/i18n';
+import { useCustomers } from '@/context/CustomerContext';
 import { useColors } from '@/hooks/useColors';
 import { useI18n } from '@/hooks/useI18n';
 import { useStore } from '@/context/StoreContext';
-import { calculateDebtTotals, createDebt, createReminder, filterDebtsByCustomer, filterPaymentsByCustomer, loadCustomers, loadDebts, loadPayments, loadReminders, parseLocalizedAmountInput, saveCustomers, saveDebts, saveReminders } from '@/services/storage';
+import { calculateDebtTotals, createDebt, createReminder, filterDebtsByCustomer, filterPaymentsByCustomer, loadDebts, loadPayments, loadReminders, parseLocalizedAmountInput, saveDebts, saveReminders } from '@/services/storage';
 import type { Customer, Debt, Payment, Reminder } from '@/types/business';
 
 function DetailRow({ icon, label, value }: { icon: React.ComponentProps<typeof Ionicons>['name']; label: string; value: string }) {
@@ -65,9 +66,17 @@ export default function CustomerDetailsScreen() {
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { profile, isReady, settleCustomerDebt } = useStore();
+  const {
+    customers,
+    isLoading: areCustomersLoading,
+    error: customerError,
+    retryCustomers,
+    updateCustomer: saveCustomer,
+    softDeleteCustomer,
+  } = useCustomers();
   const { t, language, isRTL } = useI18n();
   const customerId = typeof id === 'string' ? id : '';
-  const [customer, setCustomer] = useState<Customer | null>(null);
+  const customer = customers.find((item) => item.id === customerId) ?? null;
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isEditVisible, setIsEditVisible] = useState<boolean>(false);
   const [isDeleteDialogVisible, setIsDeleteDialogVisible] = useState<boolean>(false);
@@ -93,14 +102,13 @@ export default function CustomerDetailsScreen() {
   );
   useFocusEffect(
     useCallback(() => {
-      if (!isReady || !customerId) {
+      if (!isReady || !customerId || areCustomersLoading || customerError) {
         return undefined;
       }
       let active = true;
       setIsLoading(true);
-      void Promise.all([loadCustomers(profile.id), loadDebts(profile.id), loadPayments(profile.id), loadReminders(profile.id)]).then(([customers, storedDebts, storedPayments, storedReminders]) => {
+      void Promise.all([loadDebts(profile.id), loadPayments(profile.id), loadReminders(profile.id)]).then(([storedDebts, storedPayments, storedReminders]) => {
         if (active) {
-          setCustomer(customers.find((item) => item.id === customerId) ?? null);
           setDebts(filterDebtsByCustomer(storedDebts, customerId));
           setPayments(filterPaymentsByCustomer(storedPayments, customerId));
           const customerDebtIds = new Set(storedDebts.filter((debt) => debt.customerId === customerId).map((debt) => debt.id));
@@ -111,7 +119,7 @@ export default function CustomerDetailsScreen() {
       return () => {
         active = false;
       };
-    }, [customerId, isReady, profile.id]),
+    }, [areCustomersLoading, customerError, customerId, isReady, profile.id]),
   );
 
   const updateCustomer = async (draft: CustomerDraft) => {
@@ -129,9 +137,7 @@ export default function CustomerDetailsScreen() {
       updatedAt: new Date().toISOString(),
     };
     try {
-      const customers = await loadCustomers(profile.id);
-      await saveCustomers(profile.id, customers.map((item) => item.id === nextCustomer.id ? nextCustomer : item));
-      setCustomer(nextCustomer);
+      await saveCustomer(nextCustomer);
       setIsEditVisible(false);
       Alert.alert(t('customerSaved'));
     } catch {
@@ -238,8 +244,7 @@ export default function CustomerDetailsScreen() {
 
     setIsDeleting(true);
     try {
-      const customers = await loadCustomers(profile.id);
-      await saveCustomers(profile.id, customers.filter((item) => item.id !== customer.id));
+      await softDeleteCustomer(customer);
       setIsDeleteDialogVisible(false);
       Alert.alert(t('customerDeleted'));
       router.back();
@@ -267,13 +272,29 @@ export default function CustomerDetailsScreen() {
     }
   };
 
-  if (!isReady || isLoading) {
+  if (!isReady || areCustomersLoading || isLoading) {
     return (
       <AppShell>
         <PageHeader title={t('customerDetails')} showBack />
         <GlassCard style={styles.loadingCard}>
           <ActivityIndicator color={colors.primary} size="large" />
         </GlassCard>
+      </AppShell>
+    );
+  }
+
+  if (customerError) {
+    return (
+      <AppShell>
+        <PageHeader title={t('customerDetails')} showBack />
+        <EmptyState icon="cloud-offline-outline" title={t('somethingWentWrong')} hint={t('reloadToContinue')} />
+        <Pressable
+          testID="retry-customer-cloud"
+          onPress={retryCustomers}
+          style={({ pressed }) => [styles.retryButton, { borderColor: colors.border }, pressed && styles.pressed]}
+        >
+          <Text style={[styles.retryButtonText, { color: colors.primary }]}>{t('reloadToContinue')}</Text>
+        </Pressable>
       </AppShell>
     );
   }
@@ -710,6 +731,8 @@ export default function CustomerDetailsScreen() {
 
 const styles = StyleSheet.create({
   loadingCard: { minHeight: 180, alignItems: 'center', justifyContent: 'center' },
+  retryButton: { minHeight: 46, borderWidth: 1, borderRadius: 15, alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
+  retryButtonText: { fontSize: 13, fontFamily: 'Inter_700Bold' },
   identityCard: { alignItems: 'center', paddingVertical: 24, marginBottom: 20 },
   identityAvatar: { width: 64, height: 64, borderRadius: 23, alignItems: 'center', justifyContent: 'center', marginBottom: 12 },
   identityName: { fontSize: 20, fontFamily: 'Inter_700Bold', textAlign: 'center' },

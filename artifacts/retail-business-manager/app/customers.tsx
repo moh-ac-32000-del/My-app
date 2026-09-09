@@ -1,14 +1,14 @@
-import React, { useCallback, useMemo, useState } from 'react';
-import { Alert, FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import React, { useMemo, useState } from 'react';
+import { ActivityIndicator, Alert, FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useFocusEffect, useRouter } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { AppShell, EmptyState, GlassCard, PageHeader, SectionTitle } from '@/components/AppShell';
 import { CustomerFormModal, type CustomerDraft } from '@/components/CustomerFormModal';
 import { filterCustomers } from '@/components/customer-utils';
+import { useCustomers } from '@/context/CustomerContext';
 import { useColors } from '@/hooks/useColors';
 import { useI18n } from '@/hooks/useI18n';
 import { useStore } from '@/context/StoreContext';
-import { loadCustomers, saveCustomers } from '@/services/storage';
 import type { Customer } from '@/types/business';
 
 function createCustomerId(): string {
@@ -41,41 +41,13 @@ function CustomerCard({ customer, onPress }: { customer: Customer; onPress: () =
 export default function CustomersScreen() {
   const colors = useColors();
   const router = useRouter();
-  const { profile, isReady } = useStore();
+  const { profile } = useStore();
+  const { customers, isLoading, error, retryCustomers, createCustomer } = useCustomers();
   const { t, isRTL } = useI18n();
-  const [customers, setCustomers] = useState<Customer[]>([]);
   const [search, setSearch] = useState<string>('');
   const [isFormVisible, setIsFormVisible] = useState<boolean>(false);
 
-  useFocusEffect(
-    useCallback(() => {
-      if (!isReady) {
-        return undefined;
-      }
-      let active = true;
-      void loadCustomers(profile.id).then((loadedCustomers) => {
-        if (active) {
-          setCustomers(loadedCustomers);
-        }
-      });
-      return () => {
-        active = false;
-      };
-    }, [isReady, profile.id]),
-  );
-
   const visibleCustomers = useMemo(() => filterCustomers(customers, search), [customers, search]);
-
-  const persistCustomers = async (nextCustomers: Customer[]): Promise<boolean> => {
-    try {
-      await saveCustomers(profile.id, nextCustomers);
-      setCustomers(nextCustomers);
-      return true;
-    } catch {
-      Alert.alert(t('somethingWentWrong'), t('reloadToContinue'));
-      return false;
-    }
-  };
 
   const addCustomer = async (draft: CustomerDraft) => {
     if (!draft.name.trim()) {
@@ -95,12 +67,13 @@ export default function CustomersScreen() {
       updatedAt: now,
       isActive: true,
     };
-    const saved = await persistCustomers([customer, ...customers]);
-    if (!saved) {
-      return;
+    try {
+      await createCustomer(customer);
+      setIsFormVisible(false);
+      Alert.alert(t('customerAdded'));
+    } catch {
+      Alert.alert(t('somethingWentWrong'), t('reloadToContinue'));
     }
-    setIsFormVisible(false);
-    Alert.alert(t('customerAdded'));
   };
 
   const openCustomer = (customer: Customer) => {
@@ -143,7 +116,18 @@ export default function CustomersScreen() {
 
       <SectionTitle title={t('customersCount')} action={String(customers.length)} />
 
-      {customers.length === 0 ? (
+      {isLoading ? (
+        <GlassCard style={styles.loadingCard}>
+          <ActivityIndicator color={colors.primary} size="large" />
+        </GlassCard>
+      ) : error ? (
+        <>
+          <EmptyState icon="cloud-offline-outline" title={t('somethingWentWrong')} hint={t('reloadToContinue')} />
+          <Pressable testID="retry-customers" onPress={retryCustomers} style={({ pressed }) => [styles.retryButton, { borderColor: colors.border }, pressed && styles.pressed]}>
+            <Text style={[styles.retryButtonText, { color: colors.primary }]}>{t('reloadToContinue')}</Text>
+          </Pressable>
+        </>
+      ) : customers.length === 0 ? (
         <EmptyState icon="people-outline" title={t('customersEmpty')} hint={t('customersEmptyHint')} />
       ) : visibleCustomers.length === 0 ? (
         <EmptyState icon="search-outline" title={t('customerSearchEmpty')} hint={t('customerSearchEmptyHint')} />
@@ -174,6 +158,9 @@ const styles = StyleSheet.create({
   searchInput: { flex: 1, minHeight: 45, fontSize: 14, fontFamily: 'Inter_400Regular' },
   headerAction: { width: 42, height: 42, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
   customerCard: { marginBottom: 10, padding: 14 },
+  loadingCard: { minHeight: 130, alignItems: 'center', justifyContent: 'center' },
+  retryButton: { minHeight: 46, borderWidth: 1, borderRadius: 15, alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
+  retryButtonText: { fontSize: 13, fontFamily: 'Inter_700Bold' },
   customerRow: { alignItems: 'center', gap: 11 },
   avatar: { width: 46, height: 46, borderRadius: 16, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   avatarText: { fontSize: 18, fontFamily: 'Inter_700Bold' },

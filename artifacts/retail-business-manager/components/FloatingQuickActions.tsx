@@ -19,9 +19,10 @@ import { KeyboardAwareScrollViewCompat } from '@/components/KeyboardAwareScrollV
 import { ReminderForm } from '@/components/ReminderForm';
 import { CURRENCY_OPTIONS, getCurrency, type CurrencyCode } from '@/constants/currencies';
 import type { TranslationKey } from '@/constants/i18n';
+import { useCustomers } from '@/context/CustomerContext';
 import { useStore } from '@/context/StoreContext';
-import { calculateDebtTotals, createReminder, filterDebtsByCustomer, loadCustomers, loadDebts, loadReminders, parseLocalizedAmountInput, saveReminders } from '@/services/storage';
-import type { CashTransactionDraft, Customer, Debt } from '@/types/business';
+import { calculateDebtTotals, createReminder, filterDebtsByCustomer, loadDebts, loadReminders, parseLocalizedAmountInput, saveReminders } from '@/services/storage';
+import type { CashTransactionDraft, Debt } from '@/types/business';
 import { useColors } from '@/hooks/useColors';
 import { useI18n } from '@/hooks/useI18n';
 
@@ -334,21 +335,9 @@ function CustomerCreditSheet({
 }) {
   const colors = useColors();
   const { profile } = useStore();
+  const { customers } = useCustomers();
   const { t, isRTL } = useI18n();
-  const [customers, setCustomers] = useState<Customer[]>([]);
   const [isSaving, setIsSaving] = useState<boolean>(false);
-
-  useEffect(() => {
-    let active = true;
-    void loadCustomers(profile.id).then((loadedCustomers) => {
-      if (active) {
-        setCustomers(loadedCustomers);
-      }
-    });
-    return () => {
-      active = false;
-    };
-  }, [profile.id]);
 
   const save = async (draft: DebtDraft) => {
     if (isSaving) {
@@ -397,8 +386,8 @@ function CustomerCreditSheet({
 function CustomerReminderSheet({ onClose }: { onClose: () => void }) {
   const colors = useColors();
   const { profile } = useStore();
+  const { customers, isLoading: areCustomersLoading } = useCustomers();
   const { t } = useI18n();
-  const [customers, setCustomers] = useState<Customer[]>([]);
   const [debts, setDebts] = useState<Debt[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isSaving, setIsSaving] = useState<boolean>(false);
@@ -410,11 +399,10 @@ function CustomerReminderSheet({ onClose }: { onClose: () => void }) {
 
   useEffect(() => {
     let active = true;
-    void Promise.all([loadCustomers(profile.id), loadDebts(profile.id)]).then(([loadedCustomers, loadedDebts]) => {
+    void loadDebts(profile.id).then((loadedDebts) => {
       if (!active) {
         return;
       }
-      setCustomers(loadedCustomers);
       setDebts(loadedDebts);
       setIsLoading(false);
     });
@@ -445,7 +433,7 @@ function CustomerReminderSheet({ onClose }: { onClose: () => void }) {
       <View style={styles.sheetContent}>
         <View style={[styles.sheetHandle, { backgroundColor: colors.border }]} />
         <SheetHeader title={t('createReminder')} subtitle={t('reminderFormHint')} icon="alarm-outline" onClose={onClose} />
-        {isLoading ? (
+        {isLoading || areCustomersLoading ? (
           <View style={styles.loadingReminder}>
             <ActivityIndicator color={colors.primary} />
           </View>
@@ -467,8 +455,8 @@ function CustomerReminderSheet({ onClose }: { onClose: () => void }) {
 function CustomerSettlementSheet({ onClose }: { onClose: () => void }) {
   const colors = useColors();
   const { profile, settleCustomerDebt } = useStore();
+  const { customers } = useCustomers();
   const { t, language, isRTL } = useI18n();
-  const [customers, setCustomers] = useState<Customer[]>([]);
   const [debts, setDebts] = useState<Awaited<ReturnType<typeof loadDebts>>>([]);
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>('');
   const [selectedCurrency, setSelectedCurrency] = useState<CurrencyCode>(profile.currency);
@@ -494,13 +482,12 @@ function CustomerSettlementSheet({ onClose }: { onClose: () => void }) {
 
   useEffect(() => {
     let active = true;
-    void Promise.all([loadCustomers(profile.id), loadDebts(profile.id)]).then(([loadedCustomers, loadedDebts]) => {
+    void loadDebts(profile.id).then((loadedDebts) => {
       if (!active) {
         return;
       }
-      setCustomers(loadedCustomers);
       setDebts(loadedDebts);
-      const firstCustomer = loadedCustomers.find((customer) => {
+      const firstCustomer = customers.find((customer) => {
         const totals = calculateDebtTotals(filterDebtsByCustomer(loadedDebts, customer.id));
         return CURRENCY_OPTIONS.some(({ code }) => totals[code] > 0);
       });
@@ -513,7 +500,7 @@ function CustomerSettlementSheet({ onClose }: { onClose: () => void }) {
     return () => {
       active = false;
     };
-  }, [profile.currency, profile.id]);
+  }, [customers, profile.currency, profile.id]);
 
   const chooseCustomer = (customerId: string) => {
     setSelectedCustomerId(customerId);

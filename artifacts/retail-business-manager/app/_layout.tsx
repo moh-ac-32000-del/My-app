@@ -16,6 +16,7 @@ import { Stack, usePathname } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StoreProvider } from '@/context/StoreContext';
 import { useStore } from '@/context/StoreContext';
+import { CustomerProvider } from '@/context/CustomerContext';
 import { FloatingQuickActions } from '@/components/FloatingQuickActions';
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
@@ -55,13 +56,15 @@ export default function RootLayout() {
     <SafeAreaProvider>
       <StoreProvider>
         <ErrorBoundary>
-          <QueryClientProvider client={queryClient}>
-            <GestureHandlerRootView>
-              <KeyboardProvider>
-                <RootLayoutNav />
-              </KeyboardProvider>
-            </GestureHandlerRootView>
-          </QueryClientProvider>
+          <CustomerProvider>
+            <QueryClientProvider client={queryClient}>
+              <GestureHandlerRootView>
+                <KeyboardProvider>
+                  <RootLayoutNav />
+                </KeyboardProvider>
+              </GestureHandlerRootView>
+            </QueryClientProvider>
+          </CustomerProvider>
         </ErrorBoundary>
       </StoreProvider>
     </SafeAreaProvider>
