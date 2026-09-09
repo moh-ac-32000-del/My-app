@@ -1,0 +1,456 @@
+PHASE 3B — CUSTOMER CLOUD CRUD
+
+GOAL:
+Move CUSTOMER business data from local AsyncStorage to Firestore as the authoritative source of truth for the current canonical Workspace.
+
+This phase is ONLY for Customers.
+
+IMPORTANT ARCHITECTURE:
+- Firebase Auth UID is the authenticated identity.
+- Workspace/spaceId is the security and data boundary.
+- The canonical Workspace comes from Phase 1 cloud bootstrap.
+- Firestore is the authoritative source for Customers.
+- AsyncStorage must NOT remain the authoritative source for Customers after this phase.
+- Current local/test data is disposable. DO NOT build a migration system.
+- Do NOT preserve old local customer records through migration.
+- Local storage may remain for UI preferences/session/cache/drafts only, but NOT as the primary Customer database.
+
+CURRENT VERIFIED WORKSPACE:
+spaceId:
+KCFjcWqGvRKry3ObNrVc
+
+Do NOT hardcode this ID into application code. It is provided only as a real test reference.
+
+CURRENT VERIFIED AUTH USER:
+Mxq6SJqbaEPrJRFMoJP4SCJNo2L2
+
+Do NOT hardcode this UID into application code.
+
+PHASE 3A ALREADY COMPLETED:
+Firestore Rules for:
+spaces/{spaceId}/customers/{customerId}
+
+are already deployed and manually verified.
+
+Verified:
+- authenticated active Workspace member → customer read ALLOW
+- authenticated non-member → customer read DENY
+- unauthenticated → customer read DENY
+- top-level /customers remains denied
+- other financial collections remain denied
+
+Do NOT redesign or weaken these Rules.
+
+==================================================
+SCOPE
+==================================================
+
+Implement Customer CRUD against:
+
+spaces/{spaceId}/customers/{customerId}
+
+Required operations:
+
+1. LIST / READ CUSTOMERS
+2. CREATE CUSTOMER
+3. UPDATE CUSTOMER
+4. DELETE CUSTOMER
+
+Use the existing Customer model and existing application UI.
+
+Do not redesign the UI.
+
+Do not add new Customer features.
+
+Do not implement:
+- debts
+- payments
+- transactions
+- cash
+- daily closings
+- reminders
+- notifications
+- workspaces switching
+- invitations
+- memberships management
+- sync/outbox
+- offline financial mutations
+- cloud backup
+- migration of existing local data
+
+==================================================
+CANONICAL WORKSPACE
+==================================================
+
+Customer Firestore access MUST use the canonical active Workspace established by Phase 1.
+
+Do NOT use local SpaceIdentity as the security authority.
+
+Do NOT use StoreProfile.id/storeId as the Workspace ID.
+
+Keep these identities separate:
+
+Firebase UID
+spaceId
+StoreProfile.id
+storeId
+
+The Firestore customer path MUST be based on:
+
+spaces/{spaceId}/customers/{customerId}
+
+==================================================
+CUSTOMER MODEL
+==================================================
+
+Inspect the existing Customer type and existing customer business logic before editing.
+
+Do not invent a new Customer schema.
+
+Preserve the existing Customer fields and semantics.
+
+The Firestore document ID must equal customer.id.
+
+Existing Rule validation must remain compatible with the stored document.
+
+If Customer currently contains:
+- id
+- storeId
+- name
+- isActive
+- createdAt
+- updatedAt
+- workspaceId
+- createdByUserId
+
+or other currently supported fields, use the actual repository model as the source of truth.
+
+Do not add arbitrary fields just to make Firestore work.
+
+==================================================
+READ
+==================================================
+
+Replace the Customer authoritative read path with Firestore.
+
+For the currently selected canonical Workspace:
+
+spaces/{spaceId}/customers
+
+Read only the Customers belonging to that Workspace.
+
+Do not read a top-level customers collection.
+
+Do not load customers from every Workspace.
+
+Do not use an unbounded cross-workspace query.
+
+If the current UI needs the complete customer list, use the Workspace-scoped collection.
+
+If pagination is necessary because of the current implementation, keep it simple and bounded.
+
+Do not introduce a large pagination framework.
+
+==================================================
+CREATE
+==================================================
+
+When creating a Customer:
+
+- Generate/use the existing Customer ID mechanism if compatible.
+- Write to:
+  spaces/{spaceId}/customers/{customerId}
+- Ensure document id == customer.id.
+- Preserve existing storeId semantics.
+- workspaceId, if used by the existing model/rules, must match the canonical spaceId.
+- createdByUserId, if used, must come from authenticated Firebase Auth context, not user input.
+- createdAt/updatedAt should use the existing timestamp semantics.
+- Do not accept an arbitrary client-provided authorization identity.
+- Do not write to AsyncStorage as the authoritative Customer record.
+
+Use the existing customer creation flow as much as possible.
+
+==================================================
+UPDATE
+==================================================
+
+When updating a Customer:
+
+- Update the Firestore document under the same Workspace.
+- Preserve customer.id.
+- Do not allow the update to move the document to another Workspace.
+- Preserve createdByUserId if the current model/rules require it.
+- Update updatedAt appropriately.
+- Do not silently overwrite unrelated fields.
+- Do not create a second Customer document.
+
+Use the existing UI and customer editing flow.
+
+==================================================
+DELETE
+==================================================
+
+Implement the existing Customer delete operation against Firestore.
+
+Do not introduce a new deletion policy in this phase.
+
+Do not delete debts/payments/transactions/etc. as part of Customer deletion.
+
+Only delete the Customer document requested by the existing Customer delete flow.
+
+The current Phase 3A Rules already authorize Customer deletion for active Workspace members. Do not broaden that authorization.
+
+==================================================
+ERROR HANDLING
+==================================================
+
+Important:
+
+If Firestore is unavailable or the request fails:
+
+- Do NOT silently fall back to local AsyncStorage Customer data.
+- Do NOT present stale local Customers as authoritative data.
+- Surface a clear error to the existing UI where appropriate.
+
+Financial/customer cloud architecture must not create two competing sources of truth.
+
+If Firebase is not configured in a test environment, use the smallest testable abstraction possible, but do not introduce production fallback behavior.
+
+==================================================
+ASYNCSTORAGE
+==================================================
+
+Do NOT perform a broad AsyncStorage cleanup.
+
+Do NOT call:
+AsyncStorage.clear()
+
+Do NOT delete unrelated local storage keys.
+
+Do NOT rename or remove existing unrelated storage keys.
+
+However:
+
+Customer records must no longer depend on AsyncStorage as their authoritative database.
+
+If existing local Customer storage functions are shared with unrelated financial models, isolate Customer cloud persistence carefully instead of refactoring the entire storage architecture.
+
+Do not perform a broad StoreContext refactor.
+
+==================================================
+SERVICE LAYER
+==================================================
+
+Prefer a small Customer-specific Firestore service/repository if appropriate.
+
+Example conceptual responsibility:
+
+- listCustomers(spaceId)
+- createCustomer(spaceId, customer)
+- updateCustomer(spaceId, customer)
+- deleteCustomer(spaceId, customerId)
+
+Use existing Firebase initialization and existing Firestore service patterns.
+
+Do not create a generic enterprise repository framework.
+
+Do not add unnecessary abstractions.
+
+Do not add packages.
+
+==================================================
+SECURITY
+==================================================
+
+Do not modify firestore.rules.
+
+Do not weaken security rules.
+
+Do not introduce client-side authorization checks as a replacement for Firestore Rules.
+
+UI checks may exist for UX, but Firestore Rules remain the security boundary.
+
+Do not trust:
+- client-provided UID
+- client-provided role
+- local SpaceIdentity
+- arbitrary spaceId from user input
+
+The Workspace context must come from the authenticated/canonical application session.
+
+==================================================
+TESTS
+==================================================
+
+Add focused tests for Customer cloud persistence.
+
+At minimum cover:
+
+1. Customer path is:
+   spaces/{spaceId}/customers/{customerId}
+
+2. Customer document ID matches customer.id.
+
+3. Different Workspace IDs produce different Customer paths.
+
+4. Customer CRUD service uses the Workspace-scoped path.
+
+5. No top-level customers collection is used.
+
+6. Customer operations do not use Firebase UID as the Workspace ID.
+
+7. No local AsyncStorage fallback is used when Firestore Customer read fails.
+
+8. Existing Customer model remains compatible.
+
+Use mocks/fakes for Firestore where necessary.
+
+Do NOT install new test packages.
+
+If an existing test infrastructure cannot test a specific Firebase runtime behavior, report it rather than installing packages.
+
+==================================================
+MANUAL TEST
+==================================================
+
+After implementation, manually verify using the actual app if possible.
+
+Use the real authenticated account and real Workspace.
+
+Verify:
+
+A. Add a test Customer.
+B. Refresh/reopen the app.
+C. Customer remains visible because it is read from Firestore.
+D. Edit the Customer.
+E. Refresh/reopen and confirm the edit persists.
+F. Delete the test Customer.
+G. Confirm it disappears.
+
+The current local/test data is disposable.
+
+Do not migrate old local Customers.
+
+If manual testing cannot be completed, report exactly why.
+
+==================================================
+VALIDATION
+==================================================
+
+Run:
+
+- focused Customer tests
+- relevant existing test suite
+- TypeScript/typecheck
+- git diff --check
+
+Do not run an unnecessarily huge build if not required.
+
+==================================================
+GIT / CHANGE CONTROL
+==================================================
+
+Before editing:
+- inspect git status
+- inspect relevant existing Customer files
+- inspect current Firestore service
+- inspect current StoreContext integration
+- inspect current Firestore Rules
+
+After editing:
+- inspect git diff
+- confirm only expected files changed
+- confirm no package changes
+- confirm no Rules changes
+- confirm no unrelated financial modules changed
+
+Do NOT modify:
+- firestore.rules
+- Firebase Functions
+- debts
+- payments
+- transactions
+- reminders
+- notifications
+- Workspace membership logic
+
+unless absolutely required to make the Customer CRUD work. If something outside scope appears required, STOP and report it instead of expanding scope.
+
+==================================================
+STOP CONDITIONS
+==================================================
+
+STOP immediately and report if:
+
+- canonical Workspace cannot be determined safely
+- Customer model conflicts with current Firestore Rules
+- Firestore initialization is missing/broken
+- implementing Customer CRUD requires changing Rules
+- implementing Customer CRUD requires Cloud Functions
+- implementation requires a migration
+- implementation requires an offline outbox
+- implementation requires changing Workspace architecture
+- implementation requires changing authentication
+- implementation requires broad StoreContext refactoring
+- implementation requires new dependencies
+
+Do not solve scope problems by weakening security or adding fallback storage.
+
+==================================================
+FINAL REPORT FORMAT
+==================================================
+
+Return exactly:
+
+PHASE 3B STATUS:
+PASS / BLOCKED
+
+FILES CHANGED:
+list exact files
+
+CUSTOMER STORAGE:
+Explain where Customers are now authoritative.
+
+FIRESTORE PATH:
+Show the exact Customer path pattern.
+
+CRUD:
+READ:
+CREATE:
+UPDATE:
+DELETE:
+
+ASYNCSTORAGE:
+Explain whether Customer data still depends on AsyncStorage.
+
+SECURITY:
+Confirm that existing Phase 3A Rules were not weakened or changed.
+
+TESTS:
+Focused tests:
+Full relevant tests:
+TypeScript:
+git diff --check:
+
+MANUAL TEST:
+What was actually tested and the result.
+
+GIT:
+HEAD:
+Working tree:
+Uncommitted changes:
+
+SCOPE CHECK:
+Confirm:
+- no debts
+- no payments
+- no transactions
+- no reminders
+- no notifications
+- no Workspace switching
+- no invitations
+- no migration
+- no offline outbox
+- no new packages
+
+STOP after the report.

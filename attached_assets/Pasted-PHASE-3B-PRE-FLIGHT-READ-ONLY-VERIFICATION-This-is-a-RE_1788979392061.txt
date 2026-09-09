@@ -1,0 +1,380 @@
+PHASE 3B — PRE-FLIGHT READ-ONLY VERIFICATION
+
+This is a READ-ONLY inspection task.
+
+DO NOT:
+- edit files
+- install packages
+- deploy anything
+- commit anything
+- modify firestore.rules
+- modify application code
+- modify tests
+- modify package.json or lockfiles
+- change Firebase configuration
+
+The purpose of this task is ONLY to inspect the CURRENT repository state before we finalize the Phase 3B implementation prompt.
+
+IMPORTANT:
+Do NOT rely on an old snapshot.
+Do NOT rely on memory.
+Do NOT infer missing implementation details.
+Use the CURRENT repository files as the source of truth.
+
+==================================================
+CONTEXT
+==================================================
+
+Project:
+retail-business-manager
+
+Phase 3A has already been completed and manually verified against the real Firebase project.
+
+Verified real Workspace:
+KCFjcWqGvRKry3ObNrVc
+
+Verified owner/member UID:
+Mxq6SJqbaEPrJRFMoJP4SCJNo2L2
+
+Second test account UID:
+z32HXyu4xHTTLTmnzNIBzp4WXbo2
+
+Manual Firebase Rules Playground verification already completed:
+
+1. Authenticated active Workspace member:
+   Operation: get
+   Path:
+   spaces/KCFjcWqGvRKry3ObNrVc/customers/test-customer
+   UID:
+   Mxq6SJqbaEPrJRFMoJP4SCJNo2L2
+   Result:
+   Simulated read allowed
+
+2. Authenticated non-member:
+   Operation: get
+   Same customer path
+   UID:
+   z32HXyu4xHTTLTmnzNIBzp4WXbo2
+   Result:
+   Simulated read denied
+
+3. Unauthenticated:
+   Customer read
+   Result:
+   Simulated read denied
+
+The failed Customer create simulation is NOT being treated as a production Rules failure because it used synthetic test data and was not a valid production Customer creation test.
+
+==================================================
+1. CURRENT CUSTOMER FIRESTORE RULE SCHEMA
+==================================================
+
+Open the CURRENT repository file:
+
+firestore.rules
+
+Find the CURRENT implementation of:
+
+isValidCustomerDocument(...)
+
+Copy the COMPLETE implementation exactly as it currently exists.
+
+Do NOT paraphrase it.
+
+Do NOT reconstruct it from memory.
+
+Do NOT use an older snapshot.
+
+Then explain exactly what fields, types, and constraints it currently validates for Customer documents.
+
+Also identify the current rule block for:
+
+/spaces/{spaceId}/customers/{customerId}
+
+Show the exact current read/create/update/delete authorization conditions.
+
+Confirm whether the current rules use:
+
+- request.auth
+- active Workspace membership
+- customerId
+- workspaceId
+- storeId
+- createdByUserId
+- any other fields
+
+Do not modify the Rules.
+
+==================================================
+2. CURRENT CUSTOMER DELETE SEMANTICS
+==================================================
+
+Inspect the CURRENT Customer implementation in the repository.
+
+Find the actual existing Customer delete function/action and determine whether deleting a Customer currently means:
+
+A) SOFT DELETE
+   Example:
+   isActive = false
+
+B) HARD DELETE
+   Example:
+   remove/delete the Customer record
+
+C) OTHER BEHAVIOR
+
+Do NOT infer from the existence of an isActive field.
+
+Show the exact relevant file and function/logic that proves the current behavior.
+
+Important architectural context:
+
+The approved target architecture from the Cloud Architecture design is:
+
+Customer = soft delete.
+
+However, we must NOT assume the current implementation already follows this.
+
+Report the current implementation first.
+
+If current behavior differs from the approved target architecture, explicitly identify the difference.
+
+Do NOT fix it.
+
+Do NOT change it.
+
+==================================================
+3. CURRENT CUSTOMER READ ARCHITECTURE
+==================================================
+
+Inspect the CURRENT Customer loading/subscription implementation.
+
+Determine whether Customer reads currently use:
+
+- onSnapshot
+- getDocs
+- getDoc
+- another mechanism
+- a combination
+
+Show the relevant file/function and explain the current behavior.
+
+Do NOT modify it.
+
+Important for Phase 3B:
+
+The final Phase 3B architecture is intended to use a REAL-TIME Firestore listener for the Customer list:
+
+onSnapshot
+
+The final implementation should support real-time multi-device Customer updates without requiring manual refresh.
+
+However, this pre-flight task is READ-ONLY.
+
+Do not implement onSnapshot now.
+
+==================================================
+4. DEBT → CUSTOMER REFERENCES
+==================================================
+
+Inspect the CURRENT:
+
+- Debt model
+- Customer model
+- Customer storage implementation
+- Debt storage implementation
+- Customer ID generation
+- Debt creation/update logic
+
+Confirm exactly how:
+
+Debt.customerId
+
+relates to:
+
+Customer.id
+
+Determine whether existing local Debts may reference Customer IDs from the old local Customer storage.
+
+Determine whether any current code:
+
+- migrates Customer IDs
+- reconciles Debt.customerId
+- maps old Customer IDs to Firestore Customer IDs
+- synchronizes local Customer IDs with cloud Customer IDs
+- performs any other Debt-Customer migration
+
+Do NOT fix anything.
+
+Do NOT migrate anything.
+
+Do NOT modify Debt.
+
+IMPORTANT ARCHITECTURAL DECISION:
+
+Existing local Debts may reference customerId values from the old local Customer store.
+
+This mismatch is KNOWN and ACCEPTED for Phase 3B.
+
+DO NOT attempt to:
+- fix it
+- reconcile it
+- migrate it
+- rewrite Debt.customerId
+- create a compatibility mapping
+
+This will be addressed in a future phase.
+
+==================================================
+5. CUSTOMER ID GENERATION
+==================================================
+
+Inspect how Customer IDs are currently generated.
+
+Report:
+
+- where IDs are generated
+- whether IDs are deterministic or random
+- whether the same Customer ID is expected to survive updates
+- whether the current ID mechanism can safely be used as a Firestore document ID
+
+Do NOT change the ID generation mechanism.
+
+==================================================
+6. ASYNCSTORAGE CUSTOMER AUTHORITY
+==================================================
+
+Inspect the CURRENT Customer persistence path.
+
+Determine:
+
+- where Customers are currently stored
+- which functions read them
+- which functions create/update/delete them
+- whether AsyncStorage is currently authoritative
+- whether Customer data is shared with unrelated storage functions
+
+Do NOT change anything.
+
+Do NOT migrate existing local Customers.
+
+Do NOT delete existing local Customer data.
+
+Current local/test data is disposable and does not require migration.
+
+==================================================
+7. GIT EVIDENCE
+==================================================
+
+This is READ-ONLY.
+
+Before finishing, run:
+
+git status
+
+Also inspect:
+
+git rev-parse HEAD
+
+and, if useful:
+
+git log -5 --oneline
+
+Do NOT make any changes.
+
+FINAL REPORT MUST INCLUDE THE ACTUAL OUTPUT OF:
+
+git status
+
+and:
+
+git rev-parse HEAD
+
+Do not merely say "working tree clean".
+
+The purpose is to independently verify that this inspection task made no changes.
+
+==================================================
+8. NO IMPLEMENTATION
+==================================================
+
+This task must NOT:
+
+- modify firestore.rules
+- modify Customer code
+- modify Debt code
+- modify StoreContext
+- modify Firebase services
+- modify tests
+- install packages
+- modify package.json
+- modify pnpm-lock.yaml
+- deploy Firebase Rules
+- deploy Functions
+- commit anything
+- create new files
+- delete files
+
+If you discover something that needs to change for Phase 3B, report it only.
+
+==================================================
+FINAL REPORT FORMAT
+==================================================
+
+Return exactly the following sections:
+
+PHASE 3B PRE-FLIGHT STATUS:
+READY / BLOCKED
+
+1. CURRENT CUSTOMER RULE VALIDATION:
+- Exact current isValidCustomerDocument implementation
+- Exact Customer Rule block
+- Exact validated fields/types/constraints
+- Exact authorization conditions
+
+2. CURRENT CUSTOMER DELETE SEMANTICS:
+- SOFT / HARD / OTHER
+- Exact file/function evidence
+- Difference from approved target architecture, if any
+
+3. CURRENT CUSTOMER READ:
+- onSnapshot / getDocs / getDoc / other
+- Exact file/function evidence
+- Current behavior
+
+4. DEBT → CUSTOMER REFERENCES:
+- Debt.customerId behavior
+- Customer.id behavior
+- Whether old local IDs can differ
+- Whether any reconciliation/migration currently exists
+
+5. CUSTOMER ID GENERATION:
+- Exact current mechanism
+- Relevant file/function
+- Firestore compatibility assessment
+
+6. CURRENT CUSTOMER STORAGE:
+- AsyncStorage usage
+- Firestore usage, if any
+- Current authoritative source
+
+7. RISKS / IMPORTANT FINDINGS FOR PHASE 3B:
+- Only actual findings from the current repository
+- No speculation
+
+8. RECOMMENDED PHASE 3B PROMPT CHANGES:
+Based ONLY on the current repository inspection, list the exact changes that should be made to the Phase 3B implementation prompt.
+
+Do NOT implement any of these changes in this task.
+
+9. GIT STATUS:
+git status output:
+[paste actual output]
+
+git rev-parse HEAD:
+[paste actual output]
+
+Confirm:
+NO FILES WERE CHANGED BY THIS TASK.
+
+STOP.
