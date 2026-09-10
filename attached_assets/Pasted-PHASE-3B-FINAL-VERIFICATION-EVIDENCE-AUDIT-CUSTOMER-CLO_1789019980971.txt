@@ -1,0 +1,625 @@
+PHASE 3B — FINAL VERIFICATION & EVIDENCE AUDIT
+CUSTOMER CLOUD CRUD
+DOCUMENTATION / VERIFICATION ONLY — NO CODE CHANGES
+
+We are performing the FINAL EVIDENCE AUDIT for Phase 3B — Customer Cloud CRUD.
+
+This is NOT an implementation task.
+
+Your only job is to inspect the CURRENT repository state and provide direct evidence that Phase 3B was actually implemented as claimed.
+
+==================================================
+ABSOLUTE RULES
+==================================================
+
+DO NOT modify any project file.
+
+DO NOT:
+- fix anything
+- refactor anything
+- improve anything
+- reinstall packages
+- add dependencies
+- deploy anything
+- change Firestore Rules
+- change Firebase Functions
+- migrate data
+- reconcile data
+- create new files
+- delete files
+- commit changes
+
+Do not make "small fixes".
+
+If you discover a problem, STOP and report it.
+
+Do not describe what SHOULD exist.
+Show what ACTUALLY exists in the CURRENT repository.
+
+Do not use previous Agent reasoning, previous reports, or intended implementation as evidence.
+
+Only:
+1. current source code
+2. actual Git output
+3. actual test output
+4. actual runtime/manual test results
+
+may be used as evidence.
+
+==================================================
+1. CURRENT GIT STATE — REQUIRED
+==================================================
+
+Run these commands exactly:
+
+git status --short
+git rev-parse HEAD
+git branch --show-current
+git diff --stat
+git diff --name-only
+
+Show the actual relevant command output.
+
+Do NOT paraphrase it.
+
+Then state:
+
+- current HEAD
+- current branch
+- whether the working tree is clean
+- which files are modified, if any
+- whether there are untracked files
+
+IMPORTANT:
+Do not commit anything during this verification.
+
+==================================================
+2. CURRENT updateCustomer IMPLEMENTATION — CRITICAL
+==================================================
+
+Locate the CURRENT Firestore implementation of:
+
+updateCustomer
+
+Also locate any helper that constructs the update payload.
+
+Show the actual current code.
+
+I need to verify that Customer updates send ONLY editable fields.
+
+The update operation must NOT blindly resend or overwrite immutable identity fields such as:
+
+- id
+- workspaceId
+- createdByUserId
+- createdAt
+
+Also verify that an update cannot accidentally reactivate a soft-deleted customer by sending an old/stale:
+
+isActive = true
+
+Show the actual implementation.
+
+Then provide:
+
+UPDATE CUSTOMER: PASS / FAIL
+
+If FAIL, explain exactly why.
+
+DO NOT FIX IT.
+
+==================================================
+3. CURRENT app/customer/[id].tsx — CRITICAL
+==================================================
+
+Read the CURRENT file:
+
+app/customer/[id].tsx
+
+Show the relevant actual code proving how this screen handles:
+
+A. Loading the Customer
+B. Updating the Customer
+C. Soft deleting the Customer
+D. Customer-related actions
+E. Passing the Customer ID to debt-related actions, if applicable
+
+I specifically need evidence that Customer data is no longer loaded from AsyncStorage as the authoritative source.
+
+Verify that Customer deletion is implemented as a Firestore update equivalent to:
+
+updateDoc(..., { isActive: false })
+
+or an equivalent update operation.
+
+It MUST NOT use:
+
+deleteDoc()
+
+It MUST NOT physically delete the Firestore Customer document.
+
+Show the actual current code.
+
+Then provide:
+
+CUSTOMER DETAIL SCREEN: PASS / FAIL
+
+DO NOT FIX ANYTHING.
+
+==================================================
+4. CURRENT CustomerProvider — CRITICAL
+==================================================
+
+Locate and show the CURRENT CustomerProvider implementation.
+
+Verify directly:
+
+- How it obtains the canonical Workspace/spaceId.
+- Whether it depends on SpaceIdentity.
+- Whether it depends on storeId.
+- Whether it uses bootstrapPrimarySpace or another trusted Workspace resolution path.
+- How it handles loading/error states.
+- How it shares the Customer subscription across the application.
+
+Show the actual code.
+
+Then provide:
+
+CUSTOMER PROVIDER: PASS / FAIL
+
+==================================================
+5. CURRENT subscribeToCustomers — CRITICAL
+==================================================
+
+Locate and show the CURRENT implementation of:
+
+subscribeToCustomers
+
+I need direct evidence that:
+
+- Firestore is the authoritative Customer source.
+- onSnapshot is actually used.
+- The subscription listens to the canonical Workspace path.
+- There is one shared subscription at the provider/application level.
+- Individual Customer screens do NOT create their own Customer list listener.
+- The listener is properly unsubscribed during cleanup.
+- No AsyncStorage fallback is used for Customer reads.
+
+Show the actual code.
+
+Then provide:
+
+CUSTOMER REAL-TIME SUBSCRIPTION: PASS / FAIL
+
+==================================================
+6. DEFAULT CUSTOMER LIST — REQUIRED
+==================================================
+
+Show the actual current code that determines which Customers appear in the normal/default Customer list.
+
+Verify that:
+
+isActive == false
+
+Customers are excluded from the default list.
+
+Verify that inactive Customers remain in Firestore rather than being physically deleted.
+
+There is NO requirement to implement a deleted-customer UI in Phase 3B.
+
+Then provide:
+
+DEFAULT CUSTOMER LIST: PASS / FAIL
+
+==================================================
+7. CUSTOMER CREATE — REQUIRED
+==================================================
+
+Show the CURRENT Firestore Customer creation implementation.
+
+Verify:
+
+- The canonical Workspace/spaceId is used.
+- The document path is:
+
+spaces/{spaceId}/customers/{customerId}
+
+- The existing Customer ID generation is preserved unless there is a documented necessary reason for changing it.
+- The created document is compatible with the CURRENT Firestore Rules contract.
+- No client-supplied UID is being used as the authorization identity.
+
+Show actual code.
+
+Then provide:
+
+CUSTOMER CREATE: PASS / FAIL
+
+==================================================
+8. CUSTOMER UPDATE FIELD SAFETY — REQUIRED
+==================================================
+
+Independently verify the fields allowed to change during Customer update.
+
+The update should preserve identity/security fields.
+
+Specifically verify behavior for:
+
+- id
+- workspaceId
+- createdByUserId
+- createdAt
+- isActive
+
+If the implementation uses an explicit editable-field list, show it.
+
+If it uses another mechanism, show the actual mechanism.
+
+Do not assume correctness from TypeScript types alone.
+
+Then provide:
+
+UPDATE FIELD SAFETY: PASS / FAIL
+
+==================================================
+9. SOFT DELETE SEMANTICS — REQUIRED
+==================================================
+
+Verify the CURRENT deletion implementation from the actual source code.
+
+Requirements:
+
+- Firestore Customer document remains present.
+- Deletion is logical.
+- isActive becomes false.
+- deleteDoc() is NOT used.
+- Required identity fields remain intact.
+- A later Customer update cannot unintentionally reactivate the customer.
+
+Show the relevant code.
+
+Then provide:
+
+SOFT DELETE: PASS / FAIL
+
+==================================================
+10. CURRENT FIRESTORE RULES — READ ONLY
+==================================================
+
+DO NOT modify firestore.rules.
+
+Show the CURRENT Customer Rules block exactly as it exists.
+
+Also show the relevant helper(s), especially:
+
+isActiveMember
+
+and the current Customer document validation function, if present.
+
+Verify that the Phase 3B implementation is compatible with these Rules.
+
+Do not change Rules.
+
+Then provide:
+
+CUSTOMER RULE COMPATIBILITY: PASS / FAIL
+
+==================================================
+11. DEBT / customerId CONSTRAINT — REQUIRED
+==================================================
+
+Confirm from the current Git/source state that Phase 3B did NOT perform:
+
+- Debt migration
+- customerId migration
+- customerId remapping
+- reconciliation
+- repair of old local Debt.customerId values
+
+Existing local Debts may reference old local Customer IDs.
+
+This mismatch is KNOWN and ACCEPTED for Phase 3B.
+
+This is intentional.
+
+Do not fix or migrate it.
+
+Report whether any such migration/reconciliation was actually performed.
+
+Then provide:
+
+DEBT CUSTOMER-ID MIGRATION: NOT PERFORMED / FOUND
+
+==================================================
+12. BACKUP / RESTORE CONSTRAINT — REQUIRED
+==================================================
+
+Confirm whether Phase 3B changed Backup/Restore.
+
+Use Git evidence, not memory or assumptions.
+
+The following must remain outside Phase 3B:
+
+- backup implementation
+- restore implementation
+- backup validation
+- backup UI
+
+If moving Customers to Firestore means the existing local Backup/Restore mechanism is now incomplete or potentially misleading for Customers:
+
+DO NOT FIX IT.
+
+Report:
+
+BACKUP/RESTORE FOLLOW-UP REQUIRED
+
+and explain exactly why.
+
+If it is not affected in a material way, explain why.
+
+Then provide:
+
+BACKUP/RESTORE: UNCHANGED / FOLLOW-UP REQUIRED
+
+==================================================
+13. TEST EVIDENCE — CURRENT STATE ONLY
+==================================================
+
+Report the ACTUAL latest results from the CURRENT repository state.
+
+Run the appropriate existing verification commands, but DO NOT modify anything.
+
+Report:
+
+A. TypeScript
+
+B. Full test suite
+
+C. git diff --check
+
+D. Expo preview/runtime check, IF actually performed
+
+For every test:
+
+- show the exact command
+- show the actual result
+- report passed/failed counts when available
+
+IMPORTANT:
+
+Do NOT claim:
+
+"211 tests passed"
+
+or any other number unless the test command was actually executed against the CURRENT final repository state.
+
+Do not rely on an earlier Agent message.
+
+Then provide:
+
+AUTOMATED VERIFICATION: PASS / FAIL / PARTIAL
+
+==================================================
+14. MANUAL FIREBASE TEST — CRITICAL
+==================================================
+
+I previously required real manual verification against the actual Firebase project.
+
+If it was actually performed, report each relevant step and its actual result.
+
+If it was NOT performed, explicitly write:
+
+MANUAL FIREBASE TEST: NOT PERFORMED
+
+Do NOT substitute:
+
+- TypeScript
+- unit tests
+- static inspection
+- Firebase Rules Playground
+- Expo preview
+
+for the required manual Firebase test.
+
+Do NOT imply that those are equivalent.
+
+Do NOT invent any manual test result.
+
+If the manual test was only partially performed, clearly identify which steps were and were not performed.
+
+Then provide:
+
+MANUAL FIREBASE VERIFICATION: PASS / PARTIAL / NOT PERFORMED
+
+==================================================
+15. INITIALIZATION ORDER — CRITICAL
+==================================================
+
+The previous Agent reasoning claimed:
+
+"CustomerProvider inside ErrorBoundary prevents Firebase initialization errors from bypassing the error UI, and UID reading does not begin before authentication state is resolved."
+
+This is an architectural claim that must now be verified from the ACTUAL CURRENT CODE.
+
+Show the relevant current code proving:
+
+A. CustomerProvider does not attempt to resolve spaceId before Firebase Auth state is resolved.
+
+B. CustomerProvider does not subscribe to Customers before a valid authenticated user is available.
+
+C. Workspace resolution happens only after the required Auth state is available.
+
+D. What happens if bootstrapPrimarySpace / Workspace resolution fails:
+
+- Does CustomerProvider remain idle?
+- Does it retry?
+- Does it show an error?
+- Does it throw?
+- Does it create a local fallback?
+- Does it accidentally subscribe using a local SpaceIdentity or storeId?
+
+Show the actual control flow.
+
+E. Verify the relationship/order between:
+
+Firebase Auth
+→ Workspace resolution
+→ Customer subscription
+
+Do not infer this from filenames or comments.
+
+Then provide:
+
+INITIALIZATION ORDER: PASS / FAIL
+
+==================================================
+16. ASYNCSTORAGE AUTHORITY CHECK — REQUIRED
+==================================================
+
+Search the CURRENT Customer-related UI and services for AsyncStorage/local Customer reads.
+
+Verify that AsyncStorage is NOT being used as the authoritative Customer source in:
+
+- Customer list
+- Customer detail
+- Customer create
+- Customer update
+- Customer delete
+- Customer-related quick actions
+
+If AsyncStorage still exists anywhere in Customer-related code, identify exactly where and explain whether it is:
+
+- authoritative business data
+- cache
+- temporary UI state
+- legacy/unused code
+
+Do not remove anything.
+
+Then provide:
+
+CUSTOMER CLOUD AUTHORITY: PASS / FAIL
+
+==================================================
+17. SCOPE CONTROL / UNRELATED CHANGES — REQUIRED
+==================================================
+
+Using Git evidence, identify whether Phase 3B changed anything outside its intended scope.
+
+Specifically check for unintended changes to:
+
+- Debts
+- Payments
+- Reminders
+- Cash
+- Daily Closing
+- Backup/Restore
+- Firebase Functions
+- Firestore Rules
+- authentication behavior
+- unrelated UI
+- package dependencies
+- navigation architecture
+
+Do not fix anything.
+
+Report any unrelated modifications.
+
+Then provide:
+
+SCOPE CONTROL: PASS / FAIL
+
+==================================================
+18. FINAL EVIDENCE TABLE
+==================================================
+
+At the end create a concise table:
+
+| Area | Evidence found | Status |
+|---|---|---|
+| Git state | ... | PASS/FAIL |
+| updateCustomer | ... | PASS/FAIL |
+| Customer detail | ... | PASS/FAIL |
+| CustomerProvider | ... | PASS/FAIL |
+| onSnapshot | ... | PASS/FAIL |
+| Listener cleanup | ... | PASS/FAIL |
+| Default active-only list | ... | PASS/FAIL |
+| Customer create | ... | PASS/FAIL |
+| Update field safety | ... | PASS/FAIL |
+| Soft delete | ... | PASS/FAIL |
+| Firestore Rules | ... | PASS/FAIL |
+| Debt/customerId migration | ... | NOT PERFORMED/FOUND |
+| Backup/Restore | ... | UNCHANGED/FOLLOW-UP |
+| TypeScript | ... | PASS/FAIL |
+| Tests | ... | PASS/FAIL |
+| Manual Firebase test | ... | PASS/PARTIAL/NOT PERFORMED |
+| Initialization order | ... | PASS/FAIL |
+| AsyncStorage authority | ... | PASS/FAIL |
+| Scope control | ... | PASS/FAIL |
+
+==================================================
+19. FINAL VERDICT
+==================================================
+
+Give exactly ONE final status:
+
+PHASE 3B STATUS:
+PASS
+
+or:
+
+PHASE 3B STATUS:
+PASS WITH UNVERIFIED ITEMS
+
+or:
+
+PHASE 3B STATUS:
+FAIL
+
+Do not give PASS merely because TypeScript/tests pass.
+
+Do not give PASS if critical implementation evidence is missing.
+
+Do not give PASS if the manual Firebase verification is claimed but not actually demonstrated.
+
+Then list:
+
+A. PROVEN COMPLETE
+B. NOT PROVEN
+C. INTENTIONALLY DEFERRED
+D. FOLLOW-UP REQUIRED
+
+==================================================
+FINAL ABSOLUTE RULE
+==================================================
+
+This entire task is READ-ONLY VERIFICATION.
+
+Do not change the code even if you discover a bug.
+
+Do not fix anything.
+
+Do not install anything.
+
+Do not deploy anything.
+
+Do not commit anything.
+
+Do not create files.
+
+Do not use previous Agent claims as evidence.
+
+If something is missing, say:
+
+NOT VERIFIED
+
+If something was not performed, say:
+
+NOT PERFORMED
+
+If something is wrong, say:
+
+FAIL
+
+The goal is not to make Phase 3B pass.
+
+The goal is to determine whether Phase 3B is actually complete based on direct evidence from the CURRENT project state.
