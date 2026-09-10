@@ -1,6 +1,5 @@
 import React, { createContext, ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
 import type { Customer } from '@/types/business';
-import { bootstrapPrimarySpace } from '@/services/trustedBootstrap';
 import { getFirebaseAuth, isFirebaseConfigured } from '@/services/firebase';
 import {
   createCustomerDocument,
@@ -24,12 +23,17 @@ interface CustomerContextValue {
 const CustomerContext = createContext<CustomerContextValue | null>(null);
 
 export function CustomerProvider({ children }: { children: ReactNode }) {
-  const { isAuthenticated, isReady } = useStore();
+  const {
+    isAuthenticated,
+    activeSpaceId,
+    activeSpaceLoading,
+    activeSpaceError,
+    retryActiveSpace,
+  } = useStore();
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [canonicalSpaceId, setCanonicalSpaceId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
-  const [retryToken, setRetryToken] = useState<number>(0);
   const firebaseUid = isFirebaseConfigured && isAuthenticated
     ? getFirebaseAuth().currentUser?.uid ?? null
     : null;
@@ -44,9 +48,6 @@ export function CustomerProvider({ children }: { children: ReactNode }) {
 
     if (!isFirebaseConfigured) {
       setIsLoading(false);
-      if (isAuthenticated) {
-        setError('firebaseNotConfigured');
-      }
       return () => {
         active = false;
       };
@@ -59,61 +60,58 @@ export function CustomerProvider({ children }: { children: ReactNode }) {
       };
     }
 
-    if (!isReady) {
+    if (activeSpaceError) {
+      setIsLoading(false);
+      setError(activeSpaceError);
+      return () => {
+        active = false;
+      };
+    }
+
+    if (activeSpaceLoading || !activeSpaceId) {
       setIsLoading(true);
       return () => {
         active = false;
       };
     }
 
+    setCanonicalSpaceId(activeSpaceId);
     setIsLoading(true);
-    void bootstrapPrimarySpace()
-      .then((bootstrapResult) => {
-        const nextSpaceId = bootstrapResult.primarySpaceId.trim();
-        if (!nextSpaceId || bootstrapResult.space.spaceId !== nextSpaceId) {
-          throw new Error('invalidBootstrapResponse');
-        }
+    unsubscribe = subscribeToCustomers(
+      activeSpaceId,
+      (nextCustomers) => {
         if (!active) {
           return;
         }
-
-        setCanonicalSpaceId(nextSpaceId);
-        unsubscribe = subscribeToCustomers(
-          nextSpaceId,
-          (nextCustomers) => {
-            if (!active) {
-              return;
-            }
-            setCustomers(nextCustomers);
-            setIsLoading(false);
-            setError(null);
-          },
-          (listenerError) => {
-            if (!active) {
-              return;
-            }
-            setIsLoading(false);
-            setError(listenerError.message);
-          },
-        );
-      })
-      .catch((bootstrapError) => {
+        setCustomers(nextCustomers);
+        setIsLoading(false);
+        setError(null);
+      },
+      (listenerError) => {
         if (!active) {
           return;
         }
         setIsLoading(false);
-        setError(bootstrapError instanceof Error ? bootstrapError.message : 'customerWorkspaceUnavailable');
-      });
+        setError(listenerError.message);
+      },
+    );
 
     return () => {
       active = false;
       unsubscribe?.();
     };
-  }, [firebaseUid, isAuthenticated, isReady, retryToken]);
+  }, [
+    activeSpaceError,
+    activeSpaceId,
+    activeSpaceLoading,
+    firebaseUid,
+    isAuthenticated,
+    retryActiveSpace,
+  ]);
 
   const retryCustomers = useCallback(() => {
-    setRetryToken((current) => current + 1);
-  }, []);
+    retryActiveSpace();
+  }, [retryActiveSpace]);
 
   const createCustomer = useCallback(async (customer: Customer) => {
     if (!canonicalSpaceId) {

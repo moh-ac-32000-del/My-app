@@ -32,7 +32,7 @@ vi.mock('@/services/firebase', () => ({
   isFirebaseConfigured: true,
 }));
 
-import { discoverUserSpaces } from '@/services/firestore';
+import { discoverUserSpaces, validateUserSpaceMembership } from '@/services/firestore';
 
 describe('Space discovery', () => {
   beforeEach(() => {
@@ -122,5 +122,30 @@ describe('Space discovery', () => {
     expect(firestoreState.getDoc).toHaveBeenCalledTimes(1);
     expect(firestoreState.getDocs).toHaveBeenCalledTimes(1);
     expect(firestoreState.setDoc).not.toHaveBeenCalled();
+  });
+
+  it('validates the active membership from the Workspace member document', async () => {
+    firestoreState.getDoc.mockImplementation(async (reference: { path?: string }) => {
+      if (reference.path === 'spaces/space-a/members/firebase-user-a') {
+        return {
+          exists: () => true,
+          data: () => ({
+            spaceId: 'space-a',
+            userId: 'firebase-user-a',
+            status: 'active',
+          }),
+        };
+      }
+      return {
+        exists: () => false,
+        data: () => undefined,
+      };
+    });
+
+    await expect(validateUserSpaceMembership('firebase-user-a', 'space-a')).resolves.toBe(true);
+    await expect(validateUserSpaceMembership('firebase-user-a', 'space-b')).resolves.toBe(false);
+    expect(firestoreState.getDoc).toHaveBeenCalledWith(
+      expect.objectContaining({ path: 'spaces/space-a/members/firebase-user-a' }),
+    );
   });
 });

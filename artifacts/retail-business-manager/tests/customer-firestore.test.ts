@@ -88,6 +88,25 @@ describe('customer Firestore service', () => {
     expect(onError).not.toHaveBeenCalled();
   });
 
+  it('unsubscribes from the previous Workspace before subscribing to the next one', () => {
+    const firstUnsubscribe = subscribeToCustomers('space-A', vi.fn(), vi.fn());
+    firstUnsubscribe();
+    const secondUnsubscribe = subscribeToCustomers('space-B', vi.fn(), vi.fn());
+
+    expect(firestoreMocks.collection).toHaveBeenNthCalledWith(
+      1,
+      expect.anything(),
+      'spaces/space-A/customers',
+    );
+    expect(firestoreMocks.collection).toHaveBeenNthCalledWith(
+      2,
+      expect.anything(),
+      'spaces/space-B/customers',
+    );
+    expect(firestoreMocks.unsubscribe).toHaveBeenCalledTimes(1);
+    expect(secondUnsubscribe).toBe(firestoreMocks.unsubscribe);
+  });
+
   it('creates a Customer under the canonical Workspace path with authenticated ownership metadata', async () => {
     await createCustomerDocument('space-A', { ...customer, workspaceId: undefined, createdByUserId: undefined });
 

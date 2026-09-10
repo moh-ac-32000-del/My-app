@@ -8,6 +8,7 @@ import type { SpaceDiscoveryResult, SpaceIdentity } from '@/types/space';
 import type { MembershipDiscoveryIndexEntry } from '@/types/trustedBootstrap';
 
 const LEGACY_LOCAL_STORE_ID = 'local-store';
+
 export async function discoverUserSpaces(uid: string): Promise<SpaceDiscoveryResult> {
   const normalizedUid = uid.trim();
   if (!normalizedUid) {
@@ -38,6 +39,33 @@ export async function discoverUserSpaces(uid: string): Promise<SpaceDiscoveryRes
     // activeSpaceId is an in-memory namespace selector, not a persisted last-active source.
     lastActiveSpaceId: null,
   };
+}
+
+export async function validateUserSpaceMembership(uid: string, spaceId: string): Promise<boolean> {
+  const normalizedUid = uid.trim();
+  const normalizedSpaceId = spaceId.trim();
+  if (!normalizedUid) {
+    throw new Error('firebaseUserIdRequired');
+  }
+  if (!normalizedSpaceId || normalizedSpaceId === LEGACY_LOCAL_STORE_ID) {
+    throw new Error('cloudSpaceIdInvalid');
+  }
+
+  const membershipSnapshot = await getDoc(doc(
+    getFirestoreInstance(),
+    FIRESTORE_WORKSPACE_COLLECTIONS.spaces,
+    normalizedSpaceId,
+    FIRESTORE_WORKSPACE_COLLECTIONS.members,
+    normalizedUid,
+  ));
+  if (!membershipSnapshot.exists()) {
+    return false;
+  }
+
+  const membership = membershipSnapshot.data();
+  return membership.spaceId === normalizedSpaceId
+    && membership.userId === normalizedUid
+    && membership.status === 'active';
 }
 
 let firestore: Firestore | null = null;

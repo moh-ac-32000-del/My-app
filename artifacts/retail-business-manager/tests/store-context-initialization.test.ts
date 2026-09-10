@@ -4,11 +4,15 @@ import {
   clearFirebaseAuthSession,
   initializePostAuthLocalSession,
   isFirebaseSessionAuthenticated,
+  resolveActiveSpaceForUser,
 } from '@/context/StoreContext';
 
 const getOrCreateSpaceIdentityMock = vi.hoisted(() => vi.fn());
 const loadStoreProfileMock = vi.hoisted(() => vi.fn());
 const saveStoreProfileMock = vi.hoisted(() => vi.fn());
+const discoverUserSpacesMock = vi.hoisted(() => vi.fn());
+const validateUserSpaceMembershipMock = vi.hoisted(() => vi.fn());
+const bootstrapPrimarySpaceMock = vi.hoisted(() => vi.fn());
 
 vi.mock('@/services/firebase', () => ({
   isFirebaseConfigured: false,
@@ -21,6 +25,15 @@ vi.mock('@/services/firebaseAuth', () => ({
 
 vi.mock('@/services/spaceIdentity', () => ({
   getOrCreateSpaceIdentity: getOrCreateSpaceIdentityMock,
+}));
+
+vi.mock('@/services/firestore', () => ({
+  discoverUserSpaces: discoverUserSpacesMock,
+  validateUserSpaceMembership: validateUserSpaceMembershipMock,
+}));
+
+vi.mock('@/services/trustedBootstrap', () => ({
+  bootstrapPrimarySpace: bootstrapPrimarySpaceMock,
 }));
 
 vi.mock('@/services/storage', () => ({
@@ -63,6 +76,9 @@ describe('post-auth local initialization', () => {
     getOrCreateSpaceIdentityMock.mockReset().mockResolvedValue(identity);
     loadStoreProfileMock.mockReset().mockResolvedValue(null);
     saveStoreProfileMock.mockReset().mockResolvedValue(undefined);
+    discoverUserSpacesMock.mockReset();
+    validateUserSpaceMembershipMock.mockReset();
+    bootstrapPrimarySpaceMock.mockReset();
   });
 
   it('keeps the authenticated user when local initialization fails and can retry', async () => {
@@ -149,6 +165,52 @@ describe('post-auth local initialization', () => {
 
     expect(callbacks.onProfile).toHaveBeenCalledWith(storeProfile);
     expect(storeProfile.id).not.toBe(identity.spaceId);
+  });
+
+  it('resolves the single active membership after discovery and validates its member document', async () => {
+    discoverUserSpacesMock.mockResolvedValueOnce({
+      memberships: [{
+        spaceId: 'space-A',
+        role: 'owner',
+        status: 'active',
+        spaceNameSnapshot: 'Space A',
+        joinedAt: '2026-09-05T12:00:00.000Z',
+        updatedAt: '2026-09-05T12:00:00.000Z',
+      }],
+      primarySpaceId: 'space-A',
+      lastActiveSpaceId: null,
+    });
+    validateUserSpaceMembershipMock.mockResolvedValueOnce(true);
+
+    await expect(resolveActiveSpaceForUser(firebaseUser.uid)).resolves.toBe('space-A');
+    expect(validateUserSpaceMembershipMock).toHaveBeenCalledWith(firebaseUser.uid, 'space-A');
+    expect(bootstrapPrimarySpaceMock).not.toHaveBeenCalled();
+  });
+
+  it('uses bootstrap when discovery has no primary Space and keeps auth independent from bootstrap failure', async () => {
+    discoverUserSpacesMock.mockResolvedValueOnce({
+      memberships: [],
+      primarySpaceId: null,
+      lastActiveSpaceId: null,
+    });
+    bootstrapPrimarySpaceMock.mockRejectedValueOnce(new Error('bootstrapUnavailable'));
+
+    await expect(resolveActiveSpaceForUser(firebaseUser.uid)).rejects.toThrow('bootstrapUnavailable');
+    expect(isFirebaseSessionAuthenticated(firebaseUser)).toBe(true);
+  });
+
+  it('does not choose between multiple active memberships', async () => {
+    discoverUserSpacesMock.mockResolvedValueOnce({
+      memberships: [
+        { spaceId: 'space-A', role: 'owner', status: 'active' },
+        { spaceId: 'space-B', role: 'manager', status: 'active' },
+      ],
+      primarySpaceId: 'space-A',
+      lastActiveSpaceId: null,
+    });
+
+    await expect(resolveActiveSpaceForUser(firebaseUser.uid)).rejects.toThrow('multipleWorkspacesUnsupported');
+    expect(validateUserSpaceMembershipMock).not.toHaveBeenCalled();
   });
 
   it('clears Firebase authentication and session state on real auth loss', () => {

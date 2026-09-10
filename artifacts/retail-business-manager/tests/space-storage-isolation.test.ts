@@ -37,6 +37,7 @@ import {
   saveStoreProfile,
   saveTransactions,
   serializeLocalBackup,
+  getActiveSpaceId,
   setActiveSpaceId,
 } from '@/services/storage';
 
@@ -259,5 +260,18 @@ describe('local Space storage isolation', () => {
 
     setActiveSpaceId('space_A');
     await expect(loadCustomers(STORE_ID)).resolves.toEqual([originalA.customer]);
+  });
+
+  it('clears the active local namespace on logout before another account is processed', async () => {
+    setActiveSpaceId('space_A');
+    await seedSpace('A', 100, '2026-08-29');
+
+    setActiveSpaceId(null);
+
+    expect(getActiveSpaceId()).toBeNull();
+    await expect(loadCustomers(STORE_ID)).resolves.toEqual([]);
+    await expect(loadTransactions(STORE_ID)).resolves.toEqual([]);
+    await expect(loadDebts(STORE_ID)).resolves.toEqual([]);
+    await expect(loadPayments(STORE_ID)).resolves.toEqual([]);
   });
 });
