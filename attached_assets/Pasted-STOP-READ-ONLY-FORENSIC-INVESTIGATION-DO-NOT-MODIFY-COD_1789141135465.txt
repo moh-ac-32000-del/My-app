@@ -1,0 +1,230 @@
+STOP — READ-ONLY FORENSIC INVESTIGATION.
+DO NOT MODIFY CODE. DO NOT MODIFY DATA. DO NOT COMMIT.
+
+We have confirmed a Cloud/Local data-source split in the current application.
+
+Observed:
+1. Customer "Apo abi", previously soft-deleted during testing, has reappeared in the Customers screen.
+2. The associated debt also appears again.
+3. Recording a payment results in Home activity showing "عميل غير معروف".
+
+The "unknown customer" symptom is already explained by the confirmed architecture:
+- Customers screen -> Firestore
+- Debts/Payments/Home journal -> AsyncStorage
+- Home customer-name resolution -> local AsyncStorage Customers
+
+Do NOT investigate that symptom separately.
+
+The only live question to resolve now is:
+
+WHY DID "Apo abi" REAPPEAR IN THE CURRENT CUSTOMERS SCREEN?
+
+IMPORTANT SAFETY RULES:
+- No code changes.
+- No Firestore writes.
+- No AsyncStorage deletion or modification.
+- No migration.
+- No Rules changes.
+- No Functions changes.
+- No package installation.
+- No deployment.
+- No commit.
+- If something cannot be verified with certainty, report UNKNOWN.
+- Never infer or guess a historical fact.
+
+## 1. Runtime/build identity
+
+1a. Report the current git HEAD:
+- commit hash
+- commit message
+- branch
+- working tree status
+
+1b. Confirm whether the currently running/tested app build actually reflects this HEAD.
+
+This is important because commit:
+69181308faa99c1fc93372d162883ef387b1513e
+("Refactor retail context state management and expand test coverage")
+was created during the previous verification period.
+
+If you cannot prove that the running app reflects HEAD 6918130, state UNKNOWN.
+
+## 2. Current active Workspace
+
+Determine, from the current code/runtime if possible:
+
+- authenticated Firebase UID
+- resolved activeSpaceId
+- primarySpaceId
+- active membership used for the current session
+
+If live Firebase/authentication access is unavailable, state UNKNOWN.
+
+Do not fabricate values.
+
+## 3. Exact Customers Firestore path
+
+Determine the exact runtime Firestore path currently used by CustomerContext.
+
+Expected structure is:
+
+/spaces/{activeSpaceId}/customers
+
+Report:
+- exact activeSpaceId
+- exact collection path
+- exact source function responsible for subscription
+
+## 4. Investigate "Apo abi" in Firestore
+
+If live Firestore read access is actually available, inspect the customer document(s) for "Apo abi".
+
+Report only verified values:
+
+- document path
+- customer ID
+- name
+- isActive
+- workspaceId if present
+- storeId
+- createdAt
+- updatedAt
+
+If live Firestore cannot be inspected from the current environment, explicitly state:
+
+"Live Firestore state cannot be verified from this environment."
+
+Do NOT infer the value from application code.
+
+## 5. Check for the same customer in other Spaces
+
+ONLY if live read access is genuinely available:
+
+Determine whether the same customer ID exists in other Spaces relevant to the current account.
+
+Use only:
+- existing read functions/queries already present in the codebase, OR
+- Firebase Console read-only inspection.
+
+Do NOT create a new script or tool whose purpose is to modify data.
+
+Classify the result:
+
+A) exists only in current active Workspace
+B) exists in another Workspace
+C) exists only in local AsyncStorage
+D) exists in multiple places
+E) UNKNOWN
+
+## 6. Previous delete target
+
+Trace the delete implementation from source code.
+
+We know the current implementation calls:
+
+softDeleteCustomerDocument(canonicalSpaceId, customer)
+
+and targets:
+
+/spaces/{canonicalSpaceId}/customers/{customer.id}
+
+However:
+
+The exact spaceId used by the HISTORICAL delete operation cannot automatically be known unless it is preserved in logs, evidence, or conversation history.
+
+Therefore:
+
+- If the historical delete target is provable from code/logs/evidence, report it.
+- Otherwise report UNKNOWN.
+- NEVER infer the historical spaceId.
+
+Known reference from previous verified testing, available for comparison only:
+
+KCFjcWqGvRKry3ObNrVc
+
+Do NOT assume that this was the historical delete target unless the evidence supports it.
+
+## 7. Compare historical vs current Workspace
+
+If both values are verified, compare:
+
+Previous delete spaceId
+vs.
+Current activeSpaceId
+
+Also compare:
+
+Previous delete document path
+vs.
+Current Customers listener path
+
+Possible conclusions:
+
+- SAME SPACE
+- DIFFERENT SPACE
+- UNKNOWN
+
+Do not choose between them without evidence.
+
+## 8. Check current Firestore state against the delete semantics
+
+The current Customer listener includes only:
+
+customer.isActive === true
+
+Therefore determine whether the observed reappearance is consistent with:
+
+A) customer currently active in current Workspace
+B) customer deleted in another Workspace
+C) delete never successfully committed
+D) stale/cache state
+E) another cause
+F) UNKNOWN
+
+Only select a cause when supported by evidence.
+
+## 9. Local data is NOT the explanation for the Customers screen unless proven otherwise
+
+The current source audit already established:
+
+Customers screen
+-> useCustomers()
+-> CustomerProvider
+-> subscribeToCustomers(activeSpaceId)
+-> Firestore
+
+Legacy loadCustomers() remains in services/storage.ts and is used by Home journal generation, but not by the current CustomerProvider.
+
+Therefore do not claim that AsyncStorage caused "Apo abi" to appear in the Customers screen unless you find a concrete current call path proving that.
+
+## 10. Final forensic conclusion
+
+Provide a concise evidence-based report with exactly:
+
+1. Current git HEAD
+2. Whether tested app reflects that HEAD
+3. Current authenticated UID — or UNKNOWN
+4. Current activeSpaceId — or UNKNOWN
+5. Current Customers Firestore path
+6. Apo abi current Firestore state — or UNKNOWN
+7. Previous delete target — or UNKNOWN
+8. Previous vs current space comparison
+9. Exact root cause — or UNKNOWN
+10. Confidence level
+11. Minimal next task recommendation
+
+Important:
+The "عميل غير معروف" Home symptom is already explained by the confirmed Cloud/Local split and should NOT be treated as a separate unresolved mystery.
+
+FINAL RULE:
+If the available evidence is insufficient to prove why Apo abi reappeared, explicitly say:
+
+"ROOT CAUSE NOT PROVEN — ADDITIONAL LIVE FIRESTORE EVIDENCE REQUIRED."
+
+Do not guess.
+
+END WITH EXACTLY:
+
+NO CODE CHANGED
+NO DATA CHANGED
+NO COMMIT CREATED
