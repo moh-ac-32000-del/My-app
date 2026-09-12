@@ -1,0 +1,84 @@
+3C-A — ADD THE TWO MISSING TESTS ONLY
+
+Implement ONLY the missing 3C-A test coverage identified in the
+read-only review.
+
+Scope is strictly limited to tests and, only if absolutely required
+for testability, the smallest test-only seam/mock adjustment.
+
+Required coverage:
+
+1. ZERO MEMBERSHIPS
+
+Add an explicit test for resolveActiveSpaceForUser() when discovery
+returns:
+
+{
+  memberships: [],
+  primarySpaceId: null,
+  lastActiveSpaceId: null
+}
+
+The test must verify the intended 3C-A contract:
+
+- result is null
+- no activeSpaceId is selected
+- authentication is NOT cleared
+- do not silently fall back to local SpaceIdentity
+- do not require Workspace switching
+- do not create or write any real Firebase/Firestore data
+
+IMPORTANT:
+The current review indicates that the implementation may currently
+attempt bootstrap and throw when there are zero memberships.
+
+Do NOT change production behavior merely to make this test pass.
+If the current implementation violates the intended contract, report
+the exact failure and STOP so it can be handled separately.
+
+2. LOGIN → LOGOUT → LOGIN LIFECYCLE
+
+Add an explicit sequential test covering:
+
+login/authenticated state
+→ resolve the single active Workspace
+→ logout/auth loss
+→ activeSpaceId becomes null
+→ login/authentication again
+→ the same single active Workspace resolves again
+
+The test should verify that state from the first session does not leak
+into the second session.
+
+Do not require multiple Workspaces or switching UI.
+
+STRICT SCOPE:
+- Tests only.
+- No Firestore Rules changes.
+- No Cloud Functions changes.
+- No Firebase schema changes.
+- No financial logic changes.
+- No AsyncStorage migration.
+- No notification work.
+- No UI changes.
+- No package additions unless absolutely required by the existing test
+  infrastructure.
+- Do NOT commit.
+
+After implementation:
+
+1. Run the focused 3C-A tests.
+2. Run the full test suite.
+3. Run TypeScript typecheck.
+4. Run git diff --check.
+5. Report:
+   - files changed
+   - focused test result
+   - full test result
+   - TypeScript result
+   - diff-check result
+   - whether the zero-membership test passes or exposes a production
+     behavior mismatch
+   - whether the lifecycle test passes
+
+STOP after the report.

@@ -199,6 +199,40 @@ describe('post-auth local initialization', () => {
     expect(isFirebaseSessionAuthenticated(firebaseUser)).toBe(true);
   });
 
+  it('returns no active Space for zero memberships without bootstrapping or clearing authentication', async () => {
+    discoverUserSpacesMock.mockResolvedValueOnce({
+      memberships: [],
+      primarySpaceId: null,
+      lastActiveSpaceId: null,
+    });
+    bootstrapPrimarySpaceMock.mockRejectedValueOnce(new Error('bootstrapShouldNotRun'));
+
+    let activeSpaceId: string | null = null;
+    let resolution: string | null | undefined;
+    let resolutionError: unknown;
+    try {
+      resolution = await resolveActiveSpaceForUser(firebaseUser.uid);
+    } catch (error) {
+      resolutionError = error;
+    }
+
+    expect({
+      error: resolutionError instanceof Error ? resolutionError.message : resolutionError,
+      resolution,
+      bootstrapCalls: bootstrapPrimarySpaceMock.mock.calls.length,
+      authenticated: isFirebaseSessionAuthenticated(firebaseUser),
+      activeSpaceId,
+      localIdentityCalls: getOrCreateSpaceIdentityMock.mock.calls.length,
+    }).toEqual({
+      error: undefined,
+      resolution: null,
+      bootstrapCalls: 0,
+      authenticated: true,
+      activeSpaceId: null,
+      localIdentityCalls: 0,
+    });
+  });
+
   it('does not choose between multiple active memberships', async () => {
     discoverUserSpacesMock.mockResolvedValueOnce({
       memberships: [
@@ -231,5 +265,87 @@ describe('post-auth local initialization', () => {
     expect(callbacks.onActiveSpaceId).toHaveBeenCalledWith(null);
     expect(callbacks.onInitializationError).toHaveBeenCalledWith(null);
     expect(callbacks.onFirebaseReady).toHaveBeenCalledTimes(1);
+  });
+
+  it('resolves the same single Workspace again after logout and login without leaking session state', async () => {
+    discoverUserSpacesMock.mockResolvedValue({
+      memberships: [{
+        spaceId: 'space-A',
+        role: 'owner',
+        status: 'active',
+      }],
+      primarySpaceId: 'space-A',
+      lastActiveSpaceId: null,
+    });
+    validateUserSpaceMembershipMock.mockResolvedValue(true);
+
+    let authenticated = false;
+    let activeSpaceId: string | null = null;
+    let activeIdentity: typeof identity | null = null;
+    const callbacks = {
+      onFirebaseUser: vi.fn((user: User | null) => {
+        authenticated = user !== null;
+      }),
+      onSpaceIdentity: vi.fn((nextIdentity: typeof identity | null) => {
+        activeIdentity = nextIdentity;
+      }),
+      onCloudSpace: vi.fn(),
+      onActiveSpaceId: vi.fn((spaceId: string | null) => {
+        activeSpaceId = spaceId;
+      }),
+      onInitializationError: vi.fn(),
+      onFirebaseReady: vi.fn(),
+    };
+
+    const login = async (): Promise<string> => {
+      callbacks.onFirebaseUser(firebaseUser);
+      callbacks.onSpaceIdentity(identity);
+      const resolvedSpaceId = await resolveActiveSpaceForUser(firebaseUser.uid);
+      if (resolvedSpaceId === null) {
+        throw new Error('expectedWorkspaceResolution');
+      }
+      callbacks.onActiveSpaceId(resolvedSpaceId);
+      return resolvedSpaceId;
+    };
+
+    const firstResolvedSpaceId = await login();
+    expect({
+      authenticated,
+      activeSpaceId,
+      activeIdentity,
+      resolvedSpaceId: firstResolvedSpaceId,
+    }).toEqual({
+      authenticated: true,
+      activeSpaceId: 'space-A',
+      activeIdentity: identity,
+      resolvedSpaceId: 'space-A',
+    });
+
+    clearFirebaseAuthSession(callbacks);
+    expect({
+      authenticated,
+      activeSpaceId,
+      activeIdentity,
+    }).toEqual({
+      authenticated: false,
+      activeSpaceId: null,
+      activeIdentity: null,
+    });
+
+    const secondResolvedSpaceId = await login();
+    expect({
+      authenticated,
+      activeSpaceId,
+      activeIdentity,
+      resolvedSpaceId: secondResolvedSpaceId,
+    }).toEqual({
+      authenticated: true,
+      activeSpaceId: 'space-A',
+      activeIdentity: identity,
+      resolvedSpaceId: 'space-A',
+    });
+    expect(discoverUserSpacesMock).toHaveBeenCalledTimes(2);
+    expect(validateUserSpaceMembershipMock).toHaveBeenCalledTimes(2);
+    expect(bootstrapPrimarySpaceMock).not.toHaveBeenCalled();
   });
 });
