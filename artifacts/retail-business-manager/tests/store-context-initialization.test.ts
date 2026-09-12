@@ -199,38 +199,26 @@ describe('post-auth local initialization', () => {
     expect(isFirebaseSessionAuthenticated(firebaseUser)).toBe(true);
   });
 
-  it('returns no active Space for zero memberships without bootstrapping or clearing authentication', async () => {
+  it('bootstraps a private Space when discovery finds zero memberships and no primary Space', async () => {
     discoverUserSpacesMock.mockResolvedValueOnce({
       memberships: [],
       primarySpaceId: null,
       lastActiveSpaceId: null,
     });
-    bootstrapPrimarySpaceMock.mockRejectedValueOnce(new Error('bootstrapShouldNotRun'));
-
-    let activeSpaceId: string | null = null;
-    let resolution: string | null | undefined;
-    let resolutionError: unknown;
-    try {
-      resolution = await resolveActiveSpaceForUser(firebaseUser.uid);
-    } catch (error) {
-      resolutionError = error;
-    }
-
-    expect({
-      error: resolutionError instanceof Error ? resolutionError.message : resolutionError,
-      resolution,
-      bootstrapCalls: bootstrapPrimarySpaceMock.mock.calls.length,
-      authenticated: isFirebaseSessionAuthenticated(firebaseUser),
-      activeSpaceId,
-      localIdentityCalls: getOrCreateSpaceIdentityMock.mock.calls.length,
-    }).toEqual({
-      error: undefined,
-      resolution: null,
-      bootstrapCalls: 0,
-      authenticated: true,
-      activeSpaceId: null,
-      localIdentityCalls: 0,
+    bootstrapPrimarySpaceMock.mockResolvedValueOnce({
+      primarySpaceId: 'space-bootstrapped',
     });
+    validateUserSpaceMembershipMock.mockResolvedValueOnce(true);
+
+    await expect(resolveActiveSpaceForUser(firebaseUser.uid)).resolves.toBe('space-bootstrapped');
+    expect(discoverUserSpacesMock).toHaveBeenCalledWith(firebaseUser.uid);
+    expect(bootstrapPrimarySpaceMock).toHaveBeenCalledTimes(1);
+    expect(validateUserSpaceMembershipMock).toHaveBeenCalledWith(
+      firebaseUser.uid,
+      'space-bootstrapped',
+    );
+    expect(isFirebaseSessionAuthenticated(firebaseUser)).toBe(true);
+    expect(getOrCreateSpaceIdentityMock).not.toHaveBeenCalled();
   });
 
   it('does not choose between multiple active memberships', async () => {
