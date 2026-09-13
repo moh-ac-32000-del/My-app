@@ -1,0 +1,60 @@
+We are returning to the original phased plan.
+
+ChatGPT will review the GitHub repository and define the exact scope.
+You execute only the requested task, then report the result.
+Do NOT make unrelated changes.
+Do NOT commit unless explicitly requested.
+
+CURRENT TASK: Finish Debt Cloud Core.
+
+Goal:
+Make Firestore the authoritative source for Debts when Firebase is configured, while preserving the existing architecture and avoiding unrelated migration work.
+
+Required:
+1. Review the current Debt implementation before changing anything.
+2. Debts must live under:
+   spaces/{spaceId}/debts/{debtId}
+3. Cloud read/listener must use the canonical activeSpaceId.
+4. Creating a Debt must:
+   - use the authenticated Firebase UID
+   - verify the Customer exists in the same Workspace
+   - verify the Customer is active
+   - reject a non-existent/inactive Customer
+   - reject duplicate Debt IDs
+5. Updating a Debt must preserve immutable identity/ownership fields.
+6. Do NOT implement hard delete for financial Debts.
+7. Firestore Rules must independently enforce:
+   - authenticated active Workspace member
+   - valid Debt document
+   - correct document ID
+   - correct Workspace
+   - authenticated creator on create
+   - existing active Customer in the same Workspace
+   - immutable identity/ownership fields on update
+8. Fix the current Rules problem that causes a valid Debt create to be denied.
+9. Do NOT migrate Payments/Settlements yet.
+10. Do NOT migrate Cash Transactions, Daily Journal, Reminders, Backup/Restore, Workspace switching, invitations, or notifications.
+11. Do NOT add offline sync/outbox.
+12. Do NOT add packages unless absolutely necessary.
+13. Do NOT redesign UI.
+14. Do not silently fall back to AsyncStorage for Cloud Debts when Firebase is configured.
+15. Existing local/test debt data does not need migration.
+
+Important:
+The current repository already contains Debt Cloud service/context code and Firestore Rules. Do not recreate them blindly. Audit the current implementation and fix only what is actually wrong.
+
+Testing:
+- Run the focused Debt tests.
+- Run the full existing test suite.
+- Run TypeScript/typecheck.
+- Run git diff --check.
+- Verify no hard-delete Debt implementation remains.
+- Verify no unrelated files were changed.
+
+Do NOT commit.
+
+STOP after this task and provide a concise report:
+- files changed
+- tests passed
+- Rules result
+- remaining blocker, if any
