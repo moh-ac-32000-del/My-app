@@ -16,6 +16,7 @@ import { Stack, usePathname } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StoreProvider } from '@/context/StoreContext';
 import { useStore } from '@/context/StoreContext';
+import { DebtProvider } from '@/context/DebtContext';
 import { CustomerProvider } from '@/context/CustomerContext';
 import { FloatingQuickActions } from '@/components/FloatingQuickActions';
 
@@ -56,15 +57,17 @@ export default function RootLayout() {
     <SafeAreaProvider>
       <StoreProvider>
         <ErrorBoundary>
-          <CustomerProvider>
-            <QueryClientProvider client={queryClient}>
-              <GestureHandlerRootView>
-                <KeyboardProvider>
-                  <RootLayoutNav />
-                </KeyboardProvider>
-              </GestureHandlerRootView>
-            </QueryClientProvider>
-          </CustomerProvider>
+          <DebtProvider>
+            <CustomerProvider>
+              <QueryClientProvider client={queryClient}>
+                <GestureHandlerRootView>
+                  <KeyboardProvider>
+                    <RootLayoutNav />
+                  </KeyboardProvider>
+                </GestureHandlerRootView>
+              </QueryClientProvider>
+            </CustomerProvider>
+          </DebtProvider>
         </ErrorBoundary>
       </StoreProvider>
     </SafeAreaProvider>

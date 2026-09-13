@@ -10,6 +10,7 @@ import { signOutFromFirebase, subscribeToFirebaseAuth } from '@/services/firebas
 import { getOrCreateSpaceIdentity } from '@/services/spaceIdentity';
 import { discoverUserSpaces, validateUserSpaceMembership } from '@/services/firestore';
 import { bootstrapPrimarySpace } from '@/services/trustedBootstrap';
+import { createDebtDocument } from '@/services/debtFirestore';
 import type { Space } from '@/types/space';
 import {
   clearLegacyLanguage,
@@ -415,6 +416,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   ): Promise<Debt> => {
     const storeId = profileRef.current.id;
     const debt = createDebt(storeId, customerId, draft);
+    if (isFirebaseConfigured) {
+      if (!activeSpaceId) {
+        throw new Error('debtWorkspaceUnavailable');
+      }
+      await createDebtDocument(activeSpaceId, debt);
+      setJournalRevision((current) => current + 1);
+      return debt;
+    }
     const currentDebts = await loadDebts(storeId);
     await saveDebts(storeId, [...currentDebts, debt]);
     setJournalRevision((current) => current + 1);
@@ -423,6 +432,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const settleCustomerDebt = async (customerId: string, draft: SettlementDraft): Promise<SettlementResult> => {
     await transactionLoadPromiseRef.current;
+    if (isFirebaseConfigured) {
+      throw new Error('cloudDebtSettlementUnsupported');
+    }
     const result = await persistCustomerSettlement(profileRef.current.id, customerId, draft);
     const nextTransactions = await loadTransactions(profileRef.current.id);
     transactionsRef.current = nextTransactions;

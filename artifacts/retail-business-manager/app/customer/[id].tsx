@@ -14,7 +14,8 @@ import { useCustomers } from '@/context/CustomerContext';
 import { useColors } from '@/hooks/useColors';
 import { useI18n } from '@/hooks/useI18n';
 import { useStore } from '@/context/StoreContext';
-import { calculateDebtTotals, createDebt, createReminder, filterDebtsByCustomer, filterPaymentsByCustomer, loadDebts, loadPayments, loadReminders, parseLocalizedAmountInput, saveDebts, saveReminders } from '@/services/storage';
+import { useDebts } from '@/context/DebtContext';
+import { calculateDebtTotals, createReminder, filterDebtsByCustomer, filterPaymentsByCustomer, loadPayments, loadReminders, parseLocalizedAmountInput, saveReminders } from '@/services/storage';
 import type { Customer, Debt, Payment, Reminder } from '@/types/business';
 
 function DetailRow({ icon, label, value }: { icon: React.ComponentProps<typeof Ionicons>['name']; label: string; value: string }) {
@@ -65,7 +66,13 @@ export default function CustomerDetailsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { profile, isReady, settleCustomerDebt } = useStore();
+  const { profile, isReady, addCustomerDebt, settleCustomerDebt } = useStore();
+  const {
+    debts: workspaceDebts,
+    isLoading: areDebtsLoading,
+    error: debtError,
+    retryDebts,
+  } = useDebts();
   const {
     customers,
     isLoading: areCustomersLoading,
@@ -102,16 +109,20 @@ export default function CustomerDetailsScreen() {
   );
   useFocusEffect(
     useCallback(() => {
-      if (!isReady || !customerId || areCustomersLoading || customerError) {
+      if (!isReady || !customerId || areCustomersLoading || customerError || areDebtsLoading) {
+        return undefined;
+      }
+      if (debtError) {
+        setIsLoading(false);
         return undefined;
       }
       let active = true;
       setIsLoading(true);
-      void Promise.all([loadDebts(profile.id), loadPayments(profile.id), loadReminders(profile.id)]).then(([storedDebts, storedPayments, storedReminders]) => {
+      void Promise.all([loadPayments(profile.id), loadReminders(profile.id)]).then(([storedPayments, storedReminders]) => {
         if (active) {
-          setDebts(filterDebtsByCustomer(storedDebts, customerId));
+          setDebts(filterDebtsByCustomer(workspaceDebts, customerId));
           setPayments(filterPaymentsByCustomer(storedPayments, customerId));
-          const customerDebtIds = new Set(storedDebts.filter((debt) => debt.customerId === customerId).map((debt) => debt.id));
+          const customerDebtIds = new Set(workspaceDebts.filter((debt) => debt.customerId === customerId).map((debt) => debt.id));
           setReminders(storedReminders.filter((reminder) => customerDebtIds.has(reminder.debtId)));
           setIsLoading(false);
         }
@@ -119,7 +130,7 @@ export default function CustomerDetailsScreen() {
       return () => {
         active = false;
       };
-    }, [areCustomersLoading, customerError, customerId, isReady, profile.id]),
+    }, [areCustomersLoading, areDebtsLoading, customerError, customerId, debtError, isReady, profile.id, workspaceDebts]),
   );
 
   const updateCustomer = async (draft: CustomerDraft) => {
@@ -152,13 +163,11 @@ export default function CustomerDetailsScreen() {
 
     setIsSavingDebt(true);
     try {
-      const debt = createDebt(profile.id, customerId, {
+      const debt = await addCustomerDebt(customerId, {
         amount: draft.amount,
         currency: draft.currency,
         ...(draft.dueDate ? { dueDate: draft.dueDate } : {}),
       });
-      const currentStoreDebts = await loadDebts(profile.id);
-      await saveDebts(profile.id, [...currentStoreDebts, debt]);
       setDebts((current) => [debt, ...current].sort((first, second) => Date.parse(second.createdAt) - Date.parse(first.createdAt)));
       setIsDebtVisible(false);
       Alert.alert(t('debtAdded'));
@@ -291,6 +300,22 @@ export default function CustomerDetailsScreen() {
         <Pressable
           testID="retry-customer-cloud"
           onPress={retryCustomers}
+          style={({ pressed }) => [styles.retryButton, { borderColor: colors.border }, pressed && styles.pressed]}
+        >
+          <Text style={[styles.retryButtonText, { color: colors.primary }]}>{t('reloadToContinue')}</Text>
+        </Pressable>
+      </AppShell>
+    );
+  }
+
+  if (debtError) {
+    return (
+      <AppShell>
+        <PageHeader title={t('customerDetails')} showBack />
+        <EmptyState icon="cloud-offline-outline" title={t('somethingWentWrong')} hint={t('reloadToContinue')} />
+        <Pressable
+          testID="retry-debt-cloud"
+          onPress={retryDebts}
           style={({ pressed }) => [styles.retryButton, { borderColor: colors.border }, pressed && styles.pressed]}
         >
           <Text style={[styles.retryButtonText, { color: colors.primary }]}>{t('reloadToContinue')}</Text>

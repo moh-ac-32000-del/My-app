@@ -20,8 +20,9 @@ import { ReminderForm } from '@/components/ReminderForm';
 import { CURRENCY_OPTIONS, getCurrency, type CurrencyCode } from '@/constants/currencies';
 import type { TranslationKey } from '@/constants/i18n';
 import { useCustomers } from '@/context/CustomerContext';
+import { useDebts } from '@/context/DebtContext';
 import { useStore } from '@/context/StoreContext';
-import { calculateDebtTotals, createReminder, filterDebtsByCustomer, loadDebts, loadReminders, parseLocalizedAmountInput, saveReminders } from '@/services/storage';
+import { calculateDebtTotals, createReminder, filterDebtsByCustomer, loadReminders, parseLocalizedAmountInput, saveReminders } from '@/services/storage';
 import type { CashTransactionDraft, Debt } from '@/types/business';
 import { useColors } from '@/hooks/useColors';
 import { useI18n } from '@/hooks/useI18n';
@@ -387,29 +388,14 @@ function CustomerReminderSheet({ onClose }: { onClose: () => void }) {
   const colors = useColors();
   const { profile } = useStore();
   const { customers, isLoading: areCustomersLoading } = useCustomers();
+  const { debts, isLoading: areDebtsLoading } = useDebts();
   const { t } = useI18n();
-  const [debts, setDebts] = useState<Debt[]>([]);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const saveInFlightRef = useRef<boolean>(false);
   const customersWithDebt = useMemo(
     () => customers.filter((customer) => debts.some((debt) => debt.customerId === customer.id && debt.amount > 0)),
     [customers, debts],
   );
-
-  useEffect(() => {
-    let active = true;
-    void loadDebts(profile.id).then((loadedDebts) => {
-      if (!active) {
-        return;
-      }
-      setDebts(loadedDebts);
-      setIsLoading(false);
-    });
-    return () => {
-      active = false;
-    };
-  }, [profile.id]);
 
   const saveReminder = async (debtId: string, remindAt: string) => {
     if (isSaving || saveInFlightRef.current) {
@@ -433,7 +419,7 @@ function CustomerReminderSheet({ onClose }: { onClose: () => void }) {
       <View style={styles.sheetContent}>
         <View style={[styles.sheetHandle, { backgroundColor: colors.border }]} />
         <SheetHeader title={t('createReminder')} subtitle={t('reminderFormHint')} icon="alarm-outline" onClose={onClose} />
-        {isLoading || areCustomersLoading ? (
+        {areDebtsLoading || areCustomersLoading ? (
           <View style={styles.loadingReminder}>
             <ActivityIndicator color={colors.primary} />
           </View>
@@ -456,8 +442,8 @@ function CustomerSettlementSheet({ onClose }: { onClose: () => void }) {
   const colors = useColors();
   const { profile, settleCustomerDebt } = useStore();
   const { customers } = useCustomers();
+  const { debts, isLoading: areDebtsLoading } = useDebts();
   const { t, language, isRTL } = useI18n();
-  const [debts, setDebts] = useState<Awaited<ReturnType<typeof loadDebts>>>([]);
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>('');
   const [selectedCurrency, setSelectedCurrency] = useState<CurrencyCode>(profile.currency);
   const [amount, setAmount] = useState<string>('');
@@ -481,26 +467,18 @@ function CustomerSettlementSheet({ onClose }: { onClose: () => void }) {
   );
 
   useEffect(() => {
-    let active = true;
-    void loadDebts(profile.id).then((loadedDebts) => {
-      if (!active) {
-        return;
-      }
-      setDebts(loadedDebts);
-      const firstCustomer = customers.find((customer) => {
-        const totals = calculateDebtTotals(filterDebtsByCustomer(loadedDebts, customer.id));
-        return CURRENCY_OPTIONS.some(({ code }) => totals[code] > 0);
-      });
-      setSelectedCustomerId(firstCustomer?.id ?? '');
-      if (firstCustomer) {
-        const totals = calculateDebtTotals(filterDebtsByCustomer(loadedDebts, firstCustomer.id));
-        setSelectedCurrency(CURRENCY_OPTIONS.find(({ code }) => totals[code] > 0)?.code ?? profile.currency);
-      }
+    const firstCustomer = customers.find((customer) => {
+      const totals = calculateDebtTotals(filterDebtsByCustomer(debts, customer.id));
+      return CURRENCY_OPTIONS.some(({ code }) => totals[code] > 0);
     });
-    return () => {
-      active = false;
-    };
-  }, [customers, profile.currency, profile.id]);
+    setSelectedCustomerId((current) => current && customers.some((customer) => customer.id === current)
+      ? current
+      : firstCustomer?.id ?? '');
+    if (firstCustomer) {
+      const totals = calculateDebtTotals(filterDebtsByCustomer(debts, firstCustomer.id));
+      setSelectedCurrency(CURRENCY_OPTIONS.find(({ code }) => totals[code] > 0)?.code ?? profile.currency);
+    }
+  }, [customers, debts, profile.currency]);
 
   const chooseCustomer = (customerId: string) => {
     setSelectedCustomerId(customerId);
@@ -566,7 +544,7 @@ function CustomerSettlementSheet({ onClose }: { onClose: () => void }) {
         <Text style={[styles.inputLabel, { color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' }]}>
           {t('selectCustomer')}
         </Text>
-        {customersWithDebt.length > 0 ? (
+        {!areDebtsLoading && customersWithDebt.length > 0 ? (
           <View style={styles.customerOptions}>
             {customersWithDebt.map((customer) => {
               const selected = customer.id === selectedCustomerId;

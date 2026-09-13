@@ -65,6 +65,24 @@ service cloud.firestore {
         );
     }
 
+    match /spaces/{spaceId}/debts/{debtId} {
+      allow read: if isActiveMember(spaceId);
+      allow create: if isActiveMember(spaceId)
+        && isValidDebtDocument(spaceId, debtId, request.resource.data)
+        && hasActiveCustomer(spaceId, request.resource.data.customerId)
+        && request.resource.data.createdByUserId == request.auth.uid;
+      allow update: if isActiveMember(spaceId)
+        && isValidDebtDocument(spaceId, debtId, request.resource.data)
+        && hasActiveCustomer(spaceId, request.resource.data.customerId)
+        && request.resource.data.id == resource.data.id
+        && request.resource.data.storeId == resource.data.storeId
+        && request.resource.data.workspaceId == resource.data.workspaceId
+        && request.resource.data.createdByUserId == resource.data.createdByUserId
+        && request.resource.data.customerId == resource.data.customerId
+        && request.resource.data.createdAt == resource.data.createdAt;
+      allow delete: if isActiveMember(spaceId);
+    }
+
     match /customers/{document=**} {
       allow read, write: if false;
     }
@@ -160,6 +178,80 @@ service cloud.firestore {
         && (!customer.keys().hasAny(['phone']) || customer.phone is string)
         && (!customer.keys().hasAny(['address']) || customer.address is string)
         && (!customer.keys().hasAny(['notes']) || customer.notes is string);
+    }
+
+    function hasActiveCustomer(spaceId, customerId) {
+      return exists(/databases/$(database)/documents/spaces/$(spaceId)/customers/$(customerId))
+        && get(/databases/$(database)/documents/spaces/$(spaceId)/customers/$(customerId)).data.id == customerId
+        && get(/databases/$(database)/documents/spaces/$(spaceId)/customers/$(customerId)).data.isActive == true;
+    }
+
+    function isValidDebtDocument(spaceId, debtId, debt) {
+      return debt.keys().hasOnly([
+          'id',
+          'storeId',
+          'workspaceId',
+          'createdByUserId',
+          'customerId',
+          'currency',
+          'amount',
+          'dueDate',
+          'originalAmount',
+          'settledAt',
+          'createdAt',
+          'updatedAt'
+        ])
+        && debt.keys().hasAll([
+          'id',
+          'storeId',
+          'workspaceId',
+          'createdByUserId',
+          'customerId',
+          'currency',
+          'amount',
+          'createdAt',
+          'updatedAt'
+        ])
+        && debt.id == debtId
+        && debt.storeId is string
+        && debt.storeId.size() > 0
+        && debt.workspaceId == spaceId
+        && debt.createdByUserId is string
+        && debt.createdByUserId.size() > 0
+        && debt.customerId is string
+        && debt.customerId.size() > 0
+        && debt.currency in ['TRY', 'USD', 'EUR', 'GBP', 'SAR', 'AED', 'SYP']
+        && debt.amount is number
+        && debt.amount >= 0
+        && (
+          debt.amount > 0
+          || (
+            debt.keys().hasAll(['originalAmount', 'settledAt'])
+            && debt.originalAmount is number
+            && debt.originalAmount > 0
+            && debt.settledAt is string
+          )
+        )
+        && (
+          !debt.keys().hasAny(['originalAmount'])
+          || (
+            debt.originalAmount is number
+            && debt.originalAmount > 0
+            && debt.originalAmount >= debt.amount
+          )
+        )
+        && (!debt.keys().hasAny(['dueDate']) || (
+          debt.dueDate is string
+          && debt.dueDate.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+        ))
+        && (!debt.keys().hasAny(['settledAt']) || (
+          debt.settledAt is string
+          && debt.settledAt.size() > 0
+        ))
+        && debt.createdAt is string
+        && debt.createdAt.size() > 0
+        && debt.updatedAt is string
+        && debt.updatedAt.size() > 0;
     }
   }
 }
