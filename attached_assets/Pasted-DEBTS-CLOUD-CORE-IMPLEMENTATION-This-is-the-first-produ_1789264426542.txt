@@ -1,0 +1,377 @@
+DEBTS CLOUD CORE — IMPLEMENTATION
+
+This is the first production implementation of Cloud-backed Debts.
+
+Use the CURRENT HEAD as the source of truth.
+
+GOAL:
+Move Debt persistence/read state from local AsyncStorage to Firestore
+under the authenticated active Workspace.
+
+Firestore path:
+
+spaces/{spaceId}/debts/{debtId}
+
+The Workspace path is the primary ownership/security boundary.
+
+STRICT SCOPE:
+
+IN SCOPE:
+- Firestore Debt document serialization
+- Firestore Debt read/listener
+- Firestore Debt create
+- Firestore Debt update
+- Firestore Debt deletion if needed by the existing model/API
+- Customer relationship validation
+- Firestore Rules for Debt documents
+- DebtContext integration with the existing activeSpaceId architecture
+- Focused Cloud Debt tests
+- Existing local Debt tests may remain for legacy/reference coverage
+
+OUT OF SCOPE:
+- Settlement/payment migration
+- Payment Firestore implementation
+- Cash Transaction Firestore implementation
+- Daily Journal migration
+- Daily Closing migration
+- Reminder Cloud migration
+- Push notifications
+- Workspace switching/invitations
+- Backup/Restore migration
+- AsyncStorage migration
+- Offline sync/outbox
+- Currency model redesign
+- Debt void/cancel/archive functionality
+- New packages unless absolutely required
+- UI redesign
+- Broad refactors
+
+IMPORTANT:
+Do NOT delete existing local Debt data or run AsyncStorage.clear().
+Do NOT migrate/copy old local Debt data into Firestore.
+Current local Debt data is experimental and does not require migration.
+
+1. CURRENT ACTIVE WORKSPACE
+
+Use the existing canonical activeSpaceId from StoreContext.
+
+Do NOT create a second Workspace/Space resolution mechanism.
+
+Do NOT use local SpaceIdentity as the authority.
+
+All Cloud Debt reads/writes must use the canonical activeSpaceId.
+
+If activeSpaceId is unavailable, do not silently fall back to local
+Debt storage.
+
+2. FIRESTORE DEBT DOCUMENT
+
+Create a clear serializer/normalizer for the current Debt model.
+
+Preserve the current business fields where appropriate:
+
+- id
+- storeId
+- customerId
+- currency
+- amount
+- dueDate
+- originalAmount
+- settledAt
+- createdAt
+- updatedAt
+
+Do not invent a new Debt status field.
+
+Do not silently change the current money representation.
+
+Do not introduce a currency conversion mechanism.
+
+If workspaceId/createdByUserId are included, use them consistently and
+do not allow the client to spoof ownership metadata.
+
+3. CUSTOMER EXISTENCE AND SAME-WORKSPACE VALIDATION
+
+A Debt customerId must reference an ACTUALLY EXISTING Customer at:
+
+spaces/{spaceId}/customers/{customerId}
+
+It is not sufficient for customerId merely to be a non-empty string.
+
+A non-existent customerId must be rejected.
+
+A Customer from another Workspace must also be rejected.
+
+Do not trust client-supplied workspaceId/storeId as the security
+boundary.
+
+Use the smallest safe mechanism consistent with the existing
+Customer Firestore architecture and Rules.
+
+Do not weaken Customer Rules.
+
+Do not implement a broad backend framework.
+
+4. FIRESTORE RULES
+
+Replace the current explicit Debt DENY only for the required Debt path.
+
+Rules must require:
+
+- authenticated user
+- active membership in the requested space
+- correct Debt document identity
+- valid Debt document shape
+- valid required field types
+- valid currency code
+- valid amount constraints
+- immutable identity/ownership fields where appropriate
+- valid existing Customer relationship within the same Workspace
+
+Do NOT give non-members access.
+
+Do NOT use storeId as the authorization boundary.
+
+Do NOT weaken existing Customer Rules.
+
+Preserve all existing financial DENY rules for collections that are
+not part of this task.
+
+5. DEBT READS
+
+Implement a Cloud-backed Debt subscription/read path scoped to:
+
+spaces/{activeSpaceId}/debts
+
+The existing UI/context should receive current active Workspace data.
+
+Do not keep a second local Debt collection as a source of truth.
+
+Do not merge local and Cloud Debts.
+
+If the Cloud read fails, surface the error rather than silently
+falling back to AsyncStorage.
+
+6. DEBT CREATE
+
+Create the Firestore Debt document using the existing Debt business
+model.
+
+The client may generate the existing Debt ID if that is already part
+of the established model, but ensure:
+
+- document ID == debt.id
+- timestamps are valid
+- customerId is non-empty
+- customerId references an existing Customer in the same Workspace
+- amount is valid
+- currency is valid
+- optional dueDate is valid
+
+Do not create duplicate documents accidentally.
+
+Use authenticated Firebase user identity where createdByUserId is
+required; never accept an arbitrary user UID from the client.
+
+7. DEBT UPDATE
+
+Support the existing Debt fields that are legitimately editable.
+
+Preserve:
+
+- id
+- createdAt
+- ownership/workspace identity
+- customer relationship rules
+
+Update updatedAt.
+
+Do not introduce settlement behavior into this task.
+
+8. DEBT DELETE
+
+If the existing Cloud-facing API requires deletion, implement the
+smallest safe delete operation.
+
+Do not invent a new UI if current UI does not expose Debt deletion.
+
+Do not cascade-delete Customers.
+
+Do not cascade-delete Payments or Transactions.
+
+Do not modify Reminder behavior in this task.
+
+DEBT VOID/CANCEL:
+A separate Debt "void/cancel/archive" operation does not exist in the
+current local implementation.
+
+Do NOT invent this feature in this task.
+
+Settlement is also OUT OF SCOPE.
+
+9. CONTEXT / UI INTEGRATION
+
+Integrate Cloud Debts through the existing application architecture.
+
+Do not create a second global state system.
+
+Follow the established Customer Cloud pattern where appropriate.
+
+The existing activeSpaceId must be the single source for the current
+Cloud Workspace.
+
+Do not redesign screens.
+
+10. LOCAL STORAGE
+
+Do NOT delete or migrate existing AsyncStorage Debt data.
+
+However, after Cloud Debt integration, do not use the local Debt
+collection as the active Cloud source of truth.
+
+If local functions are still required temporarily by settlement,
+backup, journal, or other not-yet-migrated features, keep them isolated
+and do not let them overwrite the Cloud Debt collection.
+
+Document any remaining local Debt consumers.
+
+11. IMPORTANT — REMINDER TRIGGER GAP
+
+The existing local reconcileDueDateReminders() currently runs from
+saveDebts().
+
+If Cloud Debt creation/update bypasses saveDebts() entirely, automatic
+due-date reminders could silently stop being generated for new Cloud
+Debts.
+
+This is a regression of existing behavior and is NOT acceptable.
+
+You MUST explicitly handle this.
+
+Acceptable outcomes:
+
+(a) Cloud Debt create/update also triggers the existing local reminder
+reconciliation for the affected Debt, using the smallest safe
+integration, OR
+
+(b) If this cannot be wired safely within this task, STOP and report
+the gap before completing the implementation.
+
+Do NOT silently allow automatic due-date reminders to stop working.
+
+Do NOT modify the internal logic of reconcileDueDateReminders().
+Only preserve/wire its required trigger point.
+
+Do not migrate Reminder storage to Firestore in this task.
+
+12. TESTS
+
+Add focused tests covering at minimum:
+
+- Debt document serialization/normalization
+- valid Debt create
+- invalid Debt rejected
+- invalid currency rejected
+- invalid amount rejected
+- dueDate validation
+- document ID matches debt.id
+- active Workspace path is correct
+- non-member access denied
+- authenticated active member can access the Debt
+- existing Customer is required
+- Customer from another Workspace is rejected
+- update preserves immutable identity fields
+- update changes updatedAt
+- delete behavior if implemented
+- Cloud read/listener cleanup/unsubscribe
+- no fallback to AsyncStorage when Cloud read fails
+- automatic due-date reminder behavior is not silently lost after
+  Cloud Debt create/update
+
+Use mocks/emulators as appropriate for the existing test setup.
+
+Do NOT write to production Firebase from automated tests.
+
+13. REGRESSION
+
+Run:
+
+- focused Debt Cloud tests
+- existing Debt/settlement/reminder tests
+- full test suite
+- TypeScript typecheck
+- git diff --check
+
+Do not change settlement behavior in order to make old tests pass.
+
+If existing local settlement tests depend on the local Debt source,
+report that dependency rather than silently rewriting the entire
+settlement system.
+
+14. MANUAL FIREBASE TEST PREPARATION
+
+After automated tests pass, provide a concise manual test checklist
+for the real Firebase project.
+
+Do NOT execute destructive tests against real data.
+
+The manual checklist must include:
+
+A. Create one experimental Debt for an existing Customer.
+B. Verify Firestore:
+
+spaces/{spaceId}/debts/{debtId}
+
+C. Close/reopen the app.
+D. Verify the Debt remains visible.
+E. Update the Debt and verify Firestore.
+F. Verify a non-member cannot access the Debt.
+G. Verify a valid active member can access the Debt once shared
+   membership exists.
+
+Do not require multi-account testing now because invitations/shared
+Workspaces are not implemented yet.
+
+15. IMPORTANT SECURITY RULE
+
+Remember the established Admin SDK constraint:
+
+Cloud Functions using Firebase Admin SDK bypass Firestore Rules.
+
+Therefore, if a Cloud Function is required for any protected Debt
+operation, it MUST independently enforce:
+
+- request.auth
+- authenticated UID from request.auth.uid
+- Workspace membership
+- role/authorization where applicable
+- customer existence/workspace relationship
+- business invariants
+- idempotency where applicable
+
+Never rely on Firestore Rules alone inside Admin SDK functions.
+
+Do not introduce a broad Function architecture for this task.
+
+FINAL REPORT:
+
+- exact files changed
+- Firestore path implemented
+- Debt document schema
+- Rules added/changed
+- Customer relationship enforcement
+- reminder trigger handling
+- local Debt consumers remaining
+- focused tests
+- full test suite
+- TypeScript
+- git diff --check
+- git diff --stat
+- any blockers or architectural decisions required
+
+IMPORTANT:
+Do NOT commit.
+Do NOT proceed to Settlement, Payments, Transactions, Reminders,
+Notifications, Workspaces, Backup/Restore, or other features.
+
+STOP after the report.
