@@ -82,6 +82,22 @@ service cloud.firestore {
         && request.resource.data.createdAt == resource.data.createdAt;
     }
 
+    match /spaces/{spaceId}/payments/{paymentId} {
+      allow read: if isActiveMember(spaceId);
+      allow create: if isActiveMember(spaceId)
+        && isValidPaymentDocument(spaceId, paymentId, request.resource.data)
+        && request.resource.data.createdByUserId == request.auth.uid
+        && (
+          !request.resource.data.keys().hasAny(['customerId'])
+          || hasActiveCustomerForStore(
+            spaceId,
+            request.resource.data.customerId,
+            request.resource.data.storeId
+          )
+        );
+      allow update, delete: if false;
+    }
+
     match /customers/{document=**} {
       allow read, write: if false;
     }
@@ -183,6 +199,75 @@ service cloud.firestore {
       return exists(/databases/$(database)/documents/spaces/$(spaceId)/customers/$(customerId))
         && get(/databases/$(database)/documents/spaces/$(spaceId)/customers/$(customerId)).data.id == customerId
         && get(/databases/$(database)/documents/spaces/$(spaceId)/customers/$(customerId)).data.isActive == true;
+    }
+
+    function hasActiveCustomerForStore(spaceId, customerId, storeId) {
+      return exists(/databases/$(database)/documents/spaces/$(spaceId)/customers/$(customerId))
+        && get(/databases/$(database)/documents/spaces/$(spaceId)/customers/$(customerId)).data.id == customerId
+        && get(/databases/$(database)/documents/spaces/$(spaceId)/customers/$(customerId)).data.isActive == true
+        && get(/databases/$(database)/documents/spaces/$(spaceId)/customers/$(customerId)).data.storeId == storeId
+        && (
+          !get(/databases/$(database)/documents/spaces/$(spaceId)/customers/$(customerId)).data.keys().hasAny(['workspaceId'])
+          || get(/databases/$(database)/documents/spaces/$(spaceId)/customers/$(customerId)).data.workspaceId == spaceId
+        );
+    }
+
+    function isValidPaymentDocument(spaceId, paymentId, payment) {
+      return payment.keys().hasOnly([
+          'id',
+          'storeId',
+          'workspaceId',
+          'createdByUserId',
+          'amount',
+          'direction',
+          'method',
+          'customerId',
+          'transactionId',
+          'paidAt',
+          'note',
+          'createdAt',
+          'updatedAt'
+        ])
+        && payment.keys().hasAll([
+          'id',
+          'storeId',
+          'workspaceId',
+          'createdByUserId',
+          'amount',
+          'direction',
+          'method',
+          'paidAt',
+          'createdAt',
+          'updatedAt'
+        ])
+        && payment.id == paymentId
+        && payment.storeId is string
+        && payment.storeId.size() > 0
+        && payment.workspaceId == spaceId
+        && payment.createdByUserId is string
+        && payment.createdByUserId.size() > 0
+        && payment.amount.keys().hasOnly(['amount', 'currency'])
+        && payment.amount.keys().hasAll(['amount', 'currency'])
+        && payment.amount.amount is number
+        && payment.amount.amount > 0
+        && payment.amount.currency in ['TRY', 'USD', 'EUR', 'GBP', 'SAR', 'AED', 'SYP']
+        && payment.direction in ['in', 'out']
+        && payment.method in ['cash', 'card', 'bank-transfer', 'other']
+        && (!payment.keys().hasAny(['customerId']) || (
+          payment.customerId is string
+          && payment.customerId.size() > 0
+        ))
+        && (!payment.keys().hasAny(['transactionId']) || (
+          payment.transactionId is string
+          && payment.transactionId.size() > 0
+        ))
+        && payment.paidAt is string
+        && payment.paidAt.size() > 0
+        && (!payment.keys().hasAny(['note']) || payment.note is string)
+        && payment.createdAt is string
+        && payment.createdAt.size() > 0
+        && payment.updatedAt is string
+        && payment.updatedAt.size() > 0;
     }
 
     function isValidDebtDocument(spaceId, debtId, debt) {

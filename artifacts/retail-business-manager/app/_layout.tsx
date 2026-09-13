@@ -18,6 +18,7 @@ import { StoreProvider } from '@/context/StoreContext';
 import { useStore } from '@/context/StoreContext';
 import { DebtProvider } from '@/context/DebtContext';
 import { CustomerProvider } from '@/context/CustomerContext';
+import { PaymentProvider } from '@/context/PaymentContext';
 import { FloatingQuickActions } from '@/components/FloatingQuickActions';
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
@@ -58,15 +59,17 @@ export default function RootLayout() {
       <StoreProvider>
         <ErrorBoundary>
           <DebtProvider>
-            <CustomerProvider>
-              <QueryClientProvider client={queryClient}>
-                <GestureHandlerRootView>
-                  <KeyboardProvider>
-                    <RootLayoutNav />
-                  </KeyboardProvider>
-                </GestureHandlerRootView>
-              </QueryClientProvider>
-            </CustomerProvider>
+            <PaymentProvider>
+              <CustomerProvider>
+                <QueryClientProvider client={queryClient}>
+                  <GestureHandlerRootView>
+                    <KeyboardProvider>
+                      <RootLayoutNav />
+                    </KeyboardProvider>
+                  </GestureHandlerRootView>
+                </QueryClientProvider>
+              </CustomerProvider>
+            </PaymentProvider>
           </DebtProvider>
         </ErrorBoundary>
       </StoreProvider>

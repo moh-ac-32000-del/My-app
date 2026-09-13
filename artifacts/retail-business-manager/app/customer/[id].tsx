@@ -15,7 +15,8 @@ import { useColors } from '@/hooks/useColors';
 import { useI18n } from '@/hooks/useI18n';
 import { useStore } from '@/context/StoreContext';
 import { useDebts } from '@/context/DebtContext';
-import { calculateDebtTotals, createReminder, filterDebtsByCustomer, filterPaymentsByCustomer, loadPayments, loadReminders, parseLocalizedAmountInput, saveReminders } from '@/services/storage';
+import { usePayments } from '@/context/PaymentContext';
+import { calculateDebtTotals, createReminder, filterDebtsByCustomer, filterPaymentsByCustomer, loadReminders, parseLocalizedAmountInput, saveReminders } from '@/services/storage';
 import type { Customer, Debt, Payment, Reminder } from '@/types/business';
 
 function DetailRow({ icon, label, value }: { icon: React.ComponentProps<typeof Ionicons>['name']; label: string; value: string }) {
@@ -81,6 +82,12 @@ export default function CustomerDetailsScreen() {
     updateCustomer: saveCustomer,
     softDeleteCustomer,
   } = useCustomers();
+  const {
+    payments: workspacePayments,
+    isLoading: arePaymentsLoading,
+    error: paymentError,
+    retryPayments,
+  } = usePayments();
   const { t, language, isRTL } = useI18n();
   const customerId = typeof id === 'string' ? id : '';
   const customer = customers.find((item) => item.id === customerId) ?? null;
@@ -109,19 +116,19 @@ export default function CustomerDetailsScreen() {
   );
   useFocusEffect(
     useCallback(() => {
-      if (!isReady || !customerId || areCustomersLoading || customerError || areDebtsLoading) {
+      if (!isReady || !customerId || areCustomersLoading || customerError || areDebtsLoading || arePaymentsLoading) {
         return undefined;
       }
-      if (debtError) {
+      if (debtError || paymentError) {
         setIsLoading(false);
         return undefined;
       }
       let active = true;
       setIsLoading(true);
-      void Promise.all([loadPayments(profile.id), loadReminders(profile.id)]).then(([storedPayments, storedReminders]) => {
+      void loadReminders(profile.id).then((storedReminders) => {
         if (active) {
           setDebts(filterDebtsByCustomer(workspaceDebts, customerId));
-          setPayments(filterPaymentsByCustomer(storedPayments, customerId));
+          setPayments(filterPaymentsByCustomer(workspacePayments, customerId));
           const customerDebtIds = new Set(workspaceDebts.filter((debt) => debt.customerId === customerId).map((debt) => debt.id));
           setReminders(storedReminders.filter((reminder) => customerDebtIds.has(reminder.debtId)));
           setIsLoading(false);
@@ -130,7 +137,19 @@ export default function CustomerDetailsScreen() {
       return () => {
         active = false;
       };
-    }, [areCustomersLoading, areDebtsLoading, customerError, customerId, debtError, isReady, profile.id, workspaceDebts]),
+    }, [
+      areCustomersLoading,
+      areDebtsLoading,
+      arePaymentsLoading,
+      customerError,
+      customerId,
+      debtError,
+      isReady,
+      paymentError,
+      profile.id,
+      workspaceDebts,
+      workspacePayments,
+    ]),
   );
 
   const updateCustomer = async (draft: CustomerDraft) => {
@@ -316,6 +335,22 @@ export default function CustomerDetailsScreen() {
         <Pressable
           testID="retry-debt-cloud"
           onPress={retryDebts}
+          style={({ pressed }) => [styles.retryButton, { borderColor: colors.border }, pressed && styles.pressed]}
+        >
+          <Text style={[styles.retryButtonText, { color: colors.primary }]}>{t('reloadToContinue')}</Text>
+        </Pressable>
+      </AppShell>
+    );
+  }
+
+  if (paymentError) {
+    return (
+      <AppShell>
+        <PageHeader title={t('customerDetails')} showBack />
+        <EmptyState icon="cloud-offline-outline" title={t('somethingWentWrong')} hint={t('reloadToContinue')} />
+        <Pressable
+          testID="retry-payment-cloud"
+          onPress={retryPayments}
           style={({ pressed }) => [styles.retryButton, { borderColor: colors.border }, pressed && styles.pressed]}
         >
           <Text style={[styles.retryButtonText, { color: colors.primary }]}>{t('reloadToContinue')}</Text>

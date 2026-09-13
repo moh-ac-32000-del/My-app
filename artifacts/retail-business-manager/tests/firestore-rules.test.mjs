@@ -107,6 +107,23 @@ function customerDocument(customerId, overrides = {}) {
   };
 }
 
+function paymentDocument(paymentId, overrides = {}) {
+  return {
+    id: paymentId,
+    storeId: 'store-A',
+    workspaceId: 'space-A',
+    createdByUserId: 'user-A',
+    amount: { amount: 100, currency: 'TRY' },
+    direction: 'in',
+    method: 'cash',
+    customerId: 'customer-A',
+    paidAt: '2026-08-30T10:00:00.000Z',
+    createdAt: '2026-08-30T10:00:00.000Z',
+    updatedAt: '2026-08-30T10:00:00.000Z',
+    ...overrides,
+  };
+}
+
 function userReference(context, uid) {
   return doc(context.firestore(), 'users', uid);
 }
@@ -495,7 +512,6 @@ try {
 
       for (const collectionName of [
         'debts',
-        'payments',
         'cashTransactions',
         'dailyClosings',
         'reminders',
@@ -509,6 +525,41 @@ try {
           'DENY',
         );
       }
+
+      await runCase(
+        'Payment — active member can read',
+        () => getDoc(doc(userA.firestore(), 'spaces', 'space-A', 'payments', 'payment-A')),
+        'ALLOW',
+      );
+      await runCase(
+        'Payment — active member can create a valid payment',
+        () => setDoc(
+          doc(userA.firestore(), 'spaces', 'space-A', 'payments', 'payment-A'),
+          paymentDocument('payment-A'),
+        ),
+        'ALLOW',
+      );
+      await runCase(
+        'Payment — contradictory document ID on create is denied',
+        () => setDoc(
+          doc(userA.firestore(), 'spaces', 'space-A', 'payments', 'payment-B'),
+          paymentDocument('payment-A'),
+        ),
+        'DENY',
+      );
+      await runCase(
+        'Payment — inactive Customer is denied',
+        () => setDoc(
+          doc(userA.firestore(), 'spaces', 'space-A', 'payments', 'payment-inactive'),
+          paymentDocument('payment-inactive', { customerId: 'customer-inactive' }),
+        ),
+        'DENY',
+      );
+      await runCase(
+        'Payment — delete is denied',
+        () => deleteDoc(doc(userA.firestore(), 'spaces', 'space-A', 'payments', 'payment-A')),
+        'DENY',
+      );
     } finally {
       await userCForCustomers.cleanup();
       await userDForCustomers.cleanup();
