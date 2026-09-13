@@ -1,0 +1,423 @@
+# Debts Cloud Core — Implementation Report
+
+Implemented the first Cloud-backed Debt persistence layer using the current `activeSpaceId` architecture.
+
+## Exact files changed
+
+Modified:
+
+```text
+artifacts/retail-business-manager/app/_layout.tsx
+artifacts/retail-business-manager/app/customer/[id].tsx
+artifacts/retail-business-manager/components/FloatingQuickActions.tsx
+artifacts/retail-business-manager/context/StoreContext.tsx
+artifacts/retail-business-manager/firestore.rules
+```
+
+Added:
+
+```text
+artifacts/retail-business-manager/context/DebtContext.tsx
+artifacts/retail-business-manager/services/debtFirestore.ts
+artifacts/retail-business-manager/tests/debt-firestore.test.ts
+```
+
+No commit was created.
+
+---
+
+## Firestore path implemented
+
+```text
+spaces/{activeSpaceId}/debts/{debtId}
+```
+
+The Cloud service uses the canonical `activeSpaceId` from `StoreContext`.
+
+It does not use:
+
+- `StoreProfile.id` as the Workspace path.
+- Local `SpaceIdentity` as the Cloud authority.
+- A second Workspace resolution mechanism.
+
+When Firebase is configured but `activeSpaceId` is unavailable, the Debt provider reports:
+
+```text
+debtWorkspaceUnavailable
+```
+
+It does not fall back to AsyncStorage.
+
+---
+
+## Debt document schema
+
+Cloud Debt documents preserve the existing Debt model:
+
+```text
+id
+storeId
+workspaceId
+createdByUserId
+customerId
+currency
+amount
+dueDate?
+originalAmount?
+settledAt?
+createdAt
+updatedAt
+```
+
+Additional behavior:
+
+- Firestore document ID must equal `debt.id`.
+- `workspaceId` is written from the canonical path, not from client-supplied Debt data.
+- `createdByUserId` is written from the authenticated Firebase user.
+- The existing JavaScript `number` money representation is unchanged.
+- No status field was added.
+- No currency conversion or minor-unit model was introduced.
+
+Serialization and normalization are implemented in:
+
+```text
+services/debtFirestore.ts
+```
+
+Exported operations include:
+
+```text
+serializeDebtDocument
+normalizeDebtDocument
+subscribeToDebts
+listDebtDocuments
+createDebtDocument
+updateDebtDocument
+deleteDebtDocument
+```
+
+---
+
+## Create behavior
+
+Cloud Debt creation:
+
+1. Uses the existing local Debt ID generator.
+2. Validates the current Debt model.
+3. Reads the Customer in the same Workspace.
+4. Requires the Customer document to exist and be active.
+5. Uses a Firestore transaction.
+6. Rejects an existing Debt document with the same ID.
+7. Writes the document under the active Workspace path.
+
+The client does not accept arbitrary ownership metadata.
+
+---
+
+## Update behavior
+
+Implemented through `DebtContext.updateDebt()` and `updateDebtDocument()`.
+
+The update preserves:
+
+```text
+id
+storeId
+workspaceId
+createdByUserId
+customerId
+createdAt
+```
+
+The update can change:
+
+```text
+currency
+amount
+dueDate
+updatedAt
+```
+
+Settlement metadata is not cleared or rewritten by the general Debt update path. Settlement remains out of scope.
+
+There is no new Debt editing UI.
+
+---
+
+## Delete behavior
+
+Implemented through:
+
+```text
+DebtContext.deleteDebt()
+deleteDebtDocument()
+```
+
+Deletion:
+
+- Deletes only the requested Debt document.
+- Requires authentication.
+- Is Workspace-scoped.
+- Does not cascade-delete Customers.
+- Does not cascade-delete Payments or Transactions.
+- Does not introduce a void, cancel, or archive operation.
+- Does not add new deletion UI.
+
+---
+
+## Customer relationship enforcement
+
+Client-side validation checks:
+
+```text
+spaces/{activeSpaceId}/customers/{customerId}
+```
+
+The Customer must:
+
+- Exist.
+- Have a matching `id`.
+- Be active.
+
+Firestore Rules independently enforce the same relationship using `exists()` and `get()` against the active Workspace’s Customer path.
+
+A Customer from another Workspace cannot satisfy the relationship because the lookup is performed inside the requested Workspace path.
+
+---
+
+## Firestore Rules
+
+Added:
+
+```text
+match /spaces/{spaceId}/debts/{debtId}
+```
+
+Rules require:
+
+- Authenticated Firebase user.
+- Active Workspace membership.
+- Correct document ID.
+- Required Debt fields.
+- No unexpected fields.
+- Valid currency code.
+- Non-negative amount.
+- Settlement metadata when amount is zero.
+- Immutable identity and ownership fields on update.
+- Existing active Customer in the same Workspace.
+- Authenticated creator identity for creation.
+
+The existing top-level financial deny rules remain in place:
+
+```text
+/debts/{document=**}
+```
+
+continues to deny access.
+
+Existing Customer Rules were not weakened.
+
+---
+
+## Debt reads and context integration
+
+Added:
+
+```text
+context/DebtContext.tsx
+```
+
+The provider:
+
+- Subscribes to `spaces/{activeSpaceId}/debts`.
+- Clears state when authentication or Workspace state changes.
+- Cleans up listeners on unmount and Space transitions.
+- Surfaces listener errors.
+- Does not merge Cloud and local Debt collections.
+- Does not silently fall back to AsyncStorage in Firebase mode.
+
+Existing screens now consume Cloud Debt state through `useDebts()`:
+
+```text
+app/customer/[id].tsx
+components/FloatingQuickActions.tsx
+```
+
+The Customer Details screen has a Cloud Debt error state with retry behavior.
+
+---
+
+## Local Debt consumers remaining
+
+AsyncStorage Debt functions remain unchanged for legacy and not-yet-migrated features:
+
+```text
+services/storage.ts
+```
+
+Remaining local consumers include:
+
+- Local settlement implementation.
+- Local Payments.
+- Local cash Transactions.
+- Local Reminders.
+- Daily Journal construction.
+- Daily Archive snapshots.
+- Backup/Restore.
+- Existing local Debt tests.
+- Firebase-disabled compatibility mode.
+
+Cloud mode does not use local Debt writes as its active source of truth.
+
+In particular:
+
+```text
+StoreContext.settleCustomerDebt()
+```
+
+now rejects Cloud-mode settlement with:
+
+```text
+cloudDebtSettlementUnsupported
+```
+
+This prevents the existing local settlement implementation from mutating a stale local Debt list while Cloud Debts are authoritative.
+
+Settlement, Payments, Cash Transactions, Journal migration, Backup/Restore migration, and Reminder migration were not implemented.
+
+---
+
+## Reminder trigger handling
+
+The existing internal reminder logic was not modified.
+
+Cloud Debt snapshots explicitly trigger:
+
+```text
+reconcileDueDateReminders()
+```
+
+using the latest Cloud Debt snapshot.
+
+This preserves automatic due-date reminder generation for Cloud-created and Cloud-updated Debts without moving Reminder storage to Firestore.
+
+Generated reminders continue to use the existing:
+
+```text
+system:due-date
+```
+
+marker and local Space-prefixed Reminder storage.
+
+---
+
+## Focused Cloud Debt tests
+
+Added:
+
+```text
+tests/debt-firestore.test.ts
+```
+
+Coverage includes:
+
+- Cloud document serialization.
+- Cloud document normalization.
+- Workspace path correctness.
+- Document ID matching `debt.id`.
+- Authenticated ownership metadata.
+- Valid Debt creation.
+- Duplicate Debt rejection.
+- Missing Customer rejection.
+- Inactive Customer rejection.
+- Invalid currency rejection.
+- Invalid amount rejection.
+- Invalid due-date rejection.
+- Update field restrictions.
+- Immutable identity preservation.
+- Listener subscription.
+- Listener cleanup.
+- Cloud read failure propagation.
+- No AsyncStorage fallback from the Cloud listener.
+- Cloud snapshot reminder reconciliation.
+- Debt deletion.
+
+---
+
+## Regression results
+
+```text
+Test files: 25 passed
+Tests:      232 passed
+```
+
+TypeScript:
+
+```text
+PASS
+```
+
+Tracked-file whitespace check:
+
+```text
+git diff --check
+PASS
+```
+
+The newly added files were also checked independently for whitespace errors.
+
+Expo preview:
+
+- Initial screenshot was captured while the bundle was still loading.
+- A second screenshot loaded the existing Arabic login screen correctly.
+- No application error appeared in the browser logs.
+- Only existing browser warnings were reported.
+
+---
+
+## Rules validation limitation
+
+The installed Firebase CLI is available, but the Firestore emulator could not start because Java is not installed in the workspace:
+
+```text
+Could not spawn `java -version`
+```
+
+Therefore:
+
+- The Rules were updated and reviewed statically.
+- Automated emulator-based Rules tests were not executed.
+- No production Firebase data was accessed or modified.
+
+---
+
+## Manual Firebase checklist
+
+Use an experimental Customer and avoid destructive data.
+
+1. Sign in with an authenticated Firebase account that has an active Workspace.
+2. Create one experimental Debt for an existing active Customer.
+3. Verify Firestore contains:
+
+   ```text
+   spaces/{spaceId}/debts/{debtId}
+   ```
+
+4. Verify:
+
+   ```text
+   document ID === debt.id
+   workspaceId === activeSpaceId
+   createdByUserId === authenticated Firebase UID
+   customerId === existing Customer ID
+   ```
+
+5. Close and reopen the app.
+6. Verify the Debt remains visible from the Customer Details screen.
+7. Update the Debt through the Cloud-facing API if available and verify `updatedAt` and editable fields in Firestore.
+8. Verify a non-member cannot read the Debt.
+9. After a valid shared membership exists, verify an active member can read the Debt.
+10. Verify a non-existent or inactive Customer cannot be used for new Debt creation.
+11. Verify a Debt with a due date generates the existing local due-date Reminder behavior.
+
+No production Firebase writes or destructive tests were performed during implementation.
