@@ -1,0 +1,170 @@
+We are continuing the original phased plan.
+
+ChatGPT reviews the GitHub repository and defines the exact scope.
+You execute ONLY this task.
+Do not expand the scope.
+Do not commit unless explicitly requested.
+
+CURRENT TASK: Payments Cloud Core
+
+GOAL
+Implement the Cloud/Firestore core for Payments so Firestore becomes the authoritative source for payment records when Firebase is configured.
+
+IMPORTANT ARCHITECTURE
+- Firebase Auth UID is the trusted user identity.
+- activeSpaceId is the canonical Workspace identity.
+- Payment data must be Workspace-scoped.
+- Firestore path:
+  spaces/{spaceId}/payments/{paymentId}
+- Do NOT use StoreProfile.id or local store identity as the Workspace security boundary.
+- Do NOT migrate existing local data.
+- Existing local/test financial data is disposable.
+
+FIRST STEP
+Before changing anything:
+1. Inspect the current repository/worktree.
+2. Inspect the existing Payment model and all current payment-related logic.
+3. Inspect how Debts and Customers are now implemented in Cloud.
+4. Reuse existing architecture and conventions where appropriate.
+5. Do not duplicate existing abstractions.
+
+REQUIRED
+
+1. PAYMENT CLOUD MODEL
+Create/complete the Firestore representation for Payment using the existing domain model as the source.
+
+At minimum preserve the existing business identity and required fields such as:
+- id
+- workspaceId
+- storeId only if already part of the established domain model
+- createdByUserId
+- debt/customer relationship as already defined by the existing model
+- currency
+- amount
+- createdAt
+- updatedAt
+- any existing required payment-specific fields
+
+Do NOT invent new business fields unless the existing code requires them.
+
+2. FIRESTORE SERVICE
+Implement the minimum required Cloud operations:
+- subscribe/list payments for the active Workspace
+- create payment
+- update payment only if the existing application requires it
+
+Use:
+spaces/{spaceId}/payments/{paymentId}
+
+The Firestore document ID MUST equal payment.id.
+
+3. SECURITY / RELATION VALIDATION
+Payment creation must:
+- require authenticated Firebase Auth
+- use request.auth.uid as the creator identity
+- require active membership in the Workspace
+- validate that referenced Debt/Customer records belong to the same Workspace
+- reject references to records from another Workspace
+- reject nonexistent required references
+- validate amount and currency according to the existing domain conventions
+
+Do not trust a client-supplied UID.
+
+4. DUPLICATE IDs
+Use the same established safe pattern as Debt Cloud Core:
+- reject duplicate payment IDs
+- ensure the check/write is atomic where appropriate
+
+5. IMMUTABILITY
+Do not allow updates to change immutable identity/security fields such as:
+- id
+- workspaceId
+- createdByUserId
+- creation timestamp
+- relationship identifiers that must remain immutable
+
+Only update fields that the existing domain actually allows to change.
+
+6. DELETE
+Do NOT introduce hard-delete functionality.
+
+Do not invent cancellation/void/reversal behavior.
+Those require a later financial-domain decision.
+
+7. FIRESTORE RULES
+Add/complete Payment rules using the same Workspace membership/security model already established.
+
+Rules must:
+- allow only authenticated active Workspace members
+- validate the payment document shape
+- validate the document ID
+- enforce Workspace ownership
+- enforce creator identity on create
+- prevent changing immutable security fields on update
+- deny delete
+
+Do not weaken existing Customer or Debt rules.
+
+8. APPLICATION INTEGRATION
+When Firebase is configured:
+- Payment reads/listeners must use Cloud.
+- Payment write operations must use Cloud.
+- Do NOT silently fall back to AsyncStorage if a Cloud operation fails.
+
+Preserve existing local compatibility only where the current architecture already requires it when Firebase is NOT configured.
+
+Do NOT implement settlement yet.
+
+9. OUT OF SCOPE — STRICT
+Do NOT implement:
+- Debt settlement
+- Payment → cash transaction integration
+- Cash In/Cash Out Cloud migration
+- Daily journal Cloud migration
+- Daily closing Cloud migration
+- notifications migration
+- reminder migration
+- backup/restore migration
+- Workspace switching
+- invitations/shared Workspace UX
+- offline outbox/sync
+- migration of AsyncStorage data
+- currency redesign
+- UI redesign
+- unrelated refactoring
+- new dependencies unless absolutely required
+
+IMPORTANT:
+Do not modify unrelated financial domains just to make the task appear complete.
+
+TESTING
+
+Run:
+1. focused Payment tests
+2. relevant Auth/Workspace security tests
+3. full test suite
+4. TypeScript typecheck
+5. git diff --check
+6. scan to confirm no Payment hard-delete implementation was introduced
+
+If Rules Emulator testing is not currently available, do NOT install packages just for this task unless explicitly necessary. Report the limitation clearly.
+
+BEFORE FINISHING
+Audit the final diff and confirm:
+- only files necessary for Payments Cloud Core changed
+- no hard delete
+- no settlement implementation
+- no unrelated refactor
+- no AsyncStorage fallback in Firebase mode
+- Workspace boundary is preserved
+- existing Debt/Customer behavior was not weakened
+
+DO NOT COMMIT.
+
+STOP after completing the task and report:
+- exact files changed
+- what was implemented
+- tests and results
+- Rules verification status
+- any remaining blocker
+- any behavior intentionally left out of scope
