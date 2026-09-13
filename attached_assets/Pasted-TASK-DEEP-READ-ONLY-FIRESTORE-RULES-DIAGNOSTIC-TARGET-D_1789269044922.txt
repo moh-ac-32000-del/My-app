@@ -1,0 +1,437 @@
+TASK: DEEP READ-ONLY FIRESTORE RULES DIAGNOSTIC
+TARGET: Debt CREATE is consistently DENIED in Firebase Rules Playground
+
+IMPORTANT
+This is a diagnostic investigation only.
+
+DO NOT:
+- modify any source file
+- modify firestore.rules
+- modify tests
+- install packages
+- deploy rules
+- deploy functions
+- create/update/delete any Firebase production document
+- run a real Firestore write
+- commit anything
+- change project configuration
+
+FILES CHANGED MUST REMAIN: NONE.
+
+BACKGROUND
+
+The Debt CREATE simulation in Firebase Rules Playground has already been performed multiple times.
+
+It consistently returns:
+
+DENIED
+
+Therefore DO NOT ask us to repeat the same CREATE test.
+
+The following facts have already been verified manually:
+
+Firebase project:
+retail-business-manager
+
+Workspace:
+KCFjcWqGvRKry3ObNrVc
+
+Authenticated Firebase UID:
+Mxq6SJqbaEPrJRFMoJP4SCJNo2L2
+
+Active membership:
+spaces/KCFjcWqGvRKry3ObNrVc/members/Mxq6SJqbaEPrJRFMoJP4SCJNo2L2
+
+role:
+owner
+
+status:
+active
+
+Existing active Customer:
+spaces/KCFjcWqGvRKry3ObNrVc/customers/customer-mtvkybll-xq7j4uym
+
+Customer:
+id = customer-mtvkybll-xq7j4uym
+isActive = true
+
+Rules Playground reads already verified:
+- GET /users/{own UID} = ALLOWED
+- GET /spaces/{workspaceId} = ALLOWED
+- GET /spaces/{workspaceId}/customers/{customerId} = ALLOWED
+
+Debt CREATE was tested repeatedly and remains:
+DENIED
+
+Do NOT repeat that test.
+
+KNOWN TEST PAYLOAD
+
+The Debt create payload used was:
+
+id = test-debt-001
+storeId = local-store
+workspaceId = KCFjcWqGvRKry3ObNrVc
+createdByUserId = Mxq6SJqbaEPrJRFMoJP4SCJNo2L2
+customerId = customer-mtvkybll-xq7j4uym
+currency = TRY
+amount = Firestore double 100
+createdAt = 2026-09-13T09:00:00.000Z
+updatedAt = 2026-09-13T09:00:00.000Z
+
+No optional fields were supplied.
+
+CURRENT DEBT CREATE RULE
+
+Inspect the actual repository file and do not assume it is unchanged.
+
+The expected structure is:
+
+match /spaces/{spaceId}/debts/{debtId} {
+  allow read: if isActiveMember(spaceId);
+
+  allow create: if isActiveMember(spaceId)
+    && isValidDebtDocument(spaceId, debtId, request.resource.data)
+    && hasActiveCustomer(spaceId, request.resource.data.customerId)
+    && request.resource.data.createdByUserId == request.auth.uid;
+
+  allow update: if ...
+}
+
+CURRENT HELPERS TO INVESTIGATE
+
+Inspect the actual current implementation of:
+
+1. isActiveMember()
+2. hasActiveCustomer()
+3. isValidDebtDocument()
+
+Do not rely only on the snippets in this prompt.
+
+MAIN INVESTIGATION
+
+We need to determine why Firebase Rules Playground denies the request when the repository-level predicate analysis says it should pass.
+
+Investigate these areas in order:
+
+==================================================
+1. FIRESTORE RULES PARSING / SEMANTICS
+==================================================
+
+Read the complete firestore.rules file.
+
+Look for any Firestore Rules Language issue that could cause a rule to evaluate differently from the apparent JavaScript-like logic.
+
+Specifically investigate:
+
+- function return semantics
+- short-circuit behavior of && and ||
+- map field access
+- `keys().hasOnly()`
+- `keys().hasAll()`
+- `keys().hasAny()`
+- `is string`
+- `is number`
+- `.size()`
+- `.matches()`
+- `exists()`
+- `get()`
+- nested function calls
+- cross-document reads from a create rule
+- use of `database` inside helper paths
+- path interpolation with `$(database)`
+- request.auth access
+- request.resource.data during CREATE
+- resource vs request.resource
+
+Do not change anything.
+
+==================================================
+2. isActiveMember() DEEP CHECK
+==================================================
+
+Inspect the exact current isActiveMember() function.
+
+Determine exactly which Firestore documents it reads.
+
+Show the exact path(s).
+
+Determine whether it checks:
+- authentication
+- membership existence
+- membership status
+- userId
+- role
+- anything else
+
+Compare every check with the verified membership document.
+
+IMPORTANT:
+A successful direct GET of the membership document does NOT automatically prove that the helper evaluates true if the helper has additional conditions.
+
+Identify every condition.
+
+==================================================
+3. hasActiveCustomer() DEEP CHECK
+==================================================
+
+Inspect the exact current function.
+
+Determine:
+
+- exact document path
+- number of exists/get calls
+- fields accessed
+- whether customer read permissions affect the nested get
+- whether customer data type assumptions can fail
+- whether `data.id == customerId` can fail
+- whether `data.isActive == true` can fail
+- whether the Customer document has unexpected fields that matter
+
+Do not modify the Customer.
+
+Do not perform writes.
+
+==================================================
+4. isValidDebtDocument() COMPLETE TRUTH TABLE
+==================================================
+
+Build a complete predicate-by-predicate table.
+
+For EVERY condition in the actual function, state:
+
+CONDITION
+EXPECTED VALUE
+PASS/FAIL/UNKNOWN
+REASON
+
+Do not stop at the obvious fields.
+
+Pay particular attention to:
+
+- hasOnly()
+- hasAll()
+- id
+- storeId
+- workspaceId
+- createdByUserId
+- customerId
+- currency
+- amount
+- amount >= 0
+- amount > 0
+- originalAmount branch
+- dueDate branch
+- settledAt branch
+- createdAt
+- updatedAt
+
+Also investigate whether Firestore Rules `is number` accepts the exact Playground numeric representation used for `double 100`.
+
+==================================================
+5. RULE ORDER / MATCH STRUCTURE
+==================================================
+
+Inspect the entire firestore.rules file for:
+
+- another `match` that could affect the Debt path
+- nested matches
+- wildcard collisions
+- overlapping rules
+- recursive wildcard behavior
+- a parent rule that changes expectations
+- duplicate Debt match blocks
+- malformed nesting
+- accidental deny behavior
+
+Explain which match block actually governs:
+
+/spaces/KCFjcWqGvRKry3ObNrVc/debts/<debtId>
+
+==================================================
+6. DEPLOYED VS LOCAL RULES
+==================================================
+
+This is CRITICAL.
+
+Determine whether there is any available local evidence of the deployed Firestore Rules version.
+
+Inspect:
+
+- firebase.json
+- .firebaserc
+- package configuration
+- Firebase project configuration
+- git history
+- recent commits involving firestore.rules
+- any deployment output/logs available locally
+
+Determine:
+
+A. Which Firebase project the repository is configured to use.
+B. Which Firestore database configuration is expected.
+C. Whether the repository's firestore.rules were ever deployed after the current Debt rules were added.
+D. Whether there is evidence the deployed rules may be older/newer/different.
+
+Do NOT deploy.
+
+Do NOT claim the deployed rules equal the repository rules unless there is evidence.
+
+If exact deployed contents cannot be retrieved without a deployment or authenticated external operation, state that clearly.
+
+==================================================
+7. FIREBASE PROJECT / DATABASE CONSISTENCY
+==================================================
+
+Check whether the repository configuration points to:
+
+retail-business-manager
+
+and whether the expected Firestore database is:
+
+nam5
+
+Look for any possibility that Rules Playground is testing a different project/database than the repository configuration.
+
+Do not make any changes.
+
+==================================================
+8. FIRESTORE ACCESS CALL LIMIT
+==================================================
+
+Calculate the maximum document access calls made by the Debt CREATE rule.
+
+Include nested calls from:
+
+isActiveMember()
+hasActiveCustomer()
+exists()
+get()
+
+Determine whether the rule could exceed the Firestore Rules access-call limit.
+
+Show the calculation explicitly.
+
+==================================================
+9. PLAYGROUND-SPECIFIC POSSIBILITY
+==================================================
+
+Without repeating the CREATE test, investigate whether Firebase Rules Playground has any known limitation or behavior that could make a simulated CREATE with cross-document `get()/exists()` behave differently.
+
+If this cannot be verified from local project evidence, say:
+
+"Cannot establish from repository evidence."
+
+Do not invent an explanation.
+
+==================================================
+10. SERVICE VS RULES PAYLOAD
+==================================================
+
+Inspect:
+
+services/debtFirestore.ts
+
+Determine the exact object sent to Firestore for CREATE.
+
+Compare it to the Rules schema.
+
+Check especially whether production code adds/removes:
+
+- workspaceId
+- createdByUserId
+- optional fields
+- timestamps
+- extra fields
+
+Do not execute a write.
+
+==================================================
+11. HARD DELETE SAFETY
+==================================================
+
+Confirm that the current architecture does NOT introduce a hard delete for Debt.
+
+Do not add or restore delete behavior.
+
+==================================================
+12. REMINDER RECONCILIATION
+==================================================
+
+Confirm only whether the existing Cloud Debt snapshot calls local due-date reminder reconciliation.
+
+Do not modify reminder behavior.
+
+Do not expand scope.
+
+==================================================
+FINAL OUTPUT
+==================================================
+
+Return ONLY a diagnostic report with these sections:
+
+A. VERDICT
+
+Choose exactly one:
+
+- EXACT CAUSE FOUND
+- LIKELY CAUSE
+- INSUFFICIENT EVIDENCE
+
+B. EXACT ROOT CAUSE
+
+If known, identify the exact rule/function/condition.
+
+If unknown, explicitly say why.
+
+C. COMPLETE CREATE EVALUATION TABLE
+
+Every relevant predicate.
+
+D. isActiveMember() ANALYSIS
+
+Exact path and every condition.
+
+E. hasActiveCustomer() ANALYSIS
+
+Exact path and every condition.
+
+F. isValidDebtDocument() ANALYSIS
+
+Complete predicate table.
+
+G. RULE STRUCTURE ANALYSIS
+
+Which match block governs the Debt path.
+
+H. PROJECT / DATABASE ANALYSIS
+
+Firebase project and database configuration.
+
+I. DEPLOYED VS REPOSITORY
+
+State exactly what can and cannot be proven.
+
+J. ACCESS-CALL COUNT
+
+Show the calculation.
+
+K. PAYLOAD COMPARISON
+
+Repository serializer vs Rules expectations.
+
+L. NEXT ACTION
+
+Give the SINGLE smallest next action needed to resolve the uncertainty.
+
+Do NOT suggest repeating the same Rules Playground CREATE test.
+
+Do NOT suggest changing code unless the exact cause has been proven.
+
+M. FILES CHANGED
+
+MUST BE:
+
+NONE
+
+STOP.
