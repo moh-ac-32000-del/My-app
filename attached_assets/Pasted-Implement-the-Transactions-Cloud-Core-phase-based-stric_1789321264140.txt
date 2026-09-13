@@ -1,0 +1,251 @@
+Implement the Transactions Cloud Core phase based strictly on the completed preflight audit.
+
+IMPORTANT:
+This is an implementation task, not a redesign.
+
+Goal:
+Make Transactions Workspace-scoped and Cloud-first in Firebase mode while preserving the existing Transaction domain model and existing UI behavior.
+
+CURRENT DOMAIN MODEL:
+Transaction:
+- id
+- storeId
+- createdAt
+- updatedAt
+- type: 'cash_in' | 'cash_out'
+- amount
+- currency
+- note?
+
+CashTransactionDraft:
+- type
+- amount
+- currency
+- note?
+
+Do NOT change the meaning of these fields.
+
+CRITICAL:
+- Payment.transactionId means Transaction.id.
+- Do NOT treat it as debtId.
+- Do NOT add debtId.
+- Do NOT redesign Debt/Payment relationships.
+
+==================================================
+1. CANONICAL FIRESTORE PATH
+==================================================
+
+Use exactly ONE Workspace-scoped collection:
+
+spaces/{spaceId}/transactions/{transactionId}
+
+Do NOT use both:
+- transactions
+- cashTransactions
+
+Use the existing Workspace architecture and activeSpaceId as the security boundary.
+
+Do not use StoreProfile.id as the Workspace ID.
+
+==================================================
+2. CLOUD TRANSACTION SERVICE
+==================================================
+
+Create:
+
+services/transactionFirestore.ts
+
+Implement only the minimum required operations:
+
+- list/read Transactions for a Workspace
+- realtime subscription
+- create Transaction
+
+Do NOT implement update or delete because there is currently no dedicated Transaction update/delete domain flow.
+
+Requirements:
+
+- active Firebase Auth user required
+- active Workspace required
+- validate the existing Transaction shape
+- document ID must equal transaction.id
+- workspace path must determine the Workspace
+- reject duplicate Transaction IDs atomically
+- preserve the existing client-generated Transaction ID format
+- reject invalid amount/type/currency
+- amount must remain positive/valid according to the existing domain validation
+- note normalization must preserve current behavior
+- timestamps must be valid
+- do not silently fall back to AsyncStorage on Cloud read/write failure
+
+Do not introduce a new Transaction ID generator unless absolutely required.
+Reuse the existing createTransactionId().
+
+==================================================
+3. WORKSPACE METADATA
+==================================================
+
+The current Transaction domain model does not contain:
+- workspaceId
+- createdByUserId
+
+Do NOT blindly add these fields to types/business.ts.
+
+Prefer keeping the existing domain model unchanged and use the Workspace path plus trusted Auth context for Cloud ownership.
+
+If Cloud documents need metadata for validation, use only the smallest implementation necessary and clearly report the decision.
+
+Do not redesign the domain model.
+
+==================================================
+4. FIRESTORE RULES
+==================================================
+
+Add Rules for:
+
+spaces/{spaceId}/transactions/{transactionId}
+
+Rules must enforce:
+
+- authenticated user
+- active membership in the Workspace
+- create only for active members
+- document ID == transaction.id
+- valid Transaction document shape
+- valid type
+- valid currency
+- valid amount
+- valid timestamps
+- no unexpected fields
+- client cannot delete
+- client cannot update
+
+Do not weaken existing Rules.
+
+Do not modify unrelated collections.
+
+==================================================
+5. STORE CONTEXT INTEGRATION
+==================================================
+
+Update StoreContext so:
+
+Firebase configured + authenticated + activeSpaceId:
+    -> Transactions come from Firestore
+    -> addTransaction writes to Firestore
+    -> no AsyncStorage fallback
+
+Firebase unavailable:
+    -> preserve the existing local behavior unchanged
+
+Cloud read failure MUST NOT become an empty transaction list.
+
+Preserve the existing public StoreContext API where possible so existing UI components continue working.
+
+Do NOT change FloatingQuickActions unless strictly required.
+
+==================================================
+6. DO NOT MIGRATE THESE YET
+==================================================
+
+Explicitly OUT OF SCOPE:
+
+- Debt settlement
+- Payment settlement
+- Daily Journal Cloud migration
+- Cash screen Cloud migration
+- Dashboard journal migration
+- Daily archives migration
+- Backup/restore migration
+- AsyncStorage migration
+- Sync / Outbox
+- Offline mutation support
+- Workspace switching
+- Workspace invitations
+- notifications
+- currency redesign
+- UI redesign
+- transaction update/delete
+- new debt/payment relationships
+
+Do not implement any of these.
+
+==================================================
+7. PAYMENT COMPATIBILITY
+==================================================
+
+Preserve:
+
+Payment.transactionId === Transaction.id
+
+Do not change paymentFirestore.ts except if compilation requires a strictly compatible adjustment.
+
+Do NOT add Transaction -> Debt relationships.
+
+Do NOT validate transactionId against Debt.
+
+If the current Payment Cloud implementation does not validate referenced Transactions, leave that for a separate Payment relationship integrity phase.
+
+==================================================
+8. TESTS
+==================================================
+
+Add focused Transaction Cloud tests covering at minimum:
+
+- valid Transaction create
+- invalid type rejected
+- invalid currency rejected
+- invalid amount rejected
+- document ID mismatch rejected
+- duplicate Transaction ID rejected
+- valid same-Workspace authenticated create
+- unauthorized/nonmember access rejected
+- delete denied
+- update denied
+
+If Rules Emulator tests cannot run because the existing dependency is unavailable, report that clearly instead of installing packages unless installation is explicitly required by the existing project setup.
+
+Run:
+
+- focused Transaction tests
+- full test suite
+- TypeScript
+- web export/build if already part of the existing verification flow
+- git diff --check
+
+==================================================
+9. SCOPE CONTROL
+==================================================
+
+Before implementation:
+- inspect the existing StoreContext implementation
+- inspect createCashTransaction/createTransactionId
+- inspect existing Firestore workspace helpers
+- inspect existing Firestore Rules helpers
+
+Do not rewrite working architecture.
+
+Do not install unnecessary packages.
+
+Do not modify .replit or workflows.
+
+Do not commit.
+
+==================================================
+10. STOP CONDITION
+==================================================
+
+When finished, STOP.
+
+Report:
+
+1. Files changed.
+2. Exact Firestore document shape.
+3. Exact canonical collection path.
+4. How StoreContext behaves in Firebase mode versus local mode.
+5. How duplicate IDs are prevented.
+6. Exact Firestore Rules protections.
+7. Tests run and results.
+8. Any issue that prevented full verification.
+
+Do NOT continue to Daily Journal, Settlement, Backup/Restore, or any other phase.
