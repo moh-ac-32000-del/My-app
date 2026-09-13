@@ -80,7 +80,6 @@ service cloud.firestore {
         && request.resource.data.createdByUserId == resource.data.createdByUserId
         && request.resource.data.customerId == resource.data.customerId
         && request.resource.data.createdAt == resource.data.createdAt;
-      allow delete: if isActiveMember(spaceId);
     }
 
     match /customers/{document=**} {

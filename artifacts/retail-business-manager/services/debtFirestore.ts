@@ -1,6 +1,5 @@
 import {
   collection,
-  deleteDoc,
   doc,
   getDoc,
   getDocs,
@@ -120,15 +119,6 @@ export async function updateDebtDocument(spaceId: string, debt: Debt): Promise<v
     dueDate: debt.dueDate ?? deleteField(),
     updatedAt: debt.updatedAt,
   });
-}
-
-export async function deleteDebtDocument(spaceId: string, debtId: string): Promise<void> {
-  getAuthenticatedUid();
-  const debtReference = doc(
-    getFirestoreInstance(),
-    workspaceBusinessDocumentPath(spaceId, 'debts', requireDebtId(debtId)),
-  );
-  await deleteDoc(debtReference);
 }
 
 export function serializeDebtDocument(

@@ -12,7 +12,6 @@ const firestoreMocks = vi.hoisted(() => ({
   runTransaction: vi.fn(),
   setDoc: vi.fn().mockResolvedValue(undefined),
   updateDoc: vi.fn().mockResolvedValue(undefined),
-  deleteDoc: vi.fn().mockResolvedValue(undefined),
   deleteField: vi.fn(() => '__delete_field__'),
   nextSnapshot: null as ((snapshot: { docs: Array<{ id: string; data: () => Record<string, unknown> }> }) => void) | null,
   listenerError: null as ((error: Error) => void) | null,
@@ -32,7 +31,6 @@ const storageMocks = vi.hoisted(() => ({
 
 vi.mock('firebase/firestore', () => ({
   collection: firestoreMocks.collection,
-  deleteDoc: firestoreMocks.deleteDoc,
   deleteField: firestoreMocks.deleteField,
   doc: firestoreMocks.doc,
   getDoc: firestoreMocks.getDoc,
@@ -49,7 +47,6 @@ vi.mock('@/services/storage', () => storageMocks);
 
 import {
   createDebtDocument,
-  deleteDebtDocument,
   listDebtDocuments,
   normalizeDebtDocument,
   reconcileCloudDebtReminders,
@@ -251,11 +248,4 @@ describe('Debt Firestore service', () => {
     expect(storageMocks.reconcileDueDateReminders).toHaveBeenCalledWith('store-A', [debt]);
   });
 
-  it('deletes only the requested Cloud Debt document', async () => {
-    await deleteDebtDocument('space-A', 'debt-A');
-
-    expect(firestoreMocks.deleteDoc).toHaveBeenCalledWith(
-      expect.objectContaining({ path: 'spaces/space-A/debts/debt-A' }),
-    );
-  });
 });

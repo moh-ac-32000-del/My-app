@@ -2,7 +2,6 @@ import React, { createContext, ReactNode, useCallback, useEffect, useMemo, useSt
 import type { Debt } from '@/types/business';
 import { getFirebaseAuth, isFirebaseConfigured } from '@/services/firebase';
 import {
-  deleteDebtDocument,
   reconcileCloudDebtReminders,
   subscribeToDebts,
   updateDebtDocument,
@@ -17,7 +16,6 @@ interface DebtContextValue {
   error: string | null;
   retryDebts: () => void;
   updateDebt: (debt: Debt) => Promise<void>;
-  deleteDebt: (debtId: string) => Promise<void>;
 }
 
 const DebtContext = createContext<DebtContextValue | null>(null);
@@ -149,18 +147,6 @@ export function DebtProvider({ children }: { children: ReactNode }) {
     throw new Error('localDebtUpdateUnsupported');
   }, [canonicalSpaceId, profile.id]);
 
-  const deleteDebt = useCallback(async (debtId: string) => {
-    if (isFirebaseConfigured) {
-      if (!canonicalSpaceId) {
-        throw new Error('debtWorkspaceUnavailable');
-      }
-      await deleteDebtDocument(canonicalSpaceId, debtId);
-      await reconcileCloudDebtReminders(canonicalSpaceId, profile.id);
-      return;
-    }
-    throw new Error('localDebtDeleteUnsupported');
-  }, [canonicalSpaceId, profile.id]);
-
   const value = useMemo(
     () => ({
       debts,
@@ -169,9 +155,8 @@ export function DebtProvider({ children }: { children: ReactNode }) {
       error,
       retryDebts,
       updateDebt,
-      deleteDebt,
     }),
-    [canonicalSpaceId, debts, deleteDebt, error, isLoading, retryDebts, updateDebt],
+    [canonicalSpaceId, debts, error, isLoading, retryDebts, updateDebt],
   );
 
   return <DebtContext.Provider value={value}>{children}</DebtContext.Provider>;
