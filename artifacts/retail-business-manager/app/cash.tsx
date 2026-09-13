@@ -1,7 +1,6 @@
-import React, { useCallback, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import React, { useState } from 'react';
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useFocusEffect } from 'expo-router';
 import { AppShell, EmptyState, GlassCard, PageHeader } from '@/components/AppShell';
 import { DailyClosingAction } from '@/components/DailyClosingAction';
 import { formatMoney } from '@/constants/currencies';
@@ -9,31 +8,19 @@ import { formatLocalizedDateTime } from '@/constants/i18n';
 import { useStore } from '@/context/StoreContext';
 import { useColors } from '@/hooks/useColors';
 import { useI18n } from '@/hooks/useI18n';
-import { loadDailyJournalEvents, type DailyJournalEvent } from '@/services/storage';
+import { useDailyJournalProjection } from '@/hooks/useDailyJournalProjection';
+import type { DailyJournalEvent } from '@/services/storage';
 
 export default function CashScreen() {
   const colors = useColors();
-  const { profile, isReady, journalRevision } = useStore();
+  const { profile } = useStore();
   const { t, isRTL, language } = useI18n();
-  const [events, setEvents] = useState<DailyJournalEvent[]>([]);
   const [journalRefreshKey, setJournalRefreshKey] = useState(0);
-
-  useFocusEffect(
-    useCallback(() => {
-      if (!isReady) {
-        return undefined;
-      }
-      let active = true;
-      void loadDailyJournalEvents(profile.id).then((loadedEvents) => {
-        if (active) {
-          setEvents(loadedEvents);
-        }
-      });
-      return () => {
-        active = false;
-      };
-    }, [isReady, journalRevision, journalRefreshKey, profile.id]),
-  );
+  const {
+    events,
+    isLoading: journalLoading,
+    error: journalError,
+  } = useDailyJournalProjection(journalRefreshKey);
 
   const getEventTitle = (event: DailyJournalEvent): string => {
     if (event.type === 'cash_in') {
@@ -75,7 +62,17 @@ export default function CashScreen() {
         }
       />
 
-      {events.length === 0 ? (
+      {journalLoading ? (
+        <View style={styles.status}>
+          <ActivityIndicator color={colors.primary} />
+        </View>
+      ) : journalError ? (
+        <EmptyState
+          icon="cloud-offline-outline"
+          title={t('somethingWentWrong')}
+          hint={t('reloadToContinue')}
+        />
+      ) : events.length === 0 ? (
         <EmptyState
           icon="receipt-outline"
           title={t('noJournalEvents')}
@@ -112,6 +109,7 @@ export default function CashScreen() {
 
 const styles = StyleSheet.create({
   list: { gap: 10, marginBottom: 18 },
+  status: { minHeight: 130, alignItems: 'center', justifyContent: 'center' },
   transactionCard: { padding: 14 },
   transactionHeader: { alignItems: 'center', gap: 11 },
   transactionIcon: { width: 40, height: 40, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },

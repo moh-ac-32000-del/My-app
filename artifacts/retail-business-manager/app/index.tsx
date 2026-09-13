@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -12,20 +12,26 @@ import { formatLocalizedDate, formatLocalizedDateTime } from '@/constants/i18n';
 import { useStore } from '@/context/StoreContext';
 import { useColors } from '@/hooks/useColors';
 import { useI18n } from '@/hooks/useI18n';
-import { calculateVisibleCurrencyBalances, loadDailyJournalEvents, type DailyJournalEvent } from '@/services/storage';
+import { calculateVisibleCurrencyBalances } from '@/services/storage';
+import { useDailyJournalProjection } from '@/hooks/useDailyJournalProjection';
+import type { DailyJournalEvent } from '@/services/storage';
 
 export default function DashboardScreen() {
   const colors = useColors();
   const router = useRouter();
-  const { profile, isReady, isAuthenticated, initializationError, retryInitialization, transactions, journalRevision } = useStore();
+  const { profile, isReady, isAuthenticated, initializationError, retryInitialization, transactions } = useStore();
   const { t, isRTL, direction, language } = useI18n();
   const insets = useSafeAreaInsets();
   const balances = useMemo(
     () => calculateVisibleCurrencyBalances(transactions, profile.visibleCurrencies),
     [transactions, profile.visibleCurrencies],
   );
-  const [journalEvents, setJournalEvents] = useState<DailyJournalEvent[]>([]);
   const [journalRefreshKey, setJournalRefreshKey] = useState(0);
+  const {
+    events: journalEvents,
+    isLoading: journalLoading,
+    error: journalError,
+  } = useDailyJournalProjection(journalRefreshKey);
   const currencyCardWidth = balances.length === 1 ? '100%' : '48%';
 
   useEffect(() => {
@@ -33,21 +39,6 @@ export default function DashboardScreen() {
       router.replace('/login');
     }
   }, [isReady, isAuthenticated, router]);
-
-  useEffect(() => {
-    if (!isReady || initializationError) {
-      return;
-    }
-    let active = true;
-    void loadDailyJournalEvents(profile.id).then((events) => {
-      if (active) {
-        setJournalEvents(events);
-      }
-    });
-    return () => {
-      active = false;
-    };
-  }, [initializationError, isReady, journalRevision, journalRefreshKey, profile.id]);
 
   const getJournalTitle = (event: DailyJournalEvent): string => {
     if (event.type === 'cash_in') return t('cashIn');
@@ -113,7 +104,17 @@ export default function DashboardScreen() {
         onClosed={() => setJournalRefreshKey((value) => value + 1)}
       />
       <GlassCard style={styles.emptyActivity}>
-        {journalEvents.length === 0 ? (
+        {journalLoading ? (
+          <View style={styles.journalStatus}>
+            <ActivityIndicator color={colors.primary} />
+          </View>
+        ) : journalError ? (
+          <View style={styles.journalStatus}>
+            <Ionicons name="cloud-offline-outline" size={22} color={colors.destructive} />
+            <Text style={[styles.emptyTitle, { color: colors.foreground }]}>{t('somethingWentWrong')}</Text>
+            <Text style={[styles.emptyHint, { color: colors.mutedForeground }]}>{t('reloadToContinue')}</Text>
+          </View>
+        ) : journalEvents.length === 0 ? (
           <View style={[styles.emptyActivityRow, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
             <Ionicons name="pulse-outline" size={22} color={colors.mutedForeground} />
             <View style={{ flex: 1 }}>
@@ -170,6 +171,7 @@ const styles = StyleSheet.create({
   metricRow: { flexDirection: 'row-reverse', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: 9, marginBottom: 9 },
   metricCell: { minWidth: 0 },
   emptyActivity: { marginBottom: 18 },
+  journalStatus: { alignItems: 'center', gap: 8, minHeight: 64, justifyContent: 'center' },
   emptyActivityRow: { alignItems: 'center', gap: 13 },
   emptyTitle: { fontSize: 14, fontFamily: 'Inter_600SemiBold', textAlign: 'right' },
   emptyHint: { fontSize: 12, fontFamily: 'Inter_400Regular', textAlign: 'right', marginTop: 3 },

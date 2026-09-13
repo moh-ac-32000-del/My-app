@@ -64,6 +64,8 @@ interface StoreContextValue {
   spaceIdentity: SpaceIdentity | null;
   cloudSpace: Space | null;
   transactions: Transaction[];
+  transactionsLoading: boolean;
+  transactionsError: string | null;
   journalRevision: number;
   addTransaction: (draft: CashTransactionDraft) => Promise<Transaction>;
   addCustomerDebt: (customerId: string, draft: { amount: number; currency: CurrencyCode; dueDate?: string }) => Promise<Debt>;
@@ -185,6 +187,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [isFirebaseReady, setIsFirebaseReady] = useState<boolean>(!isFirebaseConfigured);
   const [initializationError, setInitializationError] = useState<string | null>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [transactionsLoading, setTransactionsLoading] = useState<boolean>(isFirebaseConfigured);
+  const [transactionsError, setTransactionsError] = useState<string | null>(null);
   const [journalRevision, setJournalRevision] = useState<number>(0);
   const profileRef = useRef<StoreProfile>(defaultProfile);
   const transactionsRef = useRef<Transaction[]>([]);
@@ -310,6 +314,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         profileRef.current = defaultProfile;
         transactionsRef.current = [];
         transactionLoadPromiseRef.current = Promise.resolve();
+         setTransactionsLoading(Boolean(user));
+         setTransactionsError(null);
         setProfile(defaultProfile);
         setTransactions([]);
         if (!user) {
@@ -339,6 +345,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         profileRef.current = defaultProfile;
         transactionsRef.current = [];
         transactionLoadPromiseRef.current = Promise.resolve();
+         setTransactionsLoading(false);
+         setTransactionsError(null);
         setProfile(defaultProfile);
         setTransactions([]);
       },
@@ -355,6 +363,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     let unsubscribe: (() => void) | undefined;
 
     if (!isReady || initializationError || (isFirebaseConfigured && !activeSpaceId)) {
+      setTransactionsLoading(isFirebaseConfigured && isAuthenticated);
       return () => {
         isActive = false;
       };
@@ -362,10 +371,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
     transactionsRef.current = [];
     setTransactions([]);
+    setTransactionsLoading(true);
+    setTransactionsError(null);
 
     if (isFirebaseConfigured) {
       if (!isAuthenticated || !activeSpaceId) {
         transactionLoadPromiseRef.current = Promise.resolve();
+        setTransactionsLoading(false);
         return () => {
           isActive = false;
         };
@@ -381,6 +393,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             }
             transactionsRef.current = loadedTransactions;
             setTransactions(loadedTransactions);
+            setTransactionsLoading(false);
+            setTransactionsError(null);
             if (!hasReceivedInitialSnapshot) {
               hasReceivedInitialSnapshot = true;
               resolve();
@@ -390,6 +404,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             if (!isActive) {
               return;
             }
+            setTransactionsLoading(false);
+            setTransactionsError(error.message);
             setInitializationError(error.message);
             if (!hasReceivedInitialSnapshot) {
               hasReceivedInitialSnapshot = true;
@@ -413,6 +429,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       }
       transactionsRef.current = loadedTransactions;
       setTransactions(loadedTransactions);
+      setTransactionsLoading(false);
+      setTransactionsError(null);
     });
     transactionLoadPromiseRef.current = loadPromise;
 
@@ -562,6 +580,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       spaceIdentity,
       cloudSpace,
       transactions,
+       transactionsLoading,
+       transactionsError,
       journalRevision,
       addTransaction,
       addCustomerDebt,
@@ -589,6 +609,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       rtl,
       spaceIdentity,
       transactions,
+       transactionsError,
+       transactionsLoading,
     ],
   );
 
