@@ -1,0 +1,78 @@
+STOP. READ-ONLY DIAGNOSIS ONLY.
+Do not modify any files, Firebase data, firestore.rules, or deploy anything.
+
+We already have these confirmed manual Firebase Rules Playground results:
+
+- Authenticated UID:
+  Mxq6SJqbaEPrJRFMoJP4SCJNo2L2
+- Firebase project:
+  retail-business-manager
+- database:
+  (default)
+- workspaceId:
+  KCFjcWqGvRKry3ObNrVc
+- membership document:
+  /spaces/KCFjcWqGvRKry3ObNrVc/members/Mxq6SJqbaEPrJRFMoJP4SCJNo2L2
+- membership status:
+  active
+- Direct GET of that exact membership document:
+  ALLOWED
+- CREATE simulation for:
+  /spaces/KCFjcWqGvRKry3ObNrVc/debts/test-debt-001
+  is DENIED
+- In the CREATE request, request.auth.uid is confirmed to be:
+  Mxq6SJqbaEPrJRFMoJP4SCJNo2L2
+- CREATE evaluation reports:
+  isActiveMember(...) = false
+
+ADDITIONAL COMPARISON POINT:
+
+isActiveMember() is already proven to work correctly for the Customers
+rules. During Phase 3A, the same UID and same workspace were successfully
+verified with real Rules Playground ALLOW/DENY tests.
+
+Therefore, compare the Customers and Debts match structures literally,
+not just semantically.
+
+Compare character-by-character if necessary:
+
+match /spaces/{spaceId}/customers/{customerId} { ... }
+
+versus:
+
+match /spaces/{spaceId}/debts/{debtId} { ... }
+
+in the currently deployed firestore.rules.
+
+Specifically verify:
+
+1. Whether both match blocks are at exactly the same nesting level.
+2. Whether both are directly inside the same:
+   match /spaces/{spaceId}
+3. Whether the Debts block could accidentally be:
+   - nested inside another match block,
+   - outside the expected /spaces/{spaceId} parent,
+   - duplicated,
+   - affected by misplaced braces,
+   - or otherwise receiving a different spaceId binding.
+4. Compare the exact braces and surrounding match blocks.
+5. Confirm the exact deployed rules structure, not only the repository source.
+6. Explain why Customers can successfully use isActiveMember() while
+   Debts reports isActiveMember() = false if the structures are actually
+   identical.
+
+Also inspect whether the CREATE evaluation's spaceId is exactly:
+KCFjcWqGvRKry3ObNrVc
+
+Do not ask the user to repeat Playground tests.
+Do not ask for screenshots.
+Do not make any changes.
+Do not deploy anything.
+
+Return only:
+1. Root cause or strongest remaining explanation.
+2. Exact evidence.
+3. Whether a code/rules change is actually required.
+4. The smallest safe next action.
+
+STOP after the diagnosis.
