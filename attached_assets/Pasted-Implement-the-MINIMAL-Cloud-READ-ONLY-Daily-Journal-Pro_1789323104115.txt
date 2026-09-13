@@ -1,0 +1,131 @@
+Implement the MINIMAL Cloud READ-ONLY Daily Journal Projection.
+
+IMPORTANT ARCHITECTURAL BOUNDARY:
+
+This phase is READ-ONLY.
+
+DO NOT:
+- migrate local data
+- write journal records to Firestore
+- migrate archives
+- migrate backup/restore
+- implement Cloud settlement
+- implement Cloud daily closing
+- modify cash balance formula
+- modify Transaction/Debt/Payment/Customer models
+- redesign storeId or Workspace mapping
+- add storeId↔spaceId assumptions
+- implement Sync/Outbox/offline writes
+- modify notifications/reminders architecture
+- redesign UI
+- install unnecessary packages
+- modify unrelated files
+
+Current architecture:
+- Transactions are Cloud-backed.
+- Debts are Cloud-backed.
+- Payments are Cloud-backed.
+- Customers are Cloud-backed.
+- Daily Journal is still incorrectly reading these sources from local AsyncStorage.
+- Archives remain local for now.
+
+GOAL:
+
+In Firebase mode, Daily Journal must be projected from the existing Cloud-backed provider states:
+
+Transactions + Debts + Payments + Customers
+
+while preserving the existing DailyJournalEvent semantics and ordering.
+
+Requirements:
+
+1. Reuse the existing journal event construction semantics.
+   Do not invent a new journal model.
+
+2. Build DailyJournalEvent[] in memory from the existing Cloud provider state.
+
+3. The journal must not use local AsyncStorage transactions/debts/payments/customers as its source of truth when Firebase mode is active.
+
+4. Establish an explicit readiness barrier:
+   The journal must not be considered ready until all four Cloud sources required by the journal have produced their initial valid snapshot:
+   - Customers
+   - Transactions
+   - Debts
+   - Payments
+
+5. Prevent partial provider states from being displayed as a complete journal.
+
+6. Preserve:
+   - current-day filtering
+   - event types
+   - payment→transaction suppression behavior
+   - customer-name joining
+   - newest-first ordering
+   - existing event/source IDs
+   - existing currency handling
+
+7. Archives:
+   - KEEP CURRENT LOCAL ARCHIVE BEHAVIOR.
+   - Do not migrate archives to Firestore.
+   - Continue using local archive snapshots only for archive/event suppression where currently required.
+   - Do not redesign archive semantics.
+
+8. Cash Balance:
+   - DO NOT change calculateVisibleCurrencyBalances.
+   - DO NOT change its formula.
+   - It should continue consuming the Cloud-backed Transaction state already provided by StoreContext.
+
+9. journalRevision:
+   - Do not redesign it into a Cloud revision.
+   - Do not create a new persisted revision.
+   - If the Cloud journal projection needs a refresh trigger, use the existing provider state changes/readiness rather than inventing a new synchronization system.
+
+10. Read-only safety:
+   - This journal projection must have NO Firestore writes.
+   - It must have NO AsyncStorage writes as part of journal calculation.
+   - Be especially careful not to trigger DebtContext reminder reconciliation from this journal read path.
+
+11. Error handling:
+   - If one required Cloud source fails, the journal must expose a clear loading/error state rather than silently falling back to local records.
+   - No local fallback in Firebase mode.
+
+12. Local/non-Firebase mode:
+   - Preserve the existing local behavior.
+   - Do not break the existing local mode.
+
+13. Keep the implementation minimal.
+   Prefer a small dedicated journal projection/helper over expanding StoreContext responsibilities unnecessarily.
+
+Before editing:
+- Inspect the existing buildDailyJournalEvents/loadDailyJournalEvents implementation and all current provider APIs.
+- Identify the smallest safe integration point.
+
+After implementation run:
+- focused relevant tests
+- full test suite
+- TypeScript typecheck
+- web/export or existing build verification
+- git diff --check
+
+Do NOT create tests for unrelated areas.
+
+STOP CONDITIONS:
+If implementing the readiness barrier requires changing the existing domain models, Firestore schema, settlement logic, archive schema, backup format, or Workspace/store identity model:
+STOP and report the blocker instead of expanding scope.
+
+FINAL REPORT:
+- Files changed
+- Exact journal data flow before vs after
+- How readiness is guaranteed
+- How partial provider states are prevented
+- Confirmation that Firebase mode has no local fallback
+- Confirmation that no Firestore writes were added
+- Confirmation that archives remain local
+- Confirmation that cash balance formula is unchanged
+- Tests/results
+- TypeScript result
+- Build/export result
+- git diff --check result
+- Any remaining limitation
+
+STOP after reporting. Do not commit unless explicitly instructed.
