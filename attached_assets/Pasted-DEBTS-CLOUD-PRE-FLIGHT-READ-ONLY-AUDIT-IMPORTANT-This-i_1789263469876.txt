@@ -1,0 +1,196 @@
+DEBTS CLOUD — PRE-FLIGHT READ-ONLY AUDIT
+
+IMPORTANT:
+This is an inspection-only task.
+
+DO NOT modify any file.
+DO NOT add or remove tests.
+DO NOT refactor.
+DO NOT change Firestore.
+DO NOT change Firestore Rules.
+DO NOT change Cloud Functions.
+DO NOT change AsyncStorage.
+DO NOT change UI.
+DO NOT add packages.
+DO NOT commit.
+
+Use the CURRENT HEAD/source of the project as the only implementation
+reference. Do not rely on older snapshots or assumptions.
+
+Audit the existing Debt implementation before we implement Debts Cloud.
+
+REPORT THE ACTUAL CURRENT CODE, NOT A PROPOSED DESIGN.
+
+1. CURRENT DEBT MODEL
+
+Find the actual current Debt type/interface/model and report:
+
+- every field
+- optional vs required
+- field types
+- ID generation format
+- timestamps
+- currency representation
+- amount representation
+- originalAmount behavior
+- dueDate behavior
+- settledAt behavior
+- any status/state fields if they exist
+
+2. DEBT CRUD / BUSINESS OPERATIONS
+
+Locate the actual implementations for:
+
+- createDebt
+- updateDebt
+- delete/remove debt
+- settle debt
+- any partial-payment logic
+- any remaining-balance calculation
+- any other operation that changes a Debt
+
+For each, report:
+- file/function
+- inputs
+- outputs
+- storage used
+- important validation
+- side effects
+
+Do NOT change them.
+
+3. STORE ID / SPACE ID
+
+Trace exactly how Debt currently obtains and uses:
+
+- storeId
+- spaceId
+- activeSpaceId
+
+Report:
+- whether Debt currently stores storeId
+- whether Debt currently stores workspaceId/spaceId
+- how the local storage namespace is selected
+- whether any Debt logic depends on storeId
+
+Do not propose a migration yet.
+
+4. CUSTOMER RELATIONSHIP
+
+Determine exactly how Debt references a Customer.
+
+Report:
+- customerId field/type
+- where customer existence is checked, if anywhere
+- whether cross-Workspace/customer validation exists
+- whether deleted/inactive Customers can still have associated Debts
+- whether Customer deletion currently affects Debts
+
+Do not modify behavior.
+
+5. REMINDER RELATIONSHIP
+
+Determine exactly how the current Debt implementation interacts
+with Reminder.
+
+Report:
+- debtId relationship
+- reminder creation/update/removal behavior
+- dueDate relationship
+- whether settlement changes reminders
+- whether deleting a Debt changes reminders
+- whether any of this is local-only
+
+Do not change Reminder behavior.
+
+6. CURRENT LOCAL STORAGE
+
+Find every AsyncStorage key/path used for:
+
+- debts
+- debt-related data
+- reminders linked to debts
+- any derived debt indexes
+
+Report the exact key-generation functions and examples.
+
+Do not read, write, migrate, clear, or modify stored data.
+
+7. CURRENT DEBT TESTS
+
+Find all existing Debt-related tests.
+
+Report:
+- test file names
+- total Debt-related tests
+- what behavior they cover
+- important missing coverage relevant to Cloud migration
+
+Do not add tests.
+
+8. CURRENT CLOUD STATUS
+
+Determine whether any part of Debt is already stored/read from:
+
+- Firestore
+- Cloud Functions
+- other cloud services
+
+Report exact files/functions if present.
+
+Do not change anything.
+
+9. FINANCIAL REPRESENTATION
+
+Trace how the current code represents and calculates money:
+
+- number/string/integer/etc.
+- decimal handling
+- rounding
+- currency separation
+- remaining balances
+
+Report actual behavior only.
+
+Do not redesign the money model in this task.
+
+10. DEPENDENCIES / CALL GRAPH
+
+Give a concise dependency flow such as:
+
+UI
+→ context
+→ service
+→ storage
+→ related Customer/Reminder logic
+
+Use the actual current project structure.
+
+FINAL REPORT:
+
+A. Current Debt model
+B. Current Debt operations
+C. storeId / spaceId usage
+D. Customer relationship
+E. Reminder relationship
+F. Local storage keys
+G. Existing tests
+H. Current Cloud status
+I. Money representation
+J. Relevant dependency flow
+K. Important findings/blockers for Debts Cloud
+
+IMPORTANT:
+Do not propose implementation yet.
+Do not change any code.
+Do not commit.
+
+Run only read-only inspection commands as needed.
+
+At the end report:
+- files changed: MUST be NONE
+- git diff --check
+- git diff --stat
+- current HEAD/commit
+
+STOP after the report.
