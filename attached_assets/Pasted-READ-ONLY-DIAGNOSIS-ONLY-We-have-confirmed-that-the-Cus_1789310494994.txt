@@ -1,0 +1,58 @@
+READ-ONLY DIAGNOSIS ONLY.
+
+We have confirmed that the Customer document was NOT deleted.
+
+Firestore currently contains:
+
+/spaces/KCFjcWqGvRKry3ObNrVc/customers/customer-mtvkybll-xq7j4uym
+
+with:
+- isActive = true
+- workspaceId = KCFjcWqGvRKry3ObNrVc
+- createdByUserId = Mxq6SJqbaEPrJRFMoJP4SCJNo2L2
+
+After Republish, the customer no longer appears in the app.
+
+IMPORTANT:
+Do NOT assume CustomerProvider subscribes before activeSpaceId.
+The previous Phase 3C-A implementation was specifically designed to wait
+for activeSpaceId before subscribing.
+
+Inspect the CURRENT project source and determine exactly which of these
+is happening after app startup:
+
+1. Firebase Auth session is not restored.
+2. activeSpaceId remains null/loading/error.
+3. activeSpaceId resolves to a different Workspace.
+4. CustomerProvider does not react correctly when activeSpaceId becomes ready.
+5. subscribeToCustomers() is not called.
+6. subscribeToCustomers() is called with the wrong spaceId.
+7. Firestore subscription is called correctly but returns an error.
+8. The correct customer snapshot arrives but the UI filters/loses it afterward.
+9. Republish/build environment uses a different Firebase project/config.
+
+Specifically inspect:
+- context/StoreContext.tsx
+- context/CustomerContext.tsx
+- services/customerFirestore.ts
+- app/_layout.tsx
+- Firebase configuration/environment variable usage
+- current authentication/session initialization
+
+Trace the exact startup sequence from Firebase Auth restoration to
+CustomerProvider subscription.
+
+Do not modify any files.
+Do not deploy.
+Do not change Firebase data.
+Do not ask the user to repeat Playground tests.
+
+Return:
+1. Exact current startup sequence.
+2. Exact point where customer loading can fail.
+3. Whether activeSpaceId is guaranteed to resolve.
+4. Whether the current CustomerProvider correctly re-subscribes when it changes.
+5. Whether Firebase build configuration could differ after Republish.
+6. The smallest safe fix, but DO NOT implement it.
+
+STOP.
