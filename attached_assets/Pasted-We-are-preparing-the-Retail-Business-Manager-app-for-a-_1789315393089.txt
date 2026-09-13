@@ -1,0 +1,137 @@
+We are preparing the Retail Business Manager app for a major architectural transition:
+
+GOAL:
+Firebase/Firestore must become the authoritative cloud source of truth for all business data.
+
+IMPORTANT:
+Do NOT implement the migration yet.
+This task is AUDIT + DESIGN ONLY.
+Do not modify application source code, Firestore data, AsyncStorage data, dependencies, or existing business behavior.
+
+Repository:
+moh-ac-32000-del/My-app
+Branch:
+main
+
+Read these files first:
+- CURRENT_PROJECT_STATE.md
+- PROJECT_HANDOFF.md
+- AI_DEVELOPER_INSTRUCTIONS.md
+- FILE_MANIFEST.md
+
+Then inspect the actual current source tree.
+
+AUDIT THE CURRENT DATA ARCHITECTURE:
+
+1. Find every AsyncStorage key and every read/write operation.
+2. Identify every business entity currently persisted locally.
+3. Identify all code paths that create, update, delete, query, calculate, or derive:
+   - StoreProfile
+   - Customers
+   - Debts
+   - Payments
+   - Cash In
+   - Cash Out
+   - Daily Journal
+   - Daily Archives
+   - Currency balances
+   - SpaceIdentity
+   - authentication/session state
+
+4. Inspect the existing Firebase implementation:
+   - firebase.ts
+   - firebaseAuth.ts
+   - firestore.ts
+   - spaceIdentity.ts
+   - trustedBootstrap.ts
+   - functions/
+   - firestore.rules
+   - all related Firebase configuration
+
+5. Determine what is already implemented versus only designed.
+
+6. Determine the safest Firestore data model for making Firebase the authoritative source of truth.
+
+7. Propose the Firestore collection/document structure, including:
+   - users
+   - spaces
+   - memberships
+   - stores
+   - customers
+   - debts
+   - payments
+   - transactions
+   - daily archives
+   - any additional required entities
+
+8. For every proposed collection, specify:
+   - document ID strategy
+   - required fields
+   - storeId relationship
+   - spaceId relationship
+   - createdByUserId where appropriate
+   - timestamps
+   - currency handling
+   - relationships to other entities
+   - read authorization
+   - write authorization
+
+9. Carefully review the current Firestore Security Rules.
+   Identify exactly what must change when business data moves to Firestore.
+
+10. Identify concurrency/transaction requirements for:
+   - debt settlement
+   - cash transactions
+   - daily closing
+   - multiple same-day closings
+   - archive immutability
+   - customer/payment relationships
+
+11. Identify what should remain local-only, if anything.
+   Do not assume AsyncStorage must be completely removed.
+   Clearly distinguish:
+   - authoritative business data
+   - authentication state
+   - cache
+   - UI preferences
+   - offline data
+
+12. Design a safe migration strategy from the current AsyncStorage data to Firestore.
+
+CRITICAL SAFETY CONSTRAINTS:
+
+- Do not delete or migrate existing local data automatically.
+- Do not change existing AsyncStorage keys in this audit.
+- Do not enable unrestricted client writes to financial data.
+- Do not allow a client-provided UID to determine authorization.
+- Do not treat activeSpaceId alone as proof of authorization.
+- Preserve strict store/space isolation.
+- Preserve per-currency arithmetic.
+- Never merge or implicitly convert currencies.
+- Preserve debt settlement semantics.
+- Preserve archive immutability.
+- Preserve multiple same-day closing behavior.
+- Do not add Sales, Purchases, Inventory, Capital, or Reports.
+- Do not implement Cloud Sync yet.
+- Do not modify production Firebase data.
+- Do not install unnecessary dependencies.
+
+OUTPUT:
+
+Produce a concise but technically complete report containing:
+
+A. Current data architecture
+B. Current Firebase architecture
+C. AsyncStorage dependency map
+D. Proposed Firestore architecture
+E. Security Rules architecture
+F. Required indexes/queries
+G. Transaction/concurrency requirements
+H. Migration strategy
+I. Risks and breaking points
+J. Exact implementation phases, ordered from safest to riskiest
+K. Files that will need modification in each phase
+
+At the end, give a recommended Phase 1 implementation plan consisting of ONE small, independently testable task.
+
+Do not make code changes in this task.
