@@ -1,0 +1,72 @@
+TASK: DIAGNOSE isActiveMember RULE ONLY — READ ONLY
+
+Firebase Rules Playground is now evaluating the deployed Debt rule.
+
+The Debt create simulation is DENIED because:
+
+request.auth != null      = true
+isSignedIn()              = true
+spaceId                   = KCFjcWqGvRKry3ObNrVc
+isActiveMember(spaceId)   = false
+
+However, the actual Firebase membership document has already been verified as:
+
+Path:
+spaces/KCFjcWqGvRKry3ObNrVc/members/Mxq6SJqbaEPrJRFMoJP4SCJNo2L2
+
+Fields:
+userId = Mxq6SJqbaEPrJRFMoJP4SCJNo2L2
+role = owner
+status = active
+
+The Firebase Rules Playground is therefore contradicting the verified membership data.
+
+DO NOT:
+- modify any file
+- modify firestore.rules
+- deploy anything
+- create/update/delete Firestore data
+- run firebase deploy
+- install packages
+- commit
+- change application code
+
+Investigate ONLY why the current isActiveMember() evaluates false.
+
+Check the repository's current:
+- isActiveMember()
+- Space/member document path definitions
+- membership document field names
+- bootstrapPrimarySpace membership write
+- Firebase project/database configuration
+
+Determine specifically whether the repository expects:
+
+spaces/{spaceId}/members/{uid}
+
+and whether the membership written by bootstrapPrimarySpace actually uses that exact path and contains:
+
+status: "active"
+
+Also verify whether request.auth.uid is the same UID used by the membership path.
+
+Do not assume the Firebase Console data is wrong and do not assume the Rules Playground is wrong.
+
+IMPORTANT ADDITION:
+Because the Firebase Rules Playground has a separate "Authenticated as" / Firebase Authentication UID field, explicitly consider the possibility that the Playground authentication UID does not exactly match:
+
+Mxq6SJqbaEPrJRFMoJP4SCJNo2L2
+
+Check whether the repository can establish anything about this. Do not claim that the Playground UI value is correct or incorrect unless there is actual evidence.
+
+REPORT ONLY:
+
+A. Exact finding.
+B. Expected membership path.
+C. Expected membership fields.
+D. Actual repository write path/fields.
+E. Whether there is a mismatch.
+F. Recommended next action.
+G. If no repository-level mismatch is found, explicitly state whether the investigation can rule in/out a Playground UI input error (e.g., the "Authenticated as" UID field not exactly matching Mxq6SJqbaEPrJRFMoJP4SCJNo2L2) as a possible explanation, even though this cannot be verified from repository code alone.
+
+STOP after the report.
