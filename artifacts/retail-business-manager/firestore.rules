@@ -98,6 +98,13 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    match /spaces/{spaceId}/transactions/{transactionId} {
+      allow read: if isActiveMember(spaceId);
+      allow create: if isActiveMember(spaceId)
+        && isValidTransactionDocument(transactionId, request.resource.data);
+      allow update, delete: if false;
+    }
+
     match /customers/{document=**} {
       allow read, write: if false;
     }
@@ -268,6 +275,40 @@ service cloud.firestore {
         && payment.createdAt.size() > 0
         && payment.updatedAt is string
         && payment.updatedAt.size() > 0;
+    }
+
+    function isValidTransactionDocument(transactionId, transaction) {
+      return transaction.keys().hasOnly([
+          'id',
+          'storeId',
+          'type',
+          'amount',
+          'currency',
+          'note',
+          'createdAt',
+          'updatedAt'
+        ])
+        && transaction.keys().hasAll([
+          'id',
+          'storeId',
+          'type',
+          'amount',
+          'currency',
+          'createdAt',
+          'updatedAt'
+        ])
+        && transaction.id == transactionId
+        && transaction.storeId is string
+        && transaction.storeId.size() > 0
+        && transaction.type in ['cash_in', 'cash_out']
+        && transaction.amount is number
+        && transaction.amount > 0
+        && transaction.currency in ['TRY', 'USD', 'EUR', 'GBP', 'SAR', 'AED', 'SYP']
+        && (!transaction.keys().hasAny(['note']) || transaction.note is string)
+        && transaction.createdAt is string
+        && transaction.createdAt.size() > 0
+        && transaction.updatedAt is string
+        && transaction.updatedAt.size() > 0;
     }
 
     function isValidDebtDocument(spaceId, debtId, debt) {

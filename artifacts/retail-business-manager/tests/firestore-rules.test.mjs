@@ -124,6 +124,19 @@ function paymentDocument(paymentId, overrides = {}) {
   };
 }
 
+function transactionDocument(transactionId, overrides = {}) {
+  return {
+    id: transactionId,
+    storeId: 'store-A',
+    type: 'cash_in',
+    amount: 100,
+    currency: 'TRY',
+    createdAt: '2026-08-30T10:00:00.000Z',
+    updatedAt: '2026-08-30T10:00:00.000Z',
+    ...overrides,
+  };
+}
+
 function userReference(context, uid) {
   return doc(context.firestore(), 'users', uid);
 }
@@ -526,6 +539,53 @@ try {
         );
       }
 
+      await runCase(
+        'Transaction — active member can read',
+        () => getDoc(doc(userA.firestore(), 'spaces', 'space-A', 'transactions', 'transaction-A')),
+        'ALLOW',
+      );
+      await runCase(
+        'Transaction — active member can create a valid transaction',
+        () => setDoc(
+          doc(userA.firestore(), 'spaces', 'space-A', 'transactions', 'transaction-A'),
+          transactionDocument('transaction-A'),
+        ),
+        'ALLOW',
+      );
+      await runCase(
+        'Transaction — nonmember cannot read',
+        () => getDoc(doc(userB.firestore(), 'spaces', 'space-A', 'transactions', 'transaction-A')),
+        'DENY',
+      );
+      await runCase(
+        'Transaction — contradictory document ID on create is denied',
+        () => setDoc(
+          doc(userA.firestore(), 'spaces', 'space-A', 'transactions', 'transaction-B'),
+          transactionDocument('transaction-A'),
+        ),
+        'DENY',
+      );
+      await runCase(
+        'Transaction — invalid type is denied',
+        () => setDoc(
+          doc(userA.firestore(), 'spaces', 'space-A', 'transactions', 'transaction-invalid'),
+          transactionDocument('transaction-invalid', { type: 'invalid' }),
+        ),
+        'DENY',
+      );
+      await runCase(
+        'Transaction — update is denied',
+        () => updateDoc(
+          doc(userA.firestore(), 'spaces', 'space-A', 'transactions', 'transaction-A'),
+          { amount: 200 },
+        ),
+        'DENY',
+      );
+      await runCase(
+        'Transaction — delete is denied',
+        () => deleteDoc(doc(userA.firestore(), 'spaces', 'space-A', 'transactions', 'transaction-A')),
+        'DENY',
+      );
       await runCase(
         'Payment — active member can read',
         () => getDoc(doc(userA.firestore(), 'spaces', 'space-A', 'payments', 'payment-A')),

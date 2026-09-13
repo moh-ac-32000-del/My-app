@@ -72,6 +72,7 @@ describe('Firestore Workspace path contracts', () => {
       'customers',
       'debts',
       'payments',
+      'transactions',
       'cashTransactions',
       'dailyClosings',
       'reminders',
@@ -103,6 +104,7 @@ describe('Firestore Workspace path contracts', () => {
     expect(FIRESTORE_WORKSPACE_COLLECTIONS.customers).toBe('customers');
     expect(workspaceBusinessCollectionPath('space-a', 'customers')).toMatch(/^spaces\//);
     expect(workspaceBusinessCollectionPath('space-a', 'payments')).not.toBe('payments');
+    expect(workspaceBusinessCollectionPath('space-a', 'transactions')).not.toBe('transactions');
   });
 
   it('rejects unsafe or empty path segments', () => {

@@ -11,6 +11,7 @@ import { getOrCreateSpaceIdentity } from '@/services/spaceIdentity';
 import { discoverUserSpaces, validateUserSpaceMembership } from '@/services/firestore';
 import { bootstrapPrimarySpace } from '@/services/trustedBootstrap';
 import { createDebtDocument } from '@/services/debtFirestore';
+import { createTransactionDocument, subscribeToTransactions } from '@/services/transactionFirestore';
 import type { Space } from '@/types/space';
 import {
   clearLegacyLanguage,
@@ -350,11 +351,62 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     : localIsAuthenticated;
 
   useEffect(() => {
+    let isActive = true;
+    let unsubscribe: (() => void) | undefined;
+
     if (!isReady || initializationError || (isFirebaseConfigured && !activeSpaceId)) {
-      return;
+      return () => {
+        isActive = false;
+      };
     }
 
-    let isActive = true;
+    transactionsRef.current = [];
+    setTransactions([]);
+
+    if (isFirebaseConfigured) {
+      if (!isAuthenticated || !activeSpaceId) {
+        transactionLoadPromiseRef.current = Promise.resolve();
+        return () => {
+          isActive = false;
+        };
+      }
+
+      const cloudLoadPromise = new Promise<void>((resolve, reject) => {
+        let hasReceivedInitialSnapshot = false;
+        unsubscribe = subscribeToTransactions(
+          activeSpaceId,
+          (loadedTransactions) => {
+            if (!isActive) {
+              return;
+            }
+            transactionsRef.current = loadedTransactions;
+            setTransactions(loadedTransactions);
+            if (!hasReceivedInitialSnapshot) {
+              hasReceivedInitialSnapshot = true;
+              resolve();
+            }
+          },
+          (error) => {
+            if (!isActive) {
+              return;
+            }
+            setInitializationError(error.message);
+            if (!hasReceivedInitialSnapshot) {
+              hasReceivedInitialSnapshot = true;
+              reject(error);
+            }
+          },
+        );
+      });
+      transactionLoadPromiseRef.current = cloudLoadPromise;
+      void cloudLoadPromise.catch(() => undefined);
+
+      return () => {
+        isActive = false;
+        unsubscribe?.();
+      };
+    }
+
     const loadPromise = loadTransactions(profile.id).then((loadedTransactions) => {
       if (!isActive) {
         return;
@@ -367,7 +419,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return () => {
       isActive = false;
     };
-  }, [activeSpaceId, initializationError, isReady, profile.id, spaceIdentity?.spaceId]);
+  }, [activeSpaceId, initializationError, isAuthenticated, isReady, profile.id, spaceIdentity?.spaceId]);
 
   const saveProfile = async (updates: Partial<StoreProfile>) => {
     const currentProfile = profileRef.current;
@@ -402,6 +454,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const addTransaction = async (draft: CashTransactionDraft): Promise<Transaction> => {
     await transactionLoadPromiseRef.current;
     const transaction = createCashTransaction(profileRef.current.id, draft);
+
+    if (isFirebaseConfigured) {
+      if (!activeSpaceId) {
+        throw new Error('transactionWorkspaceUnavailable');
+      }
+      await createTransactionDocument(activeSpaceId, transaction);
+      const nextTransactions = [transaction, ...transactionsRef.current];
+      transactionsRef.current = nextTransactions;
+      setTransactions(nextTransactions);
+      setJournalRevision((current) => current + 1);
+      return transaction;
+    }
+
     const nextTransactions = [transaction, ...transactionsRef.current];
     await saveTransactions(profileRef.current.id, nextTransactions);
     transactionsRef.current = nextTransactions;
