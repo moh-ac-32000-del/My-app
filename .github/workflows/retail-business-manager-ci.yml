@@ -20,6 +20,9 @@ on:
       - "pnpm-workspace.yaml"
       - ".github/workflows/retail-business-manager-ci.yml"
 
+permissions:
+  contents: read
+
 jobs:
   check:
     runs-on: ubuntu-latest
