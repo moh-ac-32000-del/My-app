@@ -14,10 +14,12 @@
       "backgroundColor": "#070A0E"
     },
     "ios": {
-      "supportsTablet": false
+      "supportsTablet": false,
+      "bundleIdentifier": "com.retailbusinessmanager.app"
     },
     "android": {
-      "package": "com.retailbusinessmanager.app"
+      "package": "com.retailbusinessmanager.app",
+      "versionCode": 1
     },
     "web": {
       "favicon": "./assets/images/icon.png"
