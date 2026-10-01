@@ -25,6 +25,7 @@
   ],
   "exclude": [
     "functions/**/*",
+    "tests/bootstrap-primary-space-function.test.ts",
     "node_modules",
     ".expo"
   ]
