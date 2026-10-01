@@ -46,33 +46,32 @@ function setupSignalHandlers() {
   process.on('SIGHUP', cleanup);
 }
 
-function stripProtocol(domain) {
-  let urlString = domain.trim();
+function getDeploymentUrl() {
+  const value = process.env.EXPO_PUBLIC_DEPLOYMENT_URL;
 
-  if (!/^https?:\/\//i.test(urlString)) {
-    urlString = `https://${urlString}`;
+  if (!value) {
+    console.error(
+      'ERROR: No deployment URL found. Set EXPO_PUBLIC_DEPLOYMENT_URL to the public HTTPS URL where this static build will be served.',
+    );
+    process.exit(1);
   }
 
-  return new URL(urlString).host;
-}
-
-function getDeploymentDomain() {
-  if (process.env.REPLIT_INTERNAL_APP_DOMAIN) {
-    return stripProtocol(process.env.REPLIT_INTERNAL_APP_DOMAIN);
+  let url;
+  try {
+    url = new URL(value.trim());
+  } catch {
+    console.error(
+      'ERROR: EXPO_PUBLIC_DEPLOYMENT_URL must be a valid URL, for example https://example.com/retail-business-manager',
+    );
+    process.exit(1);
   }
 
-  if (process.env.REPLIT_DEV_DOMAIN) {
-    return stripProtocol(process.env.REPLIT_DEV_DOMAIN);
+  if (url.protocol !== 'https:') {
+    console.error('ERROR: EXPO_PUBLIC_DEPLOYMENT_URL must use HTTPS.');
+    process.exit(1);
   }
 
-  if (process.env.EXPO_PUBLIC_DOMAIN) {
-    return stripProtocol(process.env.EXPO_PUBLIC_DOMAIN);
-  }
-
-  console.error(
-    'ERROR: No deployment domain found. Set REPLIT_INTERNAL_APP_DOMAIN, REPLIT_DEV_DOMAIN, or EXPO_PUBLIC_DOMAIN',
-  );
-  process.exit(1);
+  return url.toString().replace(/\/$/, '');
 }
 
 function prepareDirectories(timestamp) {
@@ -125,11 +124,7 @@ async function checkMetroHealth() {
   }
 }
 
-function getExpoPublicReplId() {
-  return process.env.REPL_ID || process.env.EXPO_PUBLIC_REPL_ID;
-}
-
-async function startMetro(expoPublicDomain, expoPublicReplId) {
+async function startMetro() {
   const isRunning = await checkMetroHealth();
   if (isRunning) {
     console.log('Metro already running');
@@ -137,16 +132,7 @@ async function startMetro(expoPublicDomain, expoPublicReplId) {
   }
 
   console.log('Starting Metro...');
-  console.log(`Setting EXPO_PUBLIC_DOMAIN=${expoPublicDomain}`);
-  const env = {
-    ...process.env,
-    EXPO_PUBLIC_DOMAIN: expoPublicDomain,
-    EXPO_PUBLIC_REPL_ID: expoPublicReplId,
-  };
-
-  if (expoPublicReplId) {
-    console.log(`Setting EXPO_PUBLIC_REPL_ID=${expoPublicReplId}`);
-  }
+  const env = { ...process.env };
 
   metroProcess = spawn(
     'pnpm',
@@ -526,15 +512,13 @@ async function main() {
 
   setupSignalHandlers();
 
-  const domain = getDeploymentDomain();
-  const expoPublicReplId = getExpoPublicReplId();
-  const baseUrl = `https://${domain}`;
+  const baseUrl = getDeploymentUrl();
   const timestamp = `${Date.now()}-${process.pid}`;
 
   prepareDirectories(timestamp);
   clearMetroCache();
 
-  await startMetro(domain, expoPublicReplId);
+  await startMetro();
 
   const downloadTimeout = 600000;
   const downloadPromise = downloadBundlesAndManifests(timestamp);
