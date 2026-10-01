@@ -46,7 +46,7 @@ jobs:
         run: pnpm --filter @workspace/retail-business-manager run typecheck
 
       - name: Install Firebase Functions dependencies
-        run: pnpm --dir artifacts/retail-business-manager/functions install --frozen-lockfile
+        run: pnpm --dir artifacts/retail-business-manager/functions install --frozen-lockfile --ignore-workspace
 
       - name: Typecheck Firebase Functions
         run: pnpm --dir artifacts/retail-business-manager/functions run typecheck
