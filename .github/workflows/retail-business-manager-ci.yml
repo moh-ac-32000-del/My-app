@@ -53,3 +53,8 @@ jobs:
 
       - name: Tests
         run: pnpm --filter @workspace/retail-business-manager run test
+
+      - name: Independent static build
+        run: pnpm --filter @workspace/retail-business-manager run build
+        env:
+          EXPO_PUBLIC_DEPLOYMENT_URL: https://example.invalid/retail-business-manager
