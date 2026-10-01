@@ -45,6 +45,9 @@ jobs:
       - name: Typecheck
         run: pnpm --filter @workspace/retail-business-manager run typecheck
 
+      - name: Validate Expo app configuration
+        run: pnpm --filter @workspace/retail-business-manager exec expo config --json > /tmp/retail-business-manager-expo-config.json
+
       - name: Install Firebase Functions dependencies
         run: pnpm --dir artifacts/retail-business-manager/functions install --frozen-lockfile --ignore-workspace
 
