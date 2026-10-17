@@ -1,6 +1,6 @@
 # Current Project State
 
-> **Architecture supersession (2026-10-17):** This snapshot is historical and conflicts with the current Firebase-only business-data decision. Follow `FIREBASE_SOURCE_OF_TRUTH.md`; local AsyncStorage business persistence, local Backup/Restore, and local operation fallback are legacy code to remove, not approved behavior.
+> **Architecture supersession (2026-10-17):** This snapshot is historical and conflicts with the current Firebase-only business-data decision. Follow `FIREBASE_SOURCE_OF_TRUTH.md`; local AsyncStorage business persistence, local Backup/Restore, and local operation fallback have been removed from the active runtime and are not approved behavior.
 
 > **Current snapshot correction — 2026-08-31, Europe/Istanbul**
 >
@@ -87,7 +87,7 @@ The historical local Expo baseline supported the following; treat these as legac
 - Sharing the selected Archive through the device share sheet; WhatsApp can be selected from that sheet.
 - Arabic, English, and Turkish.
 - RTL for Arabic and LTR for English/Turkish.
-- Local AsyncStorage persistence.
+- Historical baseline only: local AsyncStorage persistence existed before the Firebase-only migration; it is no longer active business storage.
 - Error reporting through the in-app close action result state rather than silent critical failures.
 
 Sales, purchases, inventory, and reports routes exist but are deliberately marked under development.
