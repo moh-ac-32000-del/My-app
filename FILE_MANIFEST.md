@@ -111,12 +111,6 @@ This manifest lists the important project files and the role of each area. The e
 
 | Path | Coverage |
 |---|---|
-| `tests/customers.test.ts` | Customer behavior and store scoping. |
-| `tests/transactions.test.ts` | Cash transactions, validation, balances, and store scoping. |
-| `tests/debts.test.ts` | Debt behavior and totals. |
-| `tests/settlements.test.ts` | Partial/full settlement and linked cash behavior. |
-| `tests/daily-journal.test.ts` | Derived journal behavior and day boundaries. |
-| `tests/archives.test.ts` | Snapshots, multiple closings, archive filtering, store isolation, and cash invariance. |
 | `tests/daily-closing-action.test.ts` | Shared close action and storage error propagation. |
 | `tests/archive-sharing.test.ts` | Selected Archive message content, currencies, customer names, and immutability. |
 | `tests/currencies.test.ts` | Currency definitions, normalization, and formatting. |
