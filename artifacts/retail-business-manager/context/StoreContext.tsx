@@ -12,6 +12,7 @@ import { discoverUserSpaces, validateUserSpaceMembership } from '@/services/fire
 import { bootstrapPrimarySpace } from '@/services/trustedBootstrap';
 import { createDebtDocument } from '@/services/debtFirestore';
 import { createTransactionDocument, subscribeToTransactions } from '@/services/transactionFirestore';
+import { settleCustomerDebtInCloud } from '@/services/settlementFirestore';
 import type { Space } from '@/types/space';
 import {
   clearLegacyLanguage,
@@ -29,7 +30,6 @@ import {
   saveDebts,
   saveTransactions,
   setActiveSpaceId,
-  settleCustomerDebt as persistCustomerSettlement,
   type SettlementDraft,
   type SettlementResult,
   type LocalBackup,
@@ -515,11 +515,21 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const settleCustomerDebt = async (customerId: string, draft: SettlementDraft): Promise<SettlementResult> => {
     await transactionLoadPromiseRef.current;
-    if (isFirebaseConfigured) {
-      throw new Error('cloudDebtSettlementUnsupported');
+    if (!isFirebaseConfigured) {
+      throw new Error('firebaseNotConfigured');
     }
-    const result = await persistCustomerSettlement(profileRef.current.id, customerId, draft);
-    const nextTransactions = await loadTransactions(profileRef.current.id);
+    if (!activeSpaceId) {
+      throw new Error('debtWorkspaceUnavailable');
+    }
+    const result = await settleCustomerDebtInCloud(
+      activeSpaceId,
+      profileRef.current.id,
+      customerId,
+      draft,
+    );
+    const nextTransactions = [result.transaction, ...transactionsRef.current.filter(
+      (transaction) => transaction.id !== result.transaction.id,
+    )].sort((first, second) => Date.parse(second.createdAt) - Date.parse(first.createdAt));
     transactionsRef.current = nextTransactions;
     setTransactions(nextTransactions);
     setJournalRevision((current) => current + 1);
