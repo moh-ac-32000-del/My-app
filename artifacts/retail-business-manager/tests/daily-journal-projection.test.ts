@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { Customer, Debt, Payment, Transaction } from '@/types/business';
-import { projectDailyJournalEvents } from '@/services/dailyJournalProjection';
+import { projectCloudDailyJournalEvents, projectDailyJournalEvents } from '@/services/dailyJournalProjection';
+import { loadCloudDailyArchives } from '@/services/cloudDailyArchives';
+import { beforeEach, vi } from 'vitest';
+
+vi.mock('@/services/cloudDailyArchives', () => ({ loadCloudDailyArchives: vi.fn() }));
 
 const now = new Date('2026-09-13T12:00:00.000Z');
 
@@ -52,6 +56,7 @@ const payment: Payment = {
 };
 
 describe('Cloud Daily Journal projection', () => {
+  beforeEach(() => vi.clearAllMocks());
   it('projects Cloud sources with existing semantics and newest-first ordering', () => {
     const settlementTransaction: Transaction = {
       ...transaction,
@@ -129,4 +134,27 @@ describe('Cloud Daily Journal projection', () => {
       now,
     )).toEqual([]);
   });
-});
+
+  it('loads archived event IDs from Firestore rather than local archive storage', async () => {
+    vi.mocked(loadCloudDailyArchives).mockResolvedValue([{
+      id: '2026-09-13_000001',
+      storeId: 'store-A',
+      date: '2026-09-13',
+      closedAt: '2026-09-13T11:30:00.000Z',
+      closingNumber: 1,
+      snapshot: [{
+        id: 'transaction:transaction-A',
+        storeId: 'store-A',
+        type: 'cash_in',
+        amount: 100,
+        currency: 'TRY',
+        occurredAt: '2026-09-13T09:00:00.000Z',
+        sourceId: 'transaction-A',
+      }],
+    }]);
+    await expect(projectCloudDailyJournalEvents('space-A', 'store-A', {
+      transactions: [transaction], debts: [], payments: [], customers: [],
+    }, now)).resolves.toEqual([]);
+    expect(loadCloudDailyArchives).toHaveBeenCalledWith('space-A', 'store-A');
+  });
+  });
