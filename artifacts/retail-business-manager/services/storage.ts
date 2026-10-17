@@ -317,7 +317,7 @@ export function validateDebtInput(input: {
   }
   if (
     input.dueDate !== undefined
-    && (typeof input.dueDate !== 'string' || !isValidArchiveDate(input.dueDate))
+    && (typeof input.dueDate !== 'string' || !isValidDateOnly(input.dueDate))
   ) {
     return 'dueDateInvalid';
   }
@@ -448,32 +448,6 @@ export function filterRemindersByDebt(reminders: Reminder[], debtId: string): Re
 
 
 
-export function buildDueDateReminderRemindAt(debt: Debt, notificationTime: string): string | null {
-  if (
-    debt.amount <= 0
-    || debt.settledAt
-    || !debt.dueDate
-    || !isValidArchiveDate(debt.dueDate)
-    || !isValidNotificationTime(notificationTime)
-  ) {
-    return null;
-  }
-
-  const [year, month, day] = debt.dueDate.split('-').map(Number);
-  const [hours, minutes] = notificationTime.split(':').map(Number);
-  const localDate = new Date(year, month - 1, day, hours, minutes, 0, 0);
-  if (
-    localDate.getFullYear() !== year
-    || localDate.getMonth() !== month - 1
-    || localDate.getDate() !== day
-    || localDate.getHours() !== hours
-    || localDate.getMinutes() !== minutes
-  ) {
-    return null;
-  }
-
-  return `${debt.dueDate}T${notificationTime}:00`;
-}
 
 
 
@@ -567,6 +541,13 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 
+
+function isValidDateOnly(value: unknown): value is string {
+  if (typeof value !== 'string' || !/^\\d{4}-\\d{2}-\\d{2}$/.test(value)) return false;
+  const [year, month, day] = value.split('-').map(Number);
+  const date = new Date(year, month - 1, day);
+  return date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day;
+}
 
 function isValidDateString(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0 && Number.isFinite(Date.parse(value));
