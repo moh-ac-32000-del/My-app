@@ -390,6 +390,10 @@ try {
     ]);
     await testEnvironment.withSecurityRulesDisabled(async (context) => {
       await setDoc(
+        doc(context.firestore(), 'spaces', 'space-A', 'storeProfile', 'profile'),
+        { storeId: 'store-A' },
+      );
+      await setDoc(
         customerReference(context, 'space-A', 'customer-A'),
         customerDocument('customer-A', { workspaceId: 'space-A' }),
       );
@@ -419,6 +423,22 @@ try {
           customerDocument('customer-C', { workspaceId: 'space-A' }),
         ),
         'ALLOW',
+      );
+      await runCase(
+        'Customer — mismatched store ID on create is denied',
+        () => setDoc(
+          customerReference(userCForCustomers, 'space-A', 'customer-wrong-store'),
+          customerDocument('customer-wrong-store', { workspaceId: 'space-A', storeId: 'store-forged' }),
+        ),
+        'DENY',
+      );
+      await runCase(
+        'Customer — mismatched store ID on update is denied',
+        () => updateDoc(
+          customerReference(userCForCustomers, 'space-A', 'customer-A'),
+          { storeId: 'store-forged' },
+        ),
+        'DENY',
       );
       await runCase(
         'Customer — active member can update a valid document',

@@ -39,12 +39,14 @@ service cloud.firestore {
       // Customer history is retained; deletion is represented by isActive=false.
       allow create: if isActiveMember(spaceId)
         && isValidCustomerDocument(spaceId, customerId, request.resource.data)
+        && hasCanonicalStoreProfile(spaceId, request.resource.data.storeId)
         && (
           !request.resource.data.keys().hasAny(['createdByUserId'])
           || request.resource.data.createdByUserId == request.auth.uid
         );
       allow update: if isActiveMember(spaceId)
         && isValidCustomerDocument(spaceId, customerId, request.resource.data)
+        && hasCanonicalStoreProfile(spaceId, request.resource.data.storeId)
         && request.resource.data.id == resource.data.id
         && (
           !resource.data.keys().hasAny(['workspaceId'])
@@ -162,6 +164,11 @@ service cloud.firestore {
         && request.resource.data.updatedAt is string;
 
       allow delete: if false;
+    }
+
+    function hasCanonicalStoreProfile(spaceId, storeId) {
+      return exists(/databases/$(database)/documents/spaces/$(spaceId)/storeProfile/profile)
+        && get(/databases/$(database)/documents/spaces/$(spaceId)/storeProfile/profile).data.storeId == storeId;
     }
 
     function isValidCustomerDocument(spaceId, customerId, customer) {
