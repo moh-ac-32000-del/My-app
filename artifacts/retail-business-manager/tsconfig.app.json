@@ -30,6 +30,7 @@
     "tests/reminder-command.test.ts",
     "tests/trusted-financial-store-scope.test.ts",
     "tests/settlement-trusted-backend.test.ts",
+    "tests/trusted-debt-idempotency.test.ts",
     "node_modules",
     ".expo"
   ]
