@@ -1,7 +1,5 @@
-import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-
-const config = JSON.parse(readFileSync(new URL('../firebase.json', import.meta.url), 'utf8'));
+import config from '../firebase.json';
 
 describe('Firebase test release packaging', () => {
   it('publishes only the generated export, including pnpm-nested font and image assets', () => {
@@ -15,3 +13,4 @@ describe('Firebase test release packaging', () => {
     expect(config.hosting.rewrites).toEqual([{ source: '**', destination: '/index.html' }]);
   });
 });
+
