@@ -174,7 +174,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [activeSpaceLoading, setActiveSpaceLoading] = useState<boolean>(isFirebaseConfigured);
   const [activeSpaceError, setActiveSpaceError] = useState<string | null>(null);
   const [isFirebaseReady, setIsFirebaseReady] = useState<boolean>(!isFirebaseConfigured);
-  const [initializationError, setInitializationError] = useState<string | null>(null);
+  const [initializationError, setInitializationError] = useState<string | null>(isFirebaseConfigured ? null : 'firebaseNotConfigured');
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [transactionsLoading, setTransactionsLoading] = useState<boolean>(isFirebaseConfigured);
   const [transactionsError, setTransactionsError] = useState<string | null>(null);
