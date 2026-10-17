@@ -221,14 +221,20 @@ describe('local backup and restore', () => {
     expect(() => parseLocalBackup(JSON.stringify(invalid))).toThrow('backupPaymentRelationshipInvalid');
   });
 
-  it('rejects archives whose snapshot references a missing customer', async () => {
-    await seedStore('store-a', 'a');
-    const backup = await createLocalBackup(storeProfile('store-a'), true);
-    const invalid = JSON.parse(JSON.stringify(backup));
-    const customerEvent = invalid.data.dailyArchives[0].snapshot.find((event: { customerId?: string }) => event.customerId);
-    customerEvent.customerId = 'missing-customer';
+  it('preserves immutable archive snapshots when source customer records are no longer present', async () => {
+    const seeded = await seedStore('store-a', 'a');
+    await saveCustomers('store-a', []);
+    await saveDebts('store-a', []);
+    await savePayments('store-a', []);
 
-    expect(() => parseLocalBackup(JSON.stringify(invalid))).toThrow('backupArchiveRelationshipInvalid');
+    const backup = await createLocalBackup(storeProfile('store-a'), true);
+    const parsed = parseLocalBackup(serializeLocalBackup(backup));
+
+    expect(parsed.data.customers).toEqual([]);
+    expect(parsed.data.debts).toEqual([]);
+    expect(parsed.data.payments).toEqual([]);
+    expect(parsed.data.dailyArchives).toHaveLength(1);
+    expect(parsed.data.dailyArchives[0].snapshot).toEqual(seeded.archive.snapshot);
   });
 
   it('rejects duplicate archive date and closing-number pairs', async () => {
