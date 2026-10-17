@@ -592,12 +592,12 @@ try {
         'ALLOW',
       );
       await runCase(
-        'Payment — active member can create a valid payment',
+        'Payment — direct client payment creation is denied',
         () => setDoc(
           doc(userA.firestore(), 'spaces', 'space-A', 'payments', 'payment-A'),
           paymentDocument('payment-A'),
         ),
-        'ALLOW',
+        'DENY',
       );
       await runCase(
         'Payment — contradictory document ID on create is denied',

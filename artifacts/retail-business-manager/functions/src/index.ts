@@ -5,6 +5,7 @@ import { bootstrapPrimarySpaceHandler, createDefaultBootstrapRuntime } from './b
 import { createSettlementRuntime, settleCustomerDebtHandler } from './settleCustomerDebt.js';
 import { createCashTransactionRuntime, createCashTransactionHandler } from './createCashTransaction.js';
 import { createTrustedDebtRuntime, trustedDebtCommandHandler } from './trustedDebtCommand.js';
+import { createTrustedPaymentRuntime, createPaymentHandler } from './createPayment.js';
 
 initializeApp();
 
@@ -13,6 +14,7 @@ const runtime = createDefaultBootstrapRuntime(firestore);
 const settlementRuntime = createSettlementRuntime(firestore);
 const cashTransactionRuntime = createCashTransactionRuntime(firestore);
 const trustedDebtRuntime = createTrustedDebtRuntime(firestore);
+const trustedPaymentRuntime = createTrustedPaymentRuntime(firestore);
 
 export const bootstrapPrimarySpace = onCall({ invoker: 'public' }, async (request) => (
   bootstrapPrimarySpaceHandler(request, runtime)
@@ -26,4 +28,8 @@ export const createCashTransaction = onCall({ invoker: 'public' }, async (reques
 ));
 export const trustedDebtCommand = onCall({ invoker: 'public' }, async (request) => (
   trustedDebtCommandHandler(request, trustedDebtRuntime)
+));
+
+export const createPayment = onCall({ invoker: 'public' }, async (request) => (
+  createPaymentHandler(request, trustedPaymentRuntime)
 ));

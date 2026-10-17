@@ -1,19 +1,17 @@
 import {
   collection,
-  doc,
   getDocs,
   getFirestore,
   onSnapshot,
-  runTransaction,
   type DocumentData,
 } from 'firebase/firestore';
-import { getFirebaseApp, getFirebaseAuth, isFirebaseConfigured } from '@/services/firebase';
+import { getFirebaseApp, isFirebaseConfigured } from '@/services/firebase';
 import {
   workspaceBusinessCollectionPath,
-  workspaceBusinessDocumentPath,
 } from '@/data/firestoreWorkspace';
 import { validatePaymentInput } from '@/services/storage';
 import type { Payment } from '@/types/business';
+import { createTrustedPayment } from '@/services/trustedPaymentFirestore';
 
 type PaymentSnapshot = {
   id: string;
@@ -65,34 +63,13 @@ export async function listPaymentDocuments(spaceId: string): Promise<Payment[]> 
 }
 
 export async function createPaymentDocument(spaceId: string, payment: Payment): Promise<void> {
-  const authenticatedUid = getAuthenticatedUid();
-  const paymentId = requirePaymentId(payment.id);
-  const paymentReference = doc(
-    getFirestoreInstance(),
-    workspaceBusinessDocumentPath(spaceId, 'payments', paymentId),
-  );
-  const customerId = payment.customerId ? requireCustomerId(payment.customerId) : null;
-  const customerReference = customerId
-    ? doc(
-      getFirestoreInstance(),
-      workspaceBusinessDocumentPath(spaceId, 'customers', customerId),
-    )
-    : null;
-  const serializedPayment = serializePaymentDocument(payment, spaceId, authenticatedUid);
-
-  await runTransaction(getFirestoreInstance(), async (transaction) => {
-    if (customerReference && customerId) {
-      const customerSnapshot = await transaction.get(customerReference);
-      assertActiveCustomer(customerSnapshot, customerId, payment.storeId, spaceId);
-    }
-
-    const paymentSnapshot = await transaction.get(paymentReference);
-    if (paymentSnapshot.exists()) {
-      throw new Error('paymentAlreadyExists');
-    }
-
-    transaction.set(paymentReference, serializedPayment);
-  });
+  assertValidPayment(payment);
+  requireSpaceId(spaceId);
+  requirePaymentId(payment.id);
+  requireStoreId(payment.storeId);
+  if (payment.customerId !== undefined) requireCustomerId(payment.customerId);
+  if (payment.transactionId !== undefined) requireTransactionId(payment.transactionId);
+  await createTrustedPayment(spaceId, payment);
 }
 
 export function serializePaymentDocument(
@@ -167,24 +144,6 @@ function assertValidPayment(payment: Payment): void {
   }
 }
 
-function assertActiveCustomer(
-  snapshot: { exists: () => boolean; data: () => DocumentData | undefined },
-  customerId: string,
-  storeId: string,
-  spaceId: string,
-): void {
-  const data = snapshot.exists() ? snapshot.data() : undefined;
-  if (
-    !snapshot.exists()
-    || !data
-    || data.id !== customerId
-    || data.isActive !== true
-    || data.storeId !== storeId
-    || (typeof data.workspaceId === 'string' && data.workspaceId !== spaceId)
-  ) {
-    throw new Error('customerNotFound');
-  }
-}
 
 function getFirestoreInstance(): ReturnType<typeof getFirestore> {
   if (!isFirebaseConfigured) {
@@ -196,9 +155,6 @@ function getFirestoreInstance(): ReturnType<typeof getFirestore> {
   return firestore;
 }
 
-function getAuthenticatedUid(): string {
-  return requireUid(getFirebaseAuth().currentUser?.uid);
-}
 
 function requireUid(value: unknown): string {
   const uid = typeof value === 'string' ? value.trim() : '';
