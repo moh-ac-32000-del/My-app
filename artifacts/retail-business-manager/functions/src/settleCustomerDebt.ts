@@ -1,5 +1,5 @@
 import { HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
-import type { Firestore, DocumentData } from 'firebase-admin/firestore';
+import type { Firestore } from 'firebase-admin/firestore';
 
 const SUPPORTED_CURRENCIES = new Set(['TRY', 'USD', 'EUR', 'GBP', 'SAR', 'AED', 'SYP']);
 
@@ -35,8 +35,7 @@ export async function settleCustomerDebtHandler(
   const customerRef = spaceRef.collection('customers').doc(input.customerId);
   const receiptRef = spaceRef.collection('operationReceipts').doc(input.operationId);
   const debtsQuery = spaceRef.collection('debts')
-    .where('customerId', '==', input.customerId)
-    .where('currency', '==', input.currency);
+    .where('customerId', '==', input.customerId);
 
   try {
     return await db.runTransaction(async (transaction) => {
