@@ -4,7 +4,6 @@ import {
   getDocs,
   getFirestore,
   onSnapshot,
-  setDoc,
   type DocumentData,
 } from 'firebase/firestore';
 import { getFirebaseApp, getFirebaseAuth, isFirebaseConfigured } from '@/services/firebase';
@@ -153,20 +152,6 @@ function assertValidDebt(debt: Debt): void {
   }
 }
 
-function assertActiveCustomer(
-  snapshot: { exists: () => boolean; data: () => DocumentData | undefined },
-  customerId: string,
-): void {
-  const data = snapshot.exists() ? snapshot.data() : undefined;
-  if (
-    !snapshot.exists()
-    || !data
-    || data.id !== customerId
-    || data.isActive !== true
-  ) {
-    throw new Error('customerNotFound');
-  }
-}
 
 function getFirestoreInstance(): ReturnType<typeof getFirestore> {
   if (!isFirebaseConfigured) {
