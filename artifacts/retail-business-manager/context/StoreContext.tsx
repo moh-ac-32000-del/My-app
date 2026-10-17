@@ -452,7 +452,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }
     const debt = createDebt(profileRef.current.id, customerId, draft);
     await createDebtDocument(activeSpaceId, debt);
-    setJournalRevision((current) => current + 1);
     return debt;
   };
 
