@@ -67,21 +67,21 @@ Implemented routes:
 
 ## 6. Contexts, hooks, and services
 
-- `context/StoreContext.tsx` is the only app context. It owns profile, readiness, auth mode, Firebase user/cloud Space state, local SpaceIdentity, transactions, journal revision, cash creation, debt creation, settlement, profile settings, backup restore, sign-out, and local session reset.
+- `context/StoreContext.tsx` owns Firebase Auth readiness, cloud Space membership, Firestore-backed store profile and transactions, cash/debt commands, settlement, profile settings, and sign-out. There is no local login flag, local Space identity, or local restore API.
 - `hooks/useI18n.ts` exposes translation and direction behavior.
 - `hooks/useColors.ts` derives light/dark and accent theme values.
-- `services/storage.ts` is the local domain/storage boundary: normalization, validation, store/Space namespaces, balances, journal, archive, debt/payment settlement, and local backup data.
-- `services/backupFile.ts` handles JSON backup serialization, validation, temporary/cache/document file writing, document picking, and platform sharing.
+- `services/storage.ts` now contains pure/shared business validation, constructors, currency calculations, and daily-journal projection helpers; it does not import AsyncStorage or persist business data.
+- Local backup/restore implementation and UI have been removed. Any future export/import must be designed against Firebase data, not device storage.
 - `services/dailyClosing.ts` orchestrates the close action.
 - `services/archiveSharing.ts` creates a message from one selected archive without mutating it.
-- `services/firebase.ts`, `firebaseAuth.ts`, `firestore.ts`, `spaceIdentity.ts`, and `trustedBootstrap.ts` provide the Firebase/Space foundations.
+- `services/firebase.ts`, `firebaseAuth.ts`, `firestore.ts`, and `trustedBootstrap.ts` provide the Firebase/Space foundations. Local `spaceIdentity.ts` was removed.
 - `functions/src/bootstrapPrimarySpace.ts` is the trusted server-side provisioning handler.
 
 ## 7. Actual models and relationships
 
 In `types/business.ts`:
 
-- `StoreProfile` — local store identity and settings; its `id` is the business `storeId`.
+- `StoreProfile` — cloud-backed store identity and settings; its `id` is the business `storeId`.
 - `StoreScopedEntity` / `BusinessEntity` — common IDs, `storeId`, timestamps, and optional `workspaceId`/`createdByUserId`.
 - `MoneyValue` — amount plus a required `CurrencyCode`.
 - `Customer` — belongs to one store and can own debts and payments.
@@ -96,26 +96,18 @@ The current customer settlement creates one inbound cash transaction and one lin
 
 ## 8. Storage and store isolation
 
-The following AsyncStorage business-data keys are legacy implementation details to remove as cloud migration completes; they are not an approved source of truth:
+Firebase Auth is the only authentication truth. Firestore and trusted Firebase Functions are the only authoritative persistence path for customers, debts, payments, cash transactions, reminders, store profile, daily journal projections, daily closings, and archive snapshots.
 
-- `@retail-business-manager/store-profile`
-- `@retail-business-manager/authenticated`
-- `@retail-business-manager/language` (legacy language key)
-- `@retail-business-manager/customers`
-- `@retail-business-manager/transactions`
-- `@retail-business-manager/debts`
-- `@retail-business-manager/payments`
-- `@retail-business-manager/daily-archive/…`
+The app's shared business-logic module does not import AsyncStorage. The only intentional app-level AsyncStorage use remaining is the nonfinancial notification-time preference in `services/preferences.ts`; Firebase Auth may also use its supported session persistence. Neither is a business-data source of truth.
 
-The current Space-aware namespace is `@retail-business-manager/spaces/` plus an encoded active Space ID. `setActiveSpaceId` selects the local namespace; the local `SpaceIdentity.spaceId` is not the store ID and is not the Firebase UID. Every business record still carries `storeId`. Reads filter by it; writes validate it and preserve records belonging to other stores. Archive keys contain store/date/closing information and reads re-check the stored `archive.storeId`.
+The old local business-data keys and local Space namespace are no longer used by the application. Existing local test data does not need migration. Do not add local fallback, local financial drafts, or local backup/restore.
 
-Legacy local business data is disposable test data for this project. Do not build a migration or preserve it as an alternate source of truth; remove legacy persistence paths after their Firebase replacements are verified.
 
 ## 9. Daily Journal, Archive, and multiple closings
 
-`buildDailyJournalEvents` derives today’s local-day events from store-scoped transactions, debts, and inbound customer payments, resolves customer names, suppresses settlement-linked cash transactions, and sorts by occurrence time. `loadDailyJournalEvents` then removes only event IDs already present in today’s archive snapshots.
+`buildDailyJournalEvents` derives today’s local-day events from Firestore-backed transactions, debts, and inbound customer payments, resolves customer names, suppresses settlement-linked cash transactions, and sorts by occurrence time. The cloud projection removes only event IDs already present in today’s Firestore archive snapshots.
 
-`closeDailyArchive` snapshots the currently unarchived journal, assigns the next closing number for that store/date, stores a copied `DailyArchive`, and does not delete or mutate source transactions, debts, payments, customers, the date, or cash balances. `archiveClosingQueue` serializes close operations. Multiple closings on one day are supported and each receives a distinct closing number and ID. `loadDailyArchive(storeId, date)` currently returns the first archive for a date; callers needing a particular same-day closing should use the archive list/closing number.
+`dailyArchiveCommand` builds an immutable snapshot from canonical Firestore source records and allocates same-day closing numbers in a server transaction. It does not mutate source transactions, debts, payments, customers, or cash balances. Concurrent close attempts re-check archived event IDs inside the transaction to avoid duplicate snapshots.
 
 Archive sharing reads only the selected snapshot, preserves each event’s currency, builds a message, and uses the device share sheet. It does not require a WhatsApp SDK or API key.
 
@@ -147,7 +139,7 @@ The callable `bootstrapPrimarySpace` requires verified Auth context and an empty
 
 The storage layer contains a version-1 `LocalBackup` contract and validation/restore functions for the active store: profile, auth flag, customers, transactions, debts, payments, and daily archives. It validates JSON, format version, records, store ID, and relationships before writing, preserves other local stores, and has rollback logic for multi-key writes. `backupFile.ts` supplies the file picker/cache/document/share plumbing.
 
-The user-facing Backup/Restore screen and complete product flow are still the next release work. This is local backup, not Firebase backup, Cloud Sync, or remote storage.
+Local Backup/Restore was removed. No cloud backup/export feature is currently implemented; if added later, it must read from Firebase and must never create an alternate local source of truth.
 
 ## 15. API server
 
@@ -162,14 +154,14 @@ The user-facing Backup/Restore screen and complete product flow are still the ne
 - Daily Journal, multiple same-day closings, archive snapshots, archive isolation, no-cash-impact archive behavior.
 - Selected archive sharing through the system share sheet.
 - Arabic/English/Turkish dictionaries, Arabic RTL, English/Turkish LTR, accent themes.
-- AsyncStorage validation and store/Space namespace foundation.
-- Local Backup/Restore data contract and file-service foundation.
+- Firebase-backed store and workspace validation; legacy local namespace helpers have been removed from runtime storage.
+- Cloud backup/export remains unimplemented; local Backup/Restore is prohibited.
 - Firebase client/Auth boundary, local UID-scoped SpaceIdentity, trusted primary-Space callable client/server, and membership-oriented Firestore Rules foundation.
 - API health artifact, workspace manifests, types, tests, and configuration.
 
 **DESIGNED BUT NOT IMPLEMENTED**
 
-- Complete user-facing Backup/Restore flow.
+- Any future cloud export/import design must be explicitly approved and use Firebase as the source.
 - Full Login + Spaces product flow beyond configured Auth/bootstrap foundation.
 - Additional Spaces, switching UI, memberships, invitations, member management, roles, and permissions UI.
 - Cloud Sync, durable outbox, migration, trusted financial commands, append-only ledger, notifications, and remote backup.
@@ -192,7 +184,7 @@ Latest recorded non-Emulator verification: 19 test files and 153 tests passed; T
 
 Recent completed technical work includes local cash/journal, settlement/home-credit, archive isolation/no cash impact, archive sharing, multi-Space contracts, Firebase/Firestore foundation, trusted bootstrap, client bootstrap integration, and membership-based Rules. The latest Git commit is metadata-only (`4ed9d01`); the latest functional foundation commits include trusted bootstrap and membership Rules.
 
-The remaining release work is Backup/Restore UX and robust Login + Spaces + Data Isolation; Archive sharing is implemented but remains part of the release scope and must not regress. Do not create a new task or expand to deferred modules without explicit owner approval.
+Remaining work is to complete the Firebase-only audit and end-to-end emulator/security tests. Archive sharing is implemented and must not regress. Local Backup/Restore is not a valid future task. Do not create a new task or expand to deferred modules without explicit owner approval.
 
 ## 20. Security and secrets
 
