@@ -188,7 +188,19 @@ function payloadForReceipt(input: CreatePaymentRequest): Record<string, unknown>
 
 function samePayload(receiptPayload: Record<string, unknown> | undefined, input: CreatePaymentRequest): boolean {
   if (!receiptPayload) return false;
-  return JSON.stringify(receiptPayload) === JSON.stringify(payloadForReceipt(input));
+  const amount = receiptPayload.amount;
+  return receiptPayload.spaceId === input.spaceId
+    && receiptPayload.storeId === input.storeId
+    && receiptPayload.paymentId === input.paymentId
+    && isRecord(amount)
+    && amount.amount === input.amount.amount
+    && amount.currency === input.amount.currency
+    && receiptPayload.direction === input.direction
+    && receiptPayload.method === input.method
+    && receiptPayload.customerId === (input.customerId ?? null)
+    && receiptPayload.transactionId === (input.transactionId ?? null)
+    && receiptPayload.paidAt === input.paidAt
+    && receiptPayload.note === (input.note ?? null);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
