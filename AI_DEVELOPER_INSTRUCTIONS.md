@@ -6,6 +6,35 @@
 
 This file is binding continuation guidance.
 
+## Mandatory readiness gate and development freeze (2026-10-18)
+
+The owner requires the earliest stable, runnable practical-test release of
+`moh-ac-32000-del/My-app`. This supersedes any open-ended improvement roadmap.
+
+1. Audit readiness before further development. Classify findings as test-blocking,
+   non-blocking defects, or optional later improvements. Fix only demonstrated
+   test-blocking defects before practical testing; do not add optional features or
+   unnecessary refactoring.
+2. The first test scope is login/account creation, workspace initialization,
+   customers, debts, payments, settlements, and synchronization. Preserve existing
+   stable cash, journal and archive behavior. Deferred modules stay deferred.
+3. Stop core development and declare Development Freeze as soon as required CI
+   passes and a configured runnable test release is available. Verify launch and
+   test-environment connectivity; distinguish this readiness check from user
+   acceptance. Do not turn complete automated integration coverage into an
+   unbounded prerequisite for handing over the first test release.
+4. During practical testing, change only defects actually discovered, unless the
+   owner explicitly requests a new feature. CI success, build success and actual
+   user testing must be reported separately. Never claim a device or live Firebase
+   test that was not performed.
+5. Use this repository only. Firebase remains the only source of financial truth.
+   No Replit dependency, production data changes, financial calculation changes or
+   Rules changes without demonstrated necessity and review. Required CI and diff
+   review must pass before merge.
+
+The freeze is a verified release milestone, not a declaration that every future
+improvement or every feature is complete.
+
 ## Scope control
 1. Work only on explicitly approved tasks and keep each change focused.
 2. Do not expand work into Sales, Purchases, Inventory, Capital, or Reports unless explicitly approved.

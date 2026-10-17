@@ -212,6 +212,12 @@ async function runCase(name, operation, expected) {
 
 try {
   await clearFirestore();
+  await runCase(
+    'Readiness — new user can list its empty discovery index before bootstrap',
+    () => getDocs(collection(userA.firestore(), 'users', 'user-A', 'memberships')),
+    'ALLOW',
+  );
+  await clearFirestore();
   await seedSpace(userA, 'space-A', 'user-A');
   await runCase(
     'Test 1 — user A reads space A',
@@ -365,6 +371,16 @@ try {
       'Test 20 — user A reads own membership discovery index',
       () => getDoc(membershipIndexReference(userA, 'user-A', 'space-A')),
       'ALLOW',
+    );
+    await runCase(
+      'Readiness — signed-in user can list own membership discovery index',
+      () => getDocs(collection(userA.firestore(), 'users', 'user-A', 'memberships')),
+      'ALLOW',
+    );
+    await runCase(
+      'Readiness — user cannot list another user discovery index',
+      () => getDocs(collection(userA.firestore(), 'users', 'user-B', 'memberships')),
+      'DENY',
     );
     await runCase(
       'Test 21 — user A cannot read another user membership discovery index',
