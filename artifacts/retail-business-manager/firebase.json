@@ -11,7 +11,7 @@
   "hosting": {
     "site": "retail-business-manager",
     "public": "dist",
-    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+    "ignore": ["firebase.json"],
     "rewrites": [{ "source": "**", "destination": "/index.html" }]
   },
   "emulators": {
