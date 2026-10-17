@@ -20,7 +20,6 @@ import {
   loadLegacyLanguage,
   loadStoreProfile,
   normalizeStoredStoreProfile,
-  restoreLocalBackup,
   saveAuthenticatedState,
   saveStoreProfile,
   createCashTransaction,
@@ -28,7 +27,6 @@ import {
   setActiveSpaceId,
   type SettlementDraft,
   type SettlementResult,
-  type LocalBackup,
 } from '@/services/storage';
 
 const defaultProfile: StoreProfile = {
@@ -70,7 +68,7 @@ interface StoreContextValue {
   toggleQuickCurrency: (code: CurrencyCode) => Promise<void>;
   setAuthenticated: (value: boolean) => Promise<void>;
   signOut: () => Promise<void>;
-  restoreFromLocalBackup: (contents: string) => Promise<LocalBackup>;
+  restoreFromLocalBackup: (contents: string) => Promise<never>;
   resetLocalSession: () => Promise<void>;
 }
 
@@ -529,23 +527,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     await saveAuthenticatedState(value);
   };
 
-  const restoreFromLocalBackup = async (contents: string): Promise<LocalBackup> => {
-    if (isFirebaseConfigured) {
-      throw new Error('cloudBackupRestoreUnavailable');
-    }
-    await profileWriteQueueRef.current.catch(() => undefined);
-    await transactionLoadPromiseRef.current.catch(() => undefined);
-    const restored = await restoreLocalBackup(contents, profileRef.current.id);
-    const nextProfile = restored.storeProfile;
-    const nextTransactions = await loadTransactions(restored.storeId);
-
-    profileRef.current = nextProfile;
-    transactionsRef.current = nextTransactions;
-    setProfile(nextProfile);
-    setTransactions(nextTransactions);
-    setLocalIsAuthenticatedState(restored.authenticated);
-    setJournalRevision((current) => current + 1);
-    return restored;
+  const restoreFromLocalBackup = async (_contents: string): Promise<never> => {
+    throw new Error('cloudBackupRestoreUnavailable');
   };
 
   const resetLocalSession = async () => {
