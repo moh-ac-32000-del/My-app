@@ -89,7 +89,7 @@ export async function settleCustomerDebtHandler(
         .sort((a, b) => {
           const createdA = typeof a.data.createdAt === 'string' ? a.data.createdAt : '';
           const createdB = typeof b.data.createdAt === 'string' ? b.data.createdAt : '';
-          return createdA.localeCompare(createdB) || a.ref.id.localeCompare(b.ref.id);
+          return createdB.localeCompare(createdA) || a.ref.id.localeCompare(b.ref.id);
         });
 
       const remaining = matchingDebts.reduce((sum, debt) => sum + Number(debt.data.amount), 0);
