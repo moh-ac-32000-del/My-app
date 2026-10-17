@@ -1,3 +1,4 @@
+/** Pure business logic shared by Firebase-backed services and UI. No persistence lives here. */
 import { CURRENCY_OPTIONS, isCurrencyCode, normalizeCurrency, type CurrencyCode } from '@/constants/currencies';
 import type { Language } from '@/constants/i18n';
 import type {
