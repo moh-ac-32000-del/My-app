@@ -8,7 +8,6 @@ import {
 import { getFirebaseApp, getFirebaseAuth, isFirebaseConfigured } from '@/services/firebase';
 import {
   workspaceBusinessCollectionPath,
-  workspaceBusinessDocumentPath,
 } from '@/data/firestoreWorkspace';
 import { validateCashTransactionDraft } from '@/services/storage';
 import type { Transaction } from '@/types/business';
@@ -170,6 +169,14 @@ function requireSpaceId(value: string): string {
     throw new Error('spaceIdInvalid');
   }
   return spaceId;
+}
+
+function requireTransactionId(value: string): string {
+  const transactionId = typeof value === 'string' ? value.trim() : '';
+  if (!requireNonEmptyString(transactionId) || transactionId.includes('/')) {
+    throw new Error('transactionIdInvalid');
+  }
+  return transactionId;
 }
 
 function requireStoreId(value: string): string {
