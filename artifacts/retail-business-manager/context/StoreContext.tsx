@@ -527,7 +527,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     await saveAuthenticatedState(value);
   };
 
-  const restoreFromLocalBackup = async (_contents: string): Promise<never> => {
+  const restoreFromLocalBackup = async (_contents: string): Promise<{ storeProfile: typeof profile }> => {
     throw new Error('cloudBackupRestoreUnavailable');
   };
 
