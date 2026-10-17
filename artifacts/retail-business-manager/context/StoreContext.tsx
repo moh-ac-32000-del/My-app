@@ -25,10 +25,6 @@ import {
   saveStoreProfile,
   createCashTransaction,
   createDebt,
-  loadDebts,
-  loadTransactions,
-  saveDebts,
-  saveTransactions,
   setActiveSpaceId,
   type SettlementDraft,
   type SettlementResult,
@@ -369,6 +365,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       };
     }
 
+    if (!isFirebaseConfigured) {
+      transactionsRef.current = [];
+      setTransactions([]);
+      setTransactionsLoading(false);
+      setTransactionsError('firebaseNotConfigured');
+      transactionLoadPromiseRef.current = Promise.resolve();
+      return () => {
+        isActive = false;
+      };
+    }
+
     transactionsRef.current = [];
     setTransactions([]);
     setTransactionsLoading(true);
@@ -423,17 +430,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       };
     }
 
-    const loadPromise = loadTransactions(profile.id).then((loadedTransactions) => {
-      if (!isActive) {
-        return;
-      }
-      transactionsRef.current = loadedTransactions;
-      setTransactions(loadedTransactions);
-      setTransactionsLoading(false);
-      setTransactionsError(null);
-    });
-    transactionLoadPromiseRef.current = loadPromise;
-
+    transactionLoadPromiseRef.current = Promise.resolve();
+    setTransactionsLoading(false);
+    setTransactionsError('firebaseNotConfigured');
     return () => {
       isActive = false;
     };
@@ -471,22 +470,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const addTransaction = async (draft: CashTransactionDraft): Promise<Transaction> => {
     await transactionLoadPromiseRef.current;
-    const transaction = createCashTransaction(profileRef.current.id, draft);
-
-    if (isFirebaseConfigured) {
-      if (!activeSpaceId) {
-        throw new Error('transactionWorkspaceUnavailable');
-      }
-      await createTransactionDocument(activeSpaceId, transaction);
-      const nextTransactions = [transaction, ...transactionsRef.current];
-      transactionsRef.current = nextTransactions;
-      setTransactions(nextTransactions);
-      setJournalRevision((current) => current + 1);
-      return transaction;
+    if (!isFirebaseConfigured) {
+      throw new Error('firebaseNotConfigured');
     }
-
+    if (!activeSpaceId) {
+      throw new Error('transactionWorkspaceUnavailable');
+    }
+    const transaction = createCashTransaction(profileRef.current.id, draft);
+    await createTransactionDocument(activeSpaceId, transaction);
     const nextTransactions = [transaction, ...transactionsRef.current];
-    await saveTransactions(profileRef.current.id, nextTransactions);
     transactionsRef.current = nextTransactions;
     setTransactions(nextTransactions);
     setJournalRevision((current) => current + 1);
@@ -497,18 +489,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     customerId: string,
     draft: { amount: number; currency: CurrencyCode; dueDate?: string },
   ): Promise<Debt> => {
-    const storeId = profileRef.current.id;
-    const debt = createDebt(storeId, customerId, draft);
-    if (isFirebaseConfigured) {
-      if (!activeSpaceId) {
-        throw new Error('debtWorkspaceUnavailable');
-      }
-      await createDebtDocument(activeSpaceId, debt);
-      setJournalRevision((current) => current + 1);
-      return debt;
+    if (!isFirebaseConfigured) {
+      throw new Error('firebaseNotConfigured');
     }
-    const currentDebts = await loadDebts(storeId);
-    await saveDebts(storeId, [...currentDebts, debt]);
+    if (!activeSpaceId) {
+      throw new Error('debtWorkspaceUnavailable');
+    }
+    const debt = createDebt(profileRef.current.id, customerId, draft);
+    await createDebtDocument(activeSpaceId, debt);
     setJournalRevision((current) => current + 1);
     return debt;
   };
