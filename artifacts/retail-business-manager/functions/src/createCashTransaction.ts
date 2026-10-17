@@ -56,10 +56,15 @@ export async function createCashTransactionHandler(
       if (receiptSnap.exists) {
         const receipt = receiptSnap.data() ?? {};
         const result = receipt.result as Record<string, unknown> | undefined;
+        const payload = receipt.payload as Record<string, unknown> | undefined;
+        const receiptMatches = payload
+          ? samePayload(payload, input)
+          : sameLegacyCashTransaction(receipt, transactionSnap.data() ?? {}, input);
         if (receipt.command !== 'createCashTransaction'
           || receipt.actorUserId !== uid
           || receipt.spaceId !== input.spaceId
-          || result?.transactionId !== input.transactionId) {
+          || result?.transactionId !== input.transactionId
+          || !receiptMatches) {
           throw new HttpsError('already-exists', 'Operation ID was already used', { code: 'IDEMPOTENCY_CONFLICT' });
         }
         return {
@@ -92,6 +97,7 @@ export async function createCashTransactionHandler(
         command: 'createCashTransaction',
         status: 'completed',
         processedAt: now,
+        payload: payloadForReceipt(input),
         result: { transactionId: input.transactionId },
       });
       return { outcome: 'created', transactionId: input.transactionId, processedAt: now };
@@ -135,6 +141,44 @@ function validateRequest(value: unknown): CreateCashTransactionRequest {
     currency: value.currency,
     ...(typeof value.note === 'string' && value.note.trim() ? { note: value.note.trim().slice(0, 500) } : {}),
   };
+}
+
+function payloadForReceipt(input: CreateCashTransactionRequest): Record<string, unknown> {
+  return {
+    spaceId: input.spaceId,
+    storeId: input.storeId,
+    transactionId: input.transactionId,
+    type: input.type,
+    amount: input.amount,
+    currency: input.currency,
+    note: input.note ?? null,
+  };
+}
+
+function samePayload(receiptPayload: Record<string, unknown>, input: CreateCashTransactionRequest): boolean {
+  return receiptPayload.spaceId === input.spaceId
+    && receiptPayload.storeId === input.storeId
+    && receiptPayload.transactionId === input.transactionId
+    && receiptPayload.type === input.type
+    && receiptPayload.amount === input.amount
+    && receiptPayload.currency === input.currency
+    && receiptPayload.note === (input.note ?? null);
+}
+
+function sameLegacyCashTransaction(
+  receipt: Record<string, unknown>,
+  transaction: Record<string, unknown>,
+  input: CreateCashTransactionRequest,
+): boolean {
+  return transaction.id === input.transactionId
+    && transaction.storeId === input.storeId
+    && transaction.workspaceId === input.spaceId
+    && transaction.type === input.type
+    && transaction.amount === input.amount
+    && transaction.currency === input.currency
+    && (transaction.note ?? null) === (input.note ?? null)
+    && transaction.createdAt === receipt.processedAt
+    && transaction.updatedAt === receipt.processedAt;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
