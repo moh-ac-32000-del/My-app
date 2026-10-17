@@ -8,7 +8,8 @@ import { formatLocalizedDate, formatLocalizedDateTime } from '@/constants/i18n';
 import { useStore } from '@/context/StoreContext';
 import { useColors } from '@/hooks/useColors';
 import { useI18n } from '@/hooks/useI18n';
-import { loadDailyArchives, type DailyJournalEvent } from '@/services/storage';
+import { type DailyJournalEvent } from '@/services/storage';
+import { loadCloudDailyArchives } from '@/services/cloudDailyArchives';
 import { buildArchiveShareMessage } from '@/services/archiveSharing';
 import type { DailyArchive } from '@/types/business';
 
@@ -19,7 +20,7 @@ function parseArchiveDate(value: string): Date {
 
 export default function ArchiveScreen() {
   const colors = useColors();
-  const { profile, isReady } = useStore();
+  const { profile, isReady, activeSpaceId } = useStore();
   const { t, language, isRTL } = useI18n();
   const [archives, setArchives] = useState<DailyArchive[]>([]);
   const [selectedArchiveId, setSelectedArchiveId] = useState<string | null>(null);
@@ -35,7 +36,11 @@ export default function ArchiveScreen() {
         return undefined;
       }
       let active = true;
-      void loadDailyArchives(profile.id).then((loadedArchives) => {
+      if (!activeSpaceId) {
+        setArchives([]);
+        return () => { active = false; };
+      }
+      void loadCloudDailyArchives(activeSpaceId, profile.id).then((loadedArchives) => {
         if (active) {
           setArchives(loadedArchives);
           setSelectedArchiveId((current) =>
@@ -47,7 +52,7 @@ export default function ArchiveScreen() {
       return () => {
         active = false;
       };
-    }, [isReady, profile.id]),
+    }, [activeSpaceId, isReady, profile.id]),
   );
 
   const getEventTitle = (event: DailyJournalEvent): string => {
