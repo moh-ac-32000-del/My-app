@@ -94,6 +94,10 @@ export function PaymentProvider({ children }: { children: ReactNode }) {
         if (!active) {
           return;
         }
+        // Firestore listeners terminate after an error. Clear the previous
+        // workspace snapshot so it cannot be mistaken for current cloud data.
+        setPayments([]);
+        setCanonicalSpaceId(null);
         setIsLoading(false);
         setError(listenerError.message);
       },

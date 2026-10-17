@@ -92,6 +92,10 @@ export function CustomerProvider({ children }: { children: ReactNode }) {
         if (!active) {
           return;
         }
+        // Firestore listeners terminate after an error. Clear the previous
+        // workspace snapshot so it cannot be mistaken for current cloud data.
+        setCustomers([]);
+        setCanonicalSpaceId(null);
         setIsLoading(false);
         setError(listenerError.message);
       },

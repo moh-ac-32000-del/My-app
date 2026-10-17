@@ -189,12 +189,11 @@ export default function CustomerDetailsScreen() {
 
     setIsSavingDebt(true);
     try {
-      const debt = await addCustomerDebt(customerId, {
+      await addCustomerDebt(customerId, {
         amount: draft.amount,
         currency: draft.currency,
         ...(draft.dueDate ? { dueDate: draft.dueDate } : {}),
       });
-      setDebts((current) => [debt, ...current].sort((first, second) => Date.parse(second.createdAt) - Date.parse(first.createdAt)));
       setIsDebtVisible(false);
       Alert.alert(t('debtAdded'));
     } finally {
