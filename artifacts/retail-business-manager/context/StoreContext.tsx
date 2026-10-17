@@ -291,8 +291,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     let isActive = true;
     let unsubscribe: (() => void) | undefined;
 
-    if (!isReady || initializationError || (isFirebaseConfigured && !activeSpaceId)) {
+    if (!isReady || (isFirebaseConfigured && !activeSpaceId)) {
       setTransactionsLoading(isFirebaseConfigured && isAuthenticated);
+      return () => {
+        isActive = false;
+      };
+    }
+
+    if (initializationError) {
+      setTransactionsLoading(false);
       return () => {
         isActive = false;
       };
