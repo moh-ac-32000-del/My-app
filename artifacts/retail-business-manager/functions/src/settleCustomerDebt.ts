@@ -35,18 +35,22 @@ export async function settleCustomerDebtHandler(
   const profileRef = spaceRef.collection('storeProfile').doc('profile');
   const customerRef = spaceRef.collection('customers').doc(input.customerId);
   const receiptRef = spaceRef.collection('operationReceipts').doc(input.operationId);
+  const transactionRef = spaceRef.collection('transactions').doc(input.transactionId);
+  const paymentRef = spaceRef.collection('payments').doc(input.paymentId);
   const debtsQuery = spaceRef.collection('debts')
     .where('customerId', '==', input.customerId);
 
   try {
     return await db.runTransaction(async (transaction) => {
-      const [spaceSnap, memberSnap, profileSnap, customerSnap, receiptSnap, debtSnaps] = await Promise.all([
+      const [spaceSnap, memberSnap, profileSnap, customerSnap, receiptSnap, debtSnaps, existingTransaction, existingPayment] = await Promise.all([
         transaction.get(spaceRef),
         transaction.get(memberRef),
         transaction.get(profileRef),
         transaction.get(customerRef),
         transaction.get(receiptRef),
         transaction.get(debtsQuery),
+        transaction.get(transactionRef),
+        transaction.get(paymentRef),
       ]);
 
       if (!spaceSnap.exists || spaceSnap.data()?.status !== 'active') {
@@ -68,10 +72,15 @@ export async function settleCustomerDebtHandler(
       if (receiptSnap.exists) {
         const receipt = receiptSnap.data() ?? {};
         const result = receipt.result as Record<string, unknown> | undefined;
+        const payload = receipt.payload as Record<string, unknown> | undefined;
+        const receiptMatches = payload
+          ? samePayload(payload, input)
+          : sameLegacySettlement(receipt, existingTransaction.data() ?? {}, existingPayment.data() ?? {}, input);
         if (receipt.operationId !== input.operationId || receipt.spaceId !== input.spaceId
           || receipt.actorUserId !== uid || receipt.status !== 'completed'
           || receipt.command !== 'settleCustomerDebt'
-          || result?.transactionId !== input.transactionId || result?.paymentId !== input.paymentId) {
+          || result?.transactionId !== input.transactionId || result?.paymentId !== input.paymentId
+          || !receiptMatches) {
           throw new HttpsError('already-exists', 'Operation ID was already used', { code: 'IDEMPOTENCY_CONFLICT' });
         }
         return {
@@ -102,12 +111,6 @@ export async function settleCustomerDebtHandler(
         throw new HttpsError('failed-precondition', 'Settlement exceeds the remaining debt', { code: 'SETTLEMENT_EXCEEDS_DEBT' });
       }
 
-      const transactionRef = spaceRef.collection('transactions').doc(input.transactionId);
-      const paymentRef = spaceRef.collection('payments').doc(input.paymentId);
-      const [existingTransaction, existingPayment] = await Promise.all([
-        transaction.get(transactionRef),
-        transaction.get(paymentRef),
-      ]);
       if (existingTransaction.exists || existingPayment.exists) {
         throw new HttpsError('already-exists', 'Settlement record ID already exists', { code: 'IDEMPOTENCY_CONFLICT' });
       }
@@ -174,6 +177,7 @@ export async function settleCustomerDebtHandler(
         command: 'settleCustomerDebt',
         status: 'completed',
         processedAt: now,
+        payload: payloadForReceipt(input),
         result: { transactionId: input.transactionId, paymentId: input.paymentId },
       });
 
@@ -222,6 +226,55 @@ function validateRequest(value: unknown): SettleCustomerDebtRequest {
     transactionId: (value.transactionId as string).trim(),
     paymentId: (value.paymentId as string).trim(),
   };
+}
+
+function payloadForReceipt(input: SettleCustomerDebtRequest): Record<string, unknown> {
+  return {
+    spaceId: input.spaceId,
+    storeId: input.storeId,
+    customerId: input.customerId,
+    amount: input.amount,
+    currency: input.currency,
+    transactionId: input.transactionId,
+    paymentId: input.paymentId,
+  };
+}
+
+function samePayload(receiptPayload: Record<string, unknown>, input: SettleCustomerDebtRequest): boolean {
+  return receiptPayload.spaceId === input.spaceId
+    && receiptPayload.storeId === input.storeId
+    && receiptPayload.customerId === input.customerId
+    && receiptPayload.amount === input.amount
+    && receiptPayload.currency === input.currency
+    && receiptPayload.transactionId === input.transactionId
+    && receiptPayload.paymentId === input.paymentId;
+}
+
+function sameLegacySettlement(
+  receipt: Record<string, unknown>,
+  transaction: Record<string, unknown>,
+  payment: Record<string, unknown>,
+  input: SettleCustomerDebtRequest,
+): boolean {
+  const paymentAmount = payment.amount;
+  return transaction.id === input.transactionId
+    && transaction.storeId === input.storeId
+    && transaction.workspaceId === input.spaceId
+    && transaction.type === 'cash_in'
+    && transaction.amount === input.amount
+    && transaction.currency === input.currency
+    && transaction.note === `payment_${input.customerId}`
+    && payment.id === input.paymentId
+    && payment.storeId === input.storeId
+    && payment.workspaceId === input.spaceId
+    && payment.customerId === input.customerId
+    && payment.transactionId === input.transactionId
+    && isRecord(paymentAmount)
+    && paymentAmount.amount === input.amount
+    && paymentAmount.currency === input.currency
+    && payment.direction === 'in'
+    && payment.method === 'cash'
+    && payment.paidAt === receipt.processedAt;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
