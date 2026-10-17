@@ -81,8 +81,11 @@ export async function createPaymentHandler(
         const transaction = transactionSnap?.data();
         if (!transactionSnap?.exists || transaction?.id !== input.transactionId
           || transaction?.storeId !== input.storeId
-          || transaction?.workspaceId !== input.spaceId) {
-          throw new HttpsError('failed-precondition', 'Linked cash transaction was not found in this store', { code: 'TRANSACTION_SCOPE_MISMATCH' });
+          || transaction?.workspaceId !== input.spaceId
+          || transaction?.type !== (input.direction === 'in' ? 'cash_in' : 'cash_out')
+          || transaction?.amount !== input.amount.amount
+          || transaction?.currency !== input.amount.currency) {
+          throw new HttpsError('failed-precondition', 'Linked cash transaction does not match this payment', { code: 'TRANSACTION_SCOPE_MISMATCH' });
         }
       }
 
