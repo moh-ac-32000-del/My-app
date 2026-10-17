@@ -28,6 +28,7 @@
     "tests/bootstrap-primary-space-function.test.ts",
     "tests/daily-archive-command.test.ts",
     "tests/reminder-command.test.ts",
+    "tests/trusted-financial-store-scope.test.ts",
     "node_modules",
     ".expo"
   ]
