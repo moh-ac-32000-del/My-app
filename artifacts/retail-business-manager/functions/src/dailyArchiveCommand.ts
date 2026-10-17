@@ -146,12 +146,7 @@ export async function dailyArchiveCommandHandler(
     tx.create(archivesRef.doc(id), archive);
     return archive;
   });
-  const finalSnapshot = await archivesRef.where('storeId', '==', input.storeId).get();
-  const archives = finalSnapshot.docs
-    .map((doc) => normalizeArchive(doc.id, doc.data(), input.spaceId, input.storeId))
-    .filter((archive): archive is ArchiveRecord => archive !== null)
-    .sort((a, b) => b.date.localeCompare(a.date) || b.closingNumber - a.closingNumber);
-  return { archives, created, processedAt: now };
+  return { archives: [created], created, processedAt: now };
 }
 
 export function createDailyArchiveRuntime(firestore: Firestore): DailyArchiveRuntime {
