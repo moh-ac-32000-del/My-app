@@ -545,7 +545,7 @@ try {
         'ALLOW',
       );
       await runCase(
-        'Transaction — active member can create a valid transaction',
+        'Transaction — direct client create is denied; use trusted backend',
         () => setDoc(
           doc(userA.firestore(), 'spaces', 'space-A', 'transactions', 'transaction-A'),
           transactionDocument('transaction-A'),
