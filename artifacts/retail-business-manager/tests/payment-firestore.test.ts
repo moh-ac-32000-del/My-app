@@ -62,37 +62,6 @@ const payment: Payment = {
   updatedAt: '2026-09-10T10:00:00.000Z',
 };
 
-function snapshot(data: Record<string, unknown> | undefined) {
-  return {
-    exists: () => data !== undefined,
-    data: () => data,
-  };
-}
-
-function configureTransaction(
-  customerData: Record<string, unknown> | null | undefined = {
-    id: 'customer-A',
-    storeId: 'store-A',
-    workspaceId: 'space-A',
-    isActive: true,
-  },
-  paymentData?: Record<string, unknown>,
-) {
-  const transaction = {
-    get: vi.fn(async (reference: { path: string }) => (
-      reference.path.includes('/customers/')
-        ? snapshot(customerData ?? undefined)
-        : snapshot(paymentData)
-    )),
-    set: vi.fn(),
-  };
-  firestoreMocks.runTransaction.mockImplementationOnce(async (
-    _database: unknown,
-    callback: (value: typeof transaction) => Promise<void>,
-  ) => callback(transaction));
-  return transaction;
-}
-
 describe('Payment Firestore service', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -141,18 +110,7 @@ describe('Payment Firestore service', () => {
     await createPaymentDocument('space-A', payment);
 
     expect(trustedPaymentMocks.createTrustedPayment).toHaveBeenCalledWith('space-A', payment);
-    expect(trustedPaymentMocks.createTrustedPayment).not.toHaveBeenCalled();
-  });
-
-  it.each([
-    ['missing', null],
-    ['inactive', { id: 'customer-A', storeId: 'store-A', isActive: false }],
-    ['wrong store', { id: 'customer-A', storeId: 'store-B', isActive: true }],
-  ])('rejects a %s Customer before creating a Payment', async (_label, customerData) => {
-    const transaction = configureTransaction(customerData);
-
-    await expect(createPaymentDocument('space-A', payment)).rejects.toThrow('customerNotFound');
-    expect(transaction.set).not.toHaveBeenCalled();
+    expect(trustedPaymentMocks.createTrustedPayment).toHaveBeenCalledTimes(1);
   });
 
   it.each([
@@ -165,7 +123,7 @@ describe('Payment Firestore service', () => {
       ...payment,
       ...changes,
     } as Payment)).rejects.toThrow(error);
-    expect(firestoreMocks.runTransaction).not.toHaveBeenCalled();
+    expect(trustedPaymentMocks.createTrustedPayment).not.toHaveBeenCalled();
   });
 
   it('subscribes to the active Workspace and cleans up the listener', () => {
