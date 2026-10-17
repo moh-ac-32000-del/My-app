@@ -1,4 +1,4 @@
-import type { Firestore } from 'firebase-admin/firestore';
+import type { CollectionReference, DocumentReference, Firestore } from 'firebase-admin/firestore';
 import { HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
 
 const SYSTEM_DUE_DATE_NOTE = 'system:due-date';
@@ -145,8 +145,8 @@ function validateRequest(value: unknown): ReminderCommandRequest {
 async function listAndReconcile(
   input: ReminderCommandRequest,
   runtime: ReminderRuntime,
-  remindersRef: FirebaseFirestore.CollectionReference,
-  spaceRef: FirebaseFirestore.DocumentReference,
+  remindersRef: CollectionReference,
+  spaceRef: DocumentReference,
 ): Promise<ReminderRecord[]> {
   const [debtSnapshot, reminderSnapshot] = await Promise.all([
     spaceRef.collection('debts').where('storeId', '==', input.storeId).get(),
