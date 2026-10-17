@@ -21,7 +21,9 @@ function fakeFirestore(documents: Record<string, Document> = {}) {
     ...documents,
   };
 
+  const writes: string[] = [];
   return {
+    writes,
     collection: (name: string) => ({ doc: (id: string) => reference(`${name}/${id}`) }),
     async runTransaction<T>(callback: (tx: {
       get: (ref: { path: string }) => Promise<Snapshot>;
@@ -33,7 +35,9 @@ function fakeFirestore(documents: Record<string, Document> = {}) {
           return { exists: Boolean(value), data: () => value };
         },
         create: (ref, data) => {
+          if (store[ref.path]) throw new Error('Document already exists');
           store[ref.path] = data;
+          writes.push(ref.path);
         },
       });
     },
@@ -63,14 +67,21 @@ const runtime = (firestore: ReturnType<typeof fakeFirestore>) => ({
 });
 
 describe('createCashTransaction idempotency', () => {
-  it('rejects a reused operation ID when the cash transaction payload changes', async () => {
+  it.each([
+    { amount: 125 },
+    { currency: 'USD' },
+    { type: 'cash_out' },
+    { note: 'different note' },
+    { note: undefined },
+    { transactionId: 'transaction-B' },
+  ])('rejects changed cash transaction input %j without writing', async (changed) => {
     const firestore = fakeFirestore();
 
     await expect(createCashTransactionHandler(request() as never, runtime(firestore)))
       .resolves.toMatchObject({ outcome: 'created', transactionId: 'transaction-A' });
 
     await expect(createCashTransactionHandler(
-      request({ amount: 125 }) as never,
+      request(changed) as never,
       runtime(firestore),
     )).rejects.toMatchObject({
       code: 'already-exists',
@@ -79,6 +90,7 @@ describe('createCashTransaction idempotency', () => {
 
     await expect(createCashTransactionHandler(request() as never, runtime(firestore)))
       .resolves.toMatchObject({ outcome: 'replayed', transactionId: 'transaction-A' });
+    expect(firestore.writes).toHaveLength(2);
   });
 
   it('replays matching legacy receipts without stored payloads', async () => {
@@ -107,7 +119,28 @@ describe('createCashTransaction idempotency', () => {
       },
     });
 
+    await expect(createCashTransactionHandler(
+      request({ amount: 125 }) as never,
+      runtime(firestore),
+    )).rejects.toMatchObject({
+      code: 'already-exists',
+      details: { code: 'IDEMPOTENCY_CONFLICT' },
+    });
     await expect(createCashTransactionHandler(request() as never, runtime(firestore)))
       .resolves.toMatchObject({ outcome: 'replayed', transactionId: 'transaction-A' });
+    expect(firestore.writes).toHaveLength(0);
+  });
+
+  it('replays equivalent normalized notes and absent optional notes', async () => {
+    for (const note of ['  opening balance  ', undefined, '   ']) {
+      const firestore = fakeFirestore();
+      await createCashTransactionHandler(request({ note }) as never, runtime(firestore));
+      const normalizedNote = typeof note === 'string' && note.trim() ? note.trim() : undefined;
+      await expect(createCashTransactionHandler(
+        request({ note: normalizedNote }) as never,
+        runtime(firestore),
+      )).resolves.toMatchObject({ outcome: 'replayed' });
+      expect(firestore.writes).toHaveLength(2);
+    }
   });
 });
