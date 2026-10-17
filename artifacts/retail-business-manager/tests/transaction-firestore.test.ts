@@ -25,7 +25,6 @@ const storageMocks = vi.hoisted(() => ({
 
 vi.mock('firebase/firestore', () => ({
   collection: firestoreMocks.collection,
-  doc: firestoreMocks.doc,
   getDocs: firestoreMocks.getDocs,
   getFirestore: firestoreMocks.getFirestore,
   onSnapshot: firestoreMocks.onSnapshot,
