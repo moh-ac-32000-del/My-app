@@ -5,7 +5,6 @@ import {
   createPaymentDocument,
   subscribeToPayments,
 } from '@/services/paymentFirestore';
-import { loadPayments, savePayments } from '@/services/storage';
 import { useStore } from '@/context/StoreContext';
 
 interface PaymentContextValue {
@@ -45,20 +44,8 @@ export function PaymentProvider({ children }: { children: ReactNode }) {
     setError(null);
 
     if (!isFirebaseConfigured) {
-      setIsLoading(true);
-      void loadPayments(profile.id).then((localPayments) => {
-        if (!active) {
-          return;
-        }
-        setPayments(localPayments);
-        setIsLoading(false);
-      }).catch((loadError) => {
-        if (!active) {
-          return;
-        }
-        setIsLoading(false);
-        setError(loadError instanceof Error ? loadError.message : 'paymentLoadFailed');
-      });
+      setIsLoading(false);
+      setError('firebaseNotConfigured');
       return () => {
         active = false;
       };
@@ -138,8 +125,7 @@ export function PaymentProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    const currentPayments = await loadPayments(profile.id);
-    await savePayments(profile.id, [...currentPayments, payment]);
+    throw new Error('firebaseNotConfigured');
   }, [canonicalSpaceId, profile.id]);
 
   const value = useMemo(

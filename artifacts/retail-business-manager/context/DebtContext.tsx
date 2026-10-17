@@ -6,7 +6,6 @@ import {
   subscribeToDebts,
   updateDebtDocument,
 } from '@/services/debtFirestore';
-import { loadDebts } from '@/services/storage';
 import { useStore } from '@/context/StoreContext';
 
 interface DebtContextValue {
@@ -46,20 +45,8 @@ export function DebtProvider({ children }: { children: ReactNode }) {
     setError(null);
 
     if (!isFirebaseConfigured) {
-      setIsLoading(true);
-      void loadDebts(profile.id).then((localDebts) => {
-        if (!active) {
-          return;
-        }
-        setDebts(localDebts);
-        setIsLoading(false);
-      }).catch((loadError) => {
-        if (!active) {
-          return;
-        }
-        setIsLoading(false);
-        setError(loadError instanceof Error ? loadError.message : 'debtLoadFailed');
-      });
+      setIsLoading(false);
+      setError('firebaseNotConfigured');
       return () => {
         active = false;
       };
