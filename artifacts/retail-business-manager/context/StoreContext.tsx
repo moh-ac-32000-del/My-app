@@ -68,7 +68,7 @@ interface StoreContextValue {
 
 const StoreContext = createContext<StoreContextValue | null>(null);
 
-export async function initializePostAuthLocalSession(
+export async function initializePostAuthCloudSession(
   user: User,
   isCurrentTransition: () => boolean,
   callbacks: {
@@ -197,7 +197,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const startPostAuthLocalInitialization = React.useCallback((user: User, transition: number) => {
+  const startPostAuthCloudInitialization = React.useCallback((user: User, transition: number) => {
     if (initializationInFlightRef.current === transition) {
       return;
     }
@@ -231,7 +231,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         setActiveSpaceError(error instanceof Error ? error.message : 'activeWorkspaceUnavailable');
         setActiveSpaceLoading(false);
       }
-      await initializePostAuthLocalSession(
+      await initializePostAuthCloudSession(
         user,
         () => authTransitionRef.current === transition && firebaseUserRef.current === user,
         {
@@ -256,8 +256,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     if (!user) {
       return;
     }
-    startPostAuthLocalInitialization(user, authTransitionRef.current);
-  }, [startPostAuthLocalInitialization]);
+    startPostAuthCloudInitialization(user, authTransitionRef.current);
+  }, [startPostAuthCloudInitialization]);
   const retryActiveSpace = retryInitialization;
 
   useEffect(() => {
@@ -299,7 +299,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           return;
         }
 
-        startPostAuthLocalInitialization(user, transition);
+        startPostAuthCloudInitialization(user, transition);
       },
       () => {
         authTransitionRef.current += 1;
@@ -325,7 +325,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         setTransactions([]);
       },
     );
-  }, [startPostAuthLocalInitialization]);
+  }, [startPostAuthCloudInitialization]);
 
   const isReady = isLocalReady && isFirebaseReady;
   const isAuthenticated = isFirebaseConfigured && isFirebaseSessionAuthenticated(firebaseUser);
