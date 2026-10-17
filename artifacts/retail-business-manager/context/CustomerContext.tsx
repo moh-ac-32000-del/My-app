@@ -48,6 +48,7 @@ export function CustomerProvider({ children }: { children: ReactNode }) {
 
     if (!isFirebaseConfigured) {
       setIsLoading(false);
+      setError('firebaseNotConfigured');
       return () => {
         active = false;
       };
