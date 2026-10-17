@@ -7,6 +7,7 @@ import { createCashTransactionRuntime, createCashTransactionHandler } from './cr
 import { createTrustedDebtRuntime, trustedDebtCommandHandler } from './trustedDebtCommand.js';
 import { createTrustedPaymentRuntime, createPaymentHandler } from './createPayment.js';
 import { createStoreProfileRuntime, storeProfileCommandHandler } from './storeProfileCommand.js';
+import { createReminderRuntime, reminderCommandHandler } from './reminderCommand.js';
 
 initializeApp();
 
@@ -17,6 +18,7 @@ const cashTransactionRuntime = createCashTransactionRuntime(firestore);
 const trustedDebtRuntime = createTrustedDebtRuntime(firestore);
 const trustedPaymentRuntime = createTrustedPaymentRuntime(firestore);
 const storeProfileRuntime = createStoreProfileRuntime(firestore);
+const reminderRuntime = createReminderRuntime(firestore);
 
 export const bootstrapPrimarySpace = onCall({ invoker: 'public' }, async (request) => (
   bootstrapPrimarySpaceHandler(request, runtime)
@@ -34,4 +36,8 @@ export const trustedDebtCommand = onCall({ invoker: 'public' }, async (request) 
 
 export const createPayment = onCall({ invoker: 'public' }, async (request) => (
   createPaymentHandler(request, trustedPaymentRuntime)
+));
+
+export const reminderCommand = onCall({ invoker: 'public' }, async (request) => (
+  reminderCommandHandler(request, reminderRuntime)
 ));
