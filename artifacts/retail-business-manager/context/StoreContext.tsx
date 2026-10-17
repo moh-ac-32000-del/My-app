@@ -51,7 +51,6 @@ interface StoreContextValue {
   transactions: Transaction[];
   transactionsLoading: boolean;
   transactionsError: string | null;
-  journalRevision: number;
   addTransaction: (draft: CashTransactionDraft) => Promise<Transaction>;
   addCustomerDebt: (customerId: string, draft: { amount: number; currency: CurrencyCode; dueDate?: string }) => Promise<Debt>;
   settleCustomerDebt: (customerId: string, draft: SettlementDraft) => Promise<SettlementResult>;
@@ -155,7 +154,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [transactionsLoading, setTransactionsLoading] = useState<boolean>(isFirebaseConfigured);
   const [transactionsError, setTransactionsError] = useState<string | null>(null);
-  const [journalRevision, setJournalRevision] = useState<number>(0);
   const profileRef = useRef<StoreProfile>(defaultProfile);
   const transactionsRef = useRef<Transaction[]>([]);
   const transactionLoadPromiseRef = useRef<Promise<void>>(Promise.resolve());
@@ -439,10 +437,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }
     const transaction = createCashTransaction(profileRef.current.id, draft);
     await createTrustedCashTransaction(activeSpaceId, transaction);
-    const nextTransactions = [transaction, ...transactionsRef.current];
-    transactionsRef.current = nextTransactions;
-    setTransactions(nextTransactions);
-    setJournalRevision((current) => current + 1);
     return transaction;
   };
 
@@ -476,12 +470,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       customerId,
       draft,
     );
-    const nextTransactions = [result.transaction, ...transactionsRef.current.filter(
-      (transaction) => transaction.id !== result.transaction.id,
-    )].sort((first, second) => Date.parse(second.createdAt) - Date.parse(first.createdAt));
-    transactionsRef.current = nextTransactions;
-    setTransactions(nextTransactions);
-    setJournalRevision((current) => current + 1);
     return result;
   };
 
@@ -511,7 +499,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       transactions,
        transactionsLoading,
        transactionsError,
-      journalRevision,
       addTransaction,
       addCustomerDebt,
       settleCustomerDebt,
@@ -527,7 +514,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       initializationError,
       isAuthenticated,
       isReady,
-      journalRevision,
       language,
       profile,
       retryActiveSpace,
