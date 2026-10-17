@@ -1,4 +1,5 @@
 import { CURRENCY_OPTIONS, isCurrencyCode, normalizeCurrency, type CurrencyCode } from '@/constants/currencies';
+import type { Language } from '@/constants/i18n';
 import type {
   CashTransactionDraft,
   Customer,
@@ -565,17 +566,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function readString(record: Record<string, unknown>, key: string, fallback: string): string {
-  return typeof record[key] === 'string' ? record[key] : fallback;
-}
 
-function readOptionalString(record: Record<string, unknown>, key: string): string | undefined {
-  if (typeof record[key] !== 'string') {
-    return undefined;
-  }
-  const value = record[key].trim();
-  return value || undefined;
-}
 
 function isValidDateString(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0 && Number.isFinite(Date.parse(value));
