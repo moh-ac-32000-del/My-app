@@ -8,6 +8,7 @@ import { createTrustedDebtRuntime, trustedDebtCommandHandler } from './trustedDe
 import { createTrustedPaymentRuntime, createPaymentHandler } from './createPayment.js';
 import { createStoreProfileRuntime, storeProfileCommandHandler } from './storeProfileCommand.js';
 import { createReminderRuntime, reminderCommandHandler } from './reminderCommand.js';
+import { createDailyArchiveRuntime, dailyArchiveCommandHandler } from './dailyArchiveCommand.js';
 
 initializeApp();
 
@@ -19,6 +20,7 @@ const trustedDebtRuntime = createTrustedDebtRuntime(firestore);
 const trustedPaymentRuntime = createTrustedPaymentRuntime(firestore);
 const storeProfileRuntime = createStoreProfileRuntime(firestore);
 const reminderRuntime = createReminderRuntime(firestore);
+const dailyArchiveRuntime = createDailyArchiveRuntime(firestore);
 
 export const bootstrapPrimarySpace = onCall({ invoker: 'public' }, async (request) => (
   bootstrapPrimarySpaceHandler(request, runtime)
@@ -44,4 +46,8 @@ export const storeProfileCommand = onCall({ invoker: 'public' }, async (request)
 
 export const reminderCommand = onCall({ invoker: 'public' }, async (request) => (
   reminderCommandHandler(request, reminderRuntime)
+));
+
+export const dailyArchiveCommand = onCall({ invoker: 'public' }, async (request) => (
+  dailyArchiveCommandHandler(request, dailyArchiveRuntime)
 ));

@@ -1,13 +1,12 @@
-import { closeDailyArchive, type DailyArchiveCloseResult } from '@/services/storage';
+import { closeCloudDailyArchive } from '@/services/cloudDailyArchives';
 
 export type DailyClosingStatus = 'created';
 
-type CloseDailyArchive = (storeId: string) => Promise<DailyArchiveCloseResult>;
-
 export async function runDailyClosing(
+  spaceId: string,
   storeId: string,
-  closeArchive: CloseDailyArchive = closeDailyArchive,
 ): Promise<DailyClosingStatus> {
-  await closeArchive(storeId);
+  if (!spaceId.trim() || !storeId.trim()) throw new Error('archiveWorkspaceUnavailable');
+  await closeCloudDailyArchive(spaceId, storeId);
   return 'created';
 }

@@ -77,6 +77,16 @@ service cloud.firestore {
       allow create, update, delete: if false;
     }
 
+    match /spaces/{spaceId}/dailyArchives/{archiveId} {
+      allow read: if isActiveMember(spaceId);
+      // Archive snapshots and closing counters are written only by trusted Functions.
+      allow create, update, delete: if false;
+    }
+
+    match /spaces/{spaceId}/dailyClosingCounters/{counterId} {
+      allow read, write: if false;
+    }
+
     match /spaces/{spaceId}/transactions/{transactionId} {
       allow read: if isActiveMember(spaceId);
       allow create: if isActiveMember(spaceId)
