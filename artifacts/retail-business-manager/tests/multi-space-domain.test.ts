@@ -16,7 +16,6 @@ import {
   type OperationReceipt,
   type OwnerMembership,
   type Space,
-  type SpaceIdentity,
 } from '@/types/space';
 import type { MembershipDiscoveryIndexEntry } from '@/types/trustedBootstrap';
 
@@ -66,19 +65,17 @@ describe('Multi-Space domain contracts', () => {
   });
 
   it('keeps Firebase UID, Space ID, and Store ID as separate concepts', () => {
-    const identity: SpaceIdentity = {
-      uid: 'firebase-user-contract',
-      spaceId: 'space-contract',
-      createdAt: '2026-08-30T10:00:00.000Z',
-    };
+    const uid = 'firebase-user-contract';
+    const spaceId = 'space-contract';
+    const createdAt = '2026-08-30T10:00:00.000Z';
     const space: Space = {
-      spaceId: identity.spaceId,
+      spaceId,
       name: 'Contract Space',
       mode: 'shared',
       status: 'active',
-      ownerUserId: identity.uid,
-      createdAt: identity.createdAt,
-      updatedAt: identity.createdAt,
+      ownerUserId: uid,
+      createdAt,
+      updatedAt: createdAt,
     };
     const storeProfile: StoreProfile = {
       id: 'store-contract',
@@ -92,8 +89,8 @@ describe('Multi-Space domain contracts', () => {
       accent: 'blue',
     };
 
-    expect(identity.uid).not.toBe(identity.spaceId);
-    expect(identity.spaceId).toBe(space.spaceId);
+    expect(uid).not.toBe(spaceId);
+    expect(spaceId).toBe(space.spaceId);
     expect(storeProfile.id).not.toBe(identity.spaceId);
     expect(space).not.toHaveProperty('id');
   });
@@ -157,13 +154,10 @@ describe('Multi-Space domain contracts', () => {
 
   it('separates local active-space state from the discovered Cloud identity', () => {
     const selection: ActiveSpaceSelection = {
-      localActiveSpaceId: 'local-space-namespace',
-      discoveredSpaceId: 'space-discovered',
+      activeSpaceId: 'space-discovered',
     };
 
-    expect(selection.localActiveSpaceId).toBe('local-space-namespace');
-    expect(selection.discoveredSpaceId).toBe('space-discovered');
-    expect(selection.localActiveSpaceId).not.toBe(selection.discoveredSpaceId);
+    expect(selection.activeSpaceId).toBe('space-discovered');
     expect(selection).not.toHaveProperty('role');
     expect(selection).not.toHaveProperty('status');
   });
