@@ -67,3 +67,28 @@ jobs:
         run: pnpm --filter @workspace/retail-business-manager run build
         env:
           EXPO_PUBLIC_DEPLOYMENT_URL: https://example.invalid/retail-business-manager
+
+  firestore-rules:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - name: Setup Java for Firestore emulator
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Test Firestore rules on emulator
+        run: pnpm --filter @workspace/retail-business-manager run test:rules

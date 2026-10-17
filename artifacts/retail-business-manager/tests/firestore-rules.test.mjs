@@ -14,6 +14,10 @@ import {
   updateDoc,
 } from 'firebase/firestore';
 
+// This suite clears its database between cases; refuse every non-local target.
+if (!['127.0.0.1:8080', 'localhost:8080'].includes(process.env.FIRESTORE_EMULATOR_HOST)) {
+  throw new Error('Run test:rules against the local Firestore emulator on port 8080');
+}
 const rules = await readFile(new URL('../firestore.rules', import.meta.url), 'utf8');
 const testEnvironment = await initializeTestEnvironment({
   projectId: 'demo-firestore-rules',
@@ -137,6 +141,20 @@ function transactionDocument(transactionId, overrides = {}) {
   };
 }
 
+function debtDocument(debtId) {
+  return {
+    id: debtId,
+    storeId: 'store-A',
+    workspaceId: 'space-A',
+    createdByUserId: 'user-A',
+    customerId: 'customer-A',
+    amount: 100,
+    currency: 'TRY',
+    createdAt: '2026-08-30T10:00:00.000Z',
+    updatedAt: '2026-08-30T10:00:00.000Z',
+  };
+}
+
 function userReference(context, uid) {
   return doc(context.firestore(), 'users', uid);
 }
@@ -172,10 +190,10 @@ async function seedMultiSpace(spaceId, ownerUserId, members = []) {
 }
 
 async function seedSpace(context, spaceId, ownerUserId) {
-  await assertSucceeds(setDoc(
-    spaceReference(context, spaceId),
-    legacySpaceDocument(spaceId, ownerUserId),
-  ));
+  // Existing legacy records can contain fields no longer allowed on creation.
+  await testEnvironment.withSecurityRulesDisabled(async (seedContext) => {
+    await setDoc(spaceReference(seedContext, spaceId), legacySpaceDocument(spaceId, ownerUserId));
+  });
 }
 
 async function runCase(name, operation, expected) {
@@ -229,10 +247,10 @@ try {
 
   await clearFirestore();
   await runCase(
-    'Test 5 — user B creates space A as user B',
+    'Test 5 — user B cannot forge user A as owner',
     () => setDoc(
       spaceReference(userB, 'space-A'),
-      spaceDocument('space-A', 'user-B'),
+      spaceDocument('space-A', 'user-A'),
     ),
     'DENY',
   );
@@ -397,6 +415,7 @@ try {
         customerReference(context, 'space-A', 'customer-A'),
         customerDocument('customer-A', { workspaceId: 'space-A' }),
       );
+      await setDoc(doc(context.firestore(), 'spaces', 'space-A', 'debts', 'debt-A'), debtDocument('debt-A'));
     });
     const userCForCustomers = testEnvironment.authenticatedContext('user-C');
     const userDForCustomers = testEnvironment.authenticatedContext('user-D');
@@ -544,7 +563,6 @@ try {
       );
 
       for (const collectionName of [
-        'debts',
         'cashTransactions',
         'dailyClosings',
         'reminders',
@@ -558,6 +576,42 @@ try {
           'DENY',
         );
       }
+
+      await runCase(
+        'Debt — active member can read',
+        () => getDoc(doc(userA.firestore(), 'spaces', 'space-A', 'debts', 'debt-A')),
+        'ALLOW',
+      );
+      await runCase(
+        'Debt — direct client create is denied',
+        () => setDoc(doc(userA.firestore(), 'spaces', 'space-A', 'debts', 'debt-new'), debtDocument('debt-new')),
+        'DENY',
+      );
+      await runCase(
+        'Debt — cross-Workspace read is denied',
+        () => getDoc(doc(userB.firestore(), 'spaces', 'space-A', 'debts', 'debt-A')),
+        'DENY',
+      );
+      await runCase(
+        'Debt — inactive member read is denied',
+        () => getDoc(doc(userDForCustomers.firestore(), 'spaces', 'space-A', 'debts', 'debt-A')),
+        'DENY',
+      );
+      await runCase(
+        'Debt — anonymous read is denied',
+        () => getDoc(doc(anonymous.firestore(), 'spaces', 'space-A', 'debts', 'debt-A')),
+        'DENY',
+      );
+      await runCase(
+        'Debt — direct client update is denied',
+        () => updateDoc(doc(userA.firestore(), 'spaces', 'space-A', 'debts', 'debt-A'), { amount: 200 }),
+        'DENY',
+      );
+      await runCase(
+        'Debt — direct client delete is denied',
+        () => deleteDoc(doc(userA.firestore(), 'spaces', 'space-A', 'debts', 'debt-A')),
+        'DENY',
+      );
 
       await runCase(
         'Transaction — active member can read',
