@@ -85,6 +85,7 @@ This manifest lists the important project files and the role of each area. The e
 | `constants/colors.ts` | Glass theme and accent definitions. |
 | `types/business.ts` | Store, customer, transaction, debt, payment, archive, reminder, and money models. |
 | `services/storage.ts` | Pure business constructors/validation, currency calculations, and daily-journal projection helpers; no AsyncStorage persistence. |
+| `services/preferences.ts` | Nonfinancial notification-time preference only. |
 | `services/dailyClosing.ts` | Shared close-day orchestration. |
 | `services/archiveSharing.ts` | Pure selected-Archive share-message builder. |
 | `services/firebase.ts` | Future Firebase config boundary; no active Firebase client. |
@@ -120,7 +121,6 @@ This manifest lists the important project files and the role of each area. The e
 | Path | Coverage |
 |---|---|
 | `tests/firebase-auth.test.ts` | Firebase Auth boundary behavior. |
-| `tests/firestore-space.test.ts` | Firestore Space contract behavior. |
 | `tests/multi-space-domain.test.ts` | Multi-Space domain contracts. |
 | `tests/trusted-bootstrap-contract.test.ts` | Trusted bootstrap type/contract validation. |
 | `tests/trusted-bootstrap.test.ts` | Client callable boundary validation. |
