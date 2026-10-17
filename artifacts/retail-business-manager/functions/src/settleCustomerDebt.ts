@@ -109,23 +109,30 @@ export async function settleCustomerDebtHandler(
 
       const now = runtime.now();
       let amountToApply = input.amount;
+      const debtUpdates: Array<{ ref: typeof matchingDebts[number]['ref']; currentAmount: number; nextAmount: number }> = [];
       for (const debt of matchingDebts) {
         if (amountToApply <= 0) break;
         const currentAmount = Number(debt.data.amount);
         const applied = Math.min(currentAmount, amountToApply);
         const nextAmount = currentAmount - applied;
         amountToApply -= applied;
-        transaction.update(debt.ref, {
-          amount: nextAmount,
-          originalAmount: typeof debt.data.originalAmount === 'number' ? debt.data.originalAmount : currentAmount,
-          ...(nextAmount === 0 ? { settledAt: now } : {}),
-          updatedAt: now,
-        });
+        debtUpdates.push({ ref: debt.ref, currentAmount, nextAmount });
       }
       if (Math.abs(amountToApply) > 0.000001) {
         throw new HttpsError('failed-precondition', 'Settlement could not be fully applied', { code: 'SETTLEMENT_EXCEEDS_DEBT' });
       }
 
+      // Firestore transactions require every read to finish before the first write.
+      for (const debt of debtUpdates) {
+        transaction.update(debt.ref, {
+          amount: debt.nextAmount,
+          originalAmount: typeof matchingDebts.find((candidate) => candidate.ref.path === debt.ref.path)?.data.originalAmount === 'number'
+            ? matchingDebts.find((candidate) => candidate.ref.path === debt.ref.path)?.data.originalAmount
+            : debt.currentAmount,
+          ...(debt.nextAmount === 0 ? { settledAt: now } : {}),
+          updatedAt: now,
+        });
+      }
       transaction.create(transactionRef, {
         id: input.transactionId,
         storeId: input.storeId,
