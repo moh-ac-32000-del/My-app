@@ -51,6 +51,9 @@ jobs:
       - name: Validate Expo app configuration
         run: pnpm --filter @workspace/retail-business-manager exec expo config --json > /tmp/retail-business-manager-expo-config.json
 
+      - name: Build standalone web export
+        run: pnpm --filter @workspace/retail-business-manager exec expo export --platform web --output-dir /tmp/retail-business-manager-web
+
       - name: Install Firebase Functions dependencies
         run: pnpm --dir artifacts/retail-business-manager/functions install --frozen-lockfile --ignore-workspace
 
