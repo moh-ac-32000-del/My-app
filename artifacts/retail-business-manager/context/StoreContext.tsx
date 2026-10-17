@@ -11,7 +11,8 @@ import { getOrCreateSpaceIdentity } from '@/services/spaceIdentity';
 import { discoverUserSpaces, validateUserSpaceMembership } from '@/services/firestore';
 import { bootstrapPrimarySpace } from '@/services/trustedBootstrap';
 import { createDebtDocument } from '@/services/debtFirestore';
-import { createTransactionDocument, subscribeToTransactions } from '@/services/transactionFirestore';
+import { subscribeToTransactions } from '@/services/transactionFirestore';
+import { createTrustedCashTransaction } from '@/services/trustedTransactionFirestore';
 import { settleCustomerDebtInCloud } from '@/services/settlementFirestore';
 import type { Space } from '@/types/space';
 import {
@@ -475,7 +476,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       throw new Error('transactionWorkspaceUnavailable');
     }
     const transaction = createCashTransaction(profileRef.current.id, draft);
-    await createTransactionDocument(activeSpaceId, transaction);
+    await createTrustedCashTransaction(activeSpaceId, transaction);
     const nextTransactions = [transaction, ...transactionsRef.current];
     transactionsRef.current = nextTransactions;
     setTransactions(nextTransactions);
