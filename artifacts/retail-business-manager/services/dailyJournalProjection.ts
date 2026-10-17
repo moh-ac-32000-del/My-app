@@ -2,9 +2,9 @@ import type { Customer, Debt, DailyArchive, Payment, Transaction } from '@/types
 import {
   buildDailyJournalEvents,
   getLocalDateKey,
-  loadDailyArchives,
   type DailyJournalEvent,
 } from '@/services/storage';
+import { loadCloudDailyArchives } from '@/services/cloudDailyArchives';
 
 export interface DailyJournalSources {
   transactions: Transaction[];
@@ -36,10 +36,11 @@ export function projectDailyJournalEvents(
 }
 
 export async function projectCloudDailyJournalEvents(
+  spaceId: string,
   storeId: string,
   sources: DailyJournalSources,
   now: Date = new Date(),
 ): Promise<DailyJournalEvent[]> {
-  const localArchives = await loadDailyArchives(storeId);
-  return projectDailyJournalEvents(storeId, sources, localArchives, now);
+  const cloudArchives = await loadCloudDailyArchives(spaceId, storeId);
+  return projectDailyJournalEvents(storeId, sources, cloudArchives, now);
 }
