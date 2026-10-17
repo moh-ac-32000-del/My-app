@@ -19,7 +19,7 @@ Sales, Purchases, Inventory, Capital, and Reports are explicitly postponed and a
 ## Current implementation snapshot
 
 - Expo SDK 54 / React Native app with Expo Router routes for login, dashboard, customers, customer detail, cash, archive, settings, and deliberate under-development routes for Sales, Purchases, Inventory, and Reports.
-- Legacy AsyncStorage business persistence remains in code and is migration work; Firebase/Firestore is the only approved source of truth.
+- Local business persistence and local Space identity have been removed from the app runtime; only a nonfinancial notification-time preference and Firebase Auth session persistence remain local.
 - Customers, debts, partial/full cash settlements, Cash In/Cash Out, per-currency balances, derived Daily Journal, multiple same-day closings, immutable archive snapshots, and selected archive system sharing.
 - Arabic, English, and Turkish; Arabic RTL; English/Turkish LTR; accent settings.
 - Firebase Auth, Firestore, trusted Functions, Space bootstrap, and membership checks are being developed as the authoritative path. Remaining local business paths must be removed; no local fallback is permitted.
@@ -117,7 +117,7 @@ No new tests, Expo run, browser run, Playwright run, or screenshot was performed
 
 ## Current storage
 
-Business data is local to the runtime through AsyncStorage. The primary keys are:
+Historical note only (obsolete): the former local business-data keys were:
 
 - `@retail-business-manager/store-profile`
 - `@retail-business-manager/authenticated`
@@ -128,7 +128,7 @@ Business data is local to the runtime through AsyncStorage. The primary keys are
 - `@retail-business-manager/payments`
 - `@retail-business-manager/daily-archive/{encodedStoreId}:{date}:{paddedClosingNumber}`
 
-The repository does not contain the live AsyncStorage values. There is currently no user-facing Backup/Restore export/import flow.
+Local business Backup/Restore implementation and UI have been removed. Any future export/import must be designed against Firebase and must not create a local business database.
 
 ## Current release focus
 
@@ -143,7 +143,7 @@ Do not add Sales, Purchases, Inventory, Capital, or Reports to the current relea
 
 ## Known gaps / remaining work
 
-- Backup/Restore has not yet been implemented as a user-facing flow.
+- Local Backup/Restore was removed; cloud-backed export/import remains unimplemented.
 - Real authentication is not connected; the current login is a local authenticated flag.
 - Spaces/multi-space user membership and role management are not yet implemented; `storeId` isolation is the current foundation.
 - Cloud sync and Firebase initialization are not implemented.
