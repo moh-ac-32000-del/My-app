@@ -94,6 +94,10 @@ export function DebtProvider({ children }: { children: ReactNode }) {
         if (!active) {
           return;
         }
+        // Firestore listeners terminate after an error. Clear the previous
+        // workspace snapshot so it cannot be mistaken for current cloud data.
+        setDebts([]);
+        setCanonicalSpaceId(null);
         setIsLoading(false);
         setError(listenerError.message);
       },
