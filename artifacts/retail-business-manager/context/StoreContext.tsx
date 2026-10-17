@@ -85,6 +85,7 @@ export async function initializePostAuthLocalSession(
     onReady: () => void;
     onError: (message: string | null) => void;
   },
+  activeSpaceId: string | null = null,
 ): Promise<void> {
   let identity: SpaceIdentity | null = null;
   if (!isCurrentTransition()) {
