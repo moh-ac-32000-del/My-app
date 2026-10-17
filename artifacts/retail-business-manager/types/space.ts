@@ -97,11 +97,6 @@ export interface OperationReceipt<TResult = unknown> {
   errorCode?: string;
 }
 
-export interface SpaceIdentity {
-  uid: string;
-  spaceId: string;
-  createdAt: string;
-}
 
 /**
  * The discovery result is built from the user's membership discovery index.
@@ -115,11 +110,9 @@ export interface SpaceDiscoveryResult {
 }
 
 /**
- * Local active-space state is a namespace-selection hint, not an
- * authorization source. The discovered ID is the Cloud/membership identity
- * selected for the current session.
+ * The selected active Space comes from authenticated cloud membership;
+ * it is never derived from local business-data namespaces.
  */
 export interface ActiveSpaceSelection {
-  localActiveSpaceId: string | null;
-  discoveredSpaceId: string | null;
+  activeSpaceId: string | null;
 }
