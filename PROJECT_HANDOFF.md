@@ -325,71 +325,42 @@ The provider loads and normalizes local profile/auth state, then loads transacti
 
 ### Services
 
-- `services/storage.ts` — all current AsyncStorage persistence, validation, normalization, local data derivation, settlement behavior, Daily Journal construction, and Daily Archive creation/loading.
-- `services/dailyClosing.ts` — thin shared orchestration path for the close-day action.
-- `services/archiveSharing.ts` — builds a shareable message from one `DailyArchive.snapshot`; it does not write data.
-- `services/firebase.ts` — future Firebase configuration boundary only; no Firebase client is initialized.
+- `services/storage.ts` — pure business constructors, validation, currency calculations, and daily-journal projection helpers. It does not import AsyncStorage or persist business data.
+- `services/preferences.ts` — the only app-level AsyncStorage use for a nonfinancial notification-time preference.
+- `services/dailyClosing.ts` and `services/cloudDailyArchives.ts` — daily closing and archive reads through the trusted Firebase callable.
+- `services/archiveSharing.ts` — builds a shareable message from one cloud archive snapshot; it does not write data.
+- `services/firebase.ts`, `firebaseAuth.ts`, `firestore.ts`, and trusted callable clients — Firebase Auth, cloud membership discovery, Firestore subscriptions, and trusted business commands.
+- Local backup/restore and local SpaceIdentity persistence have been removed. Firebase Auth may use its supported session persistence; it is not a business-data store.
 
 ### Core models
 
 Defined in `types/business.ts`:
 
-- `StoreProfile`
-- `StoreScopedEntity`
-- `BusinessEntity`
-- `MoneyValue`
-- `Customer`
-- `Transaction`
-- `Payment`
-- `Debt`
-- `DailyArchive`
-- `Reminder` (model exists, but no completed reminder workflow is part of this baseline)
+- `StoreProfile` — cloud-backed store identity and settings.
+- `StoreScopedEntity` / `BusinessEntity` — entity identity, store, timestamps, and optional workspace metadata.
+- `MoneyValue` — amount plus currency.
+- `Customer`, `Transaction`, `Debt`, and `Payment` — cloud business records.
+- `DailyArchive` — immutable cloud snapshot with date, closing time, and sequential closing number.
+- `Reminder` — cloud-backed reminder record.
 
-`DailyJournalEvent` is defined in `services/storage.ts` and combines the current-day view of transactions, debts, payments, and customer names.
+`DailyJournalEvent` is a pure projection model built from Firestore-backed transactions, debts, payments, and customer names.
 
-## 9. Local storage and data extraction
+## 9. Persistence and data extraction
 
-There is no database file or exported data file in the repository. Runtime business data is stored in the platform implementation of `@react-native-async-storage/async-storage`.
+Firestore and trusted Firebase Functions are the only authoritative persistence path for business data. The shared business-logic module has no AsyncStorage import.
 
-Current keys in `services/storage.ts`:
+The only intentional app-level AsyncStorage use is the nonfinancial notification-time preference in `services/preferences.ts`. Firebase Auth may also use its supported session persistence. Neither is an alternate source of truth for customers, debts, payments, transactions, reminders, store profile, journal, closings, or archives.
 
-| Key | Data |
-|---|---|
-| `@retail-business-manager/store-profile` | One normalized `StoreProfile`, including store identity, language, currency, quick/visible currencies, and accent. |
-| `@retail-business-manager/authenticated` | String boolean for the local session flag. |
-| `@retail-business-manager/language` | Legacy language key read during migration and removed after normalization. |
-| `@retail-business-manager/customers` | JSON array of customers for all locally known stores; reads filter by `storeId`. |
-| `@retail-business-manager/transactions` | JSON array of cash transactions for all locally known stores; reads filter by `storeId`. |
-| `@retail-business-manager/debts` | JSON array of debts for all locally known stores; reads filter by `storeId`. |
-| `@retail-business-manager/payments` | JSON array of payments for all locally known stores; reads filter by `storeId`. |
-| `@retail-business-manager/daily-archive/{encodedStoreId}:{date}:{paddedClosingNumber}` | One JSON `DailyArchive` per store/date/closing number. |
-
-### Current data categories
-
-- **Customers:** customer identity/contact/notes/active state plus store and timestamps.
-- **Transactions:** Cash In/Cash Out, amount, currency, note, store and timestamps.
-- **Debts:** customer, remaining amount, currency, optional original amount and settlement timestamp.
-- **Payments:** amount/currency, direction, method, customer, optional linked transaction, and timestamps.
-- **Daily Archives:** immutable snapshots of journal event IDs/details, date, close time, store, and sequential closing number.
-- **Store Profiles:** store name, phone, address, store ID, selected currency, quick/visible currencies, language, accent, optional logo URI.
-- **App settings:** local authenticated flag, language, currency settings, visible/quick currencies, and accent/theme selection. These are local profile/session values; there is no separate settings database.
-
-### Extraction and restoration status
-
-The current application does not yet expose a user-facing Backup/Restore flow and does not provide an AsyncStorage export/import function. The repository therefore cannot contain the current runtime values of the data above.
-
-Do not add Backup/Restore over legacy AsyncStorage business keys. Any future backup must export/import explicitly from the authoritative Firebase data model and must not create an alternate local source of truth.
+The legacy local business-data keys and local Space namespace are no longer used by the app. Existing local test data is disposable and does not need migration. Do not add local business backup/restore, local fallbacks, or dual writes. Any future backup/export must read from Firebase and be separately reviewed.
 
 ## 10. Store Isolation
 
-- Every business entity carries `storeId`.
-- Load functions filter records to the active store.
-- Save functions validate that every incoming record belongs to the requested store and preserve other stores' records in the shared arrays.
-- Archive storage uses an encoded store ID in the key and also verifies the stored `archive.storeId`.
-- Journal construction filters transactions, debts, payments, and customers by the active store.
-- Future Firebase/Firestore documents are expected to carry `storeId`; `data/collections.ts` documents that rule.
-
-The current profile is the locally active store profile. Multi-space/account infrastructure is not complete yet; the `storeId` discipline is the foundation for it.
+- Firebase Auth establishes the authenticated user.
+- Active Space is discovered from cloud membership; a local Space ID is not used as identity or authorization.
+- Trusted commands validate authenticated UID, active membership, and matching workspace/store scope.
+- Customer, debt, payment, transaction, reminder, journal, and archive reads are cloud-backed.
+- Debt/payment/settlement writes and daily archive closing use trusted Firebase Functions.
+- Store isolation, per-currency arithmetic, settlement links, immutable archive snapshots, event-ID filtering, and multiple same-day closing semantics must remain unchanged.
 
 ## 11. Currency system
 
