@@ -1,16 +1,13 @@
 import {
   collection,
-  doc,
   getDocs,
   getFirestore,
   onSnapshot,
-  runTransaction,
   type DocumentData,
 } from 'firebase/firestore';
 import { getFirebaseApp, getFirebaseAuth, isFirebaseConfigured } from '@/services/firebase';
 import {
   workspaceBusinessCollectionPath,
-  workspaceBusinessDocumentPath,
 } from '@/data/firestoreWorkspace';
 import { validateCashTransactionDraft } from '@/services/storage';
 import type { Transaction } from '@/types/business';
@@ -70,28 +67,6 @@ export async function listTransactionDocuments(spaceId: string): Promise<Transac
     ))
     .filter((transaction): transaction is Transaction => transaction !== null)
     .sort((first, second) => Date.parse(second.createdAt) - Date.parse(first.createdAt));
-}
-
-export async function createTransactionDocument(
-  spaceId: string,
-  transaction: Transaction,
-): Promise<void> {
-  getAuthenticatedUid();
-  const transactionId = requireTransactionId(transaction.id);
-  const transactionReference = doc(
-    getFirestoreInstance(),
-    workspaceBusinessDocumentPath(spaceId, 'transactions', transactionId),
-  );
-  const serializedTransaction = serializeTransactionDocument(transaction);
-
-  await runTransaction(getFirestoreInstance(), async (firestoreTransaction) => {
-    const existingTransaction = await firestoreTransaction.get(transactionReference);
-    if (existingTransaction.exists()) {
-      throw new Error('transactionAlreadyExists');
-    }
-
-    firestoreTransaction.set(transactionReference, serializedTransaction);
-  });
 }
 
 export function serializeTransactionDocument(

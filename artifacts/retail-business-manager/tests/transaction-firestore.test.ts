@@ -3,11 +3,9 @@ import type { Transaction } from '@/types/business';
 
 const firestoreMocks = vi.hoisted(() => ({
   collection: vi.fn((database: unknown, path: string) => ({ database, path })),
-  doc: vi.fn((database: unknown, path: string) => ({ database, path })),
   getFirestore: vi.fn(() => ({ name: 'test-db' })),
   onSnapshot: vi.fn(),
   getDocs: vi.fn(),
-  runTransaction: vi.fn(),
   nextSnapshot: null as ((snapshot: {
     docs: Array<{ id: string; data: () => Record<string, unknown> }>;
   }) => void) | null,
@@ -27,18 +25,15 @@ const storageMocks = vi.hoisted(() => ({
 
 vi.mock('firebase/firestore', () => ({
   collection: firestoreMocks.collection,
-  doc: firestoreMocks.doc,
   getDocs: firestoreMocks.getDocs,
   getFirestore: firestoreMocks.getFirestore,
   onSnapshot: firestoreMocks.onSnapshot,
-  runTransaction: firestoreMocks.runTransaction,
 }));
 
 vi.mock('@/services/firebase', () => firebaseMocks);
 vi.mock('@/services/storage', () => storageMocks);
 
 import {
-  createTransactionDocument,
   listTransactionDocuments,
   normalizeTransactionDocument,
   serializeTransactionDocument,
@@ -55,25 +50,6 @@ const transaction: Transaction = {
   createdAt: '2026-09-10T10:00:00.000Z',
   updatedAt: '2026-09-10T10:00:00.000Z',
 };
-
-function snapshot(data: Record<string, unknown> | undefined) {
-  return {
-    exists: () => data !== undefined,
-    data: () => data,
-  };
-}
-
-function configureTransaction(paymentData?: Record<string, unknown>) {
-  const firestoreTransaction = {
-    get: vi.fn(async () => snapshot(paymentData)),
-    set: vi.fn(),
-  };
-  firestoreMocks.runTransaction.mockImplementationOnce(async (
-    _database: unknown,
-    callback: (value: typeof firestoreTransaction) => Promise<void>,
-  ) => callback(firestoreTransaction));
-  return firestoreTransaction;
-}
 
 describe('Transaction Firestore service', () => {
   beforeEach(() => {
@@ -113,60 +89,14 @@ describe('Transaction Firestore service', () => {
     expect(normalizeTransactionDocument('different-id', serialized, 'space-A')).toBeNull();
   });
 
-  it('creates a Transaction under the canonical Workspace path', async () => {
-    const firestoreTransaction = configureTransaction();
 
-    await createTransactionDocument('space-A', transaction);
 
-    expect(firestoreMocks.doc).toHaveBeenCalledWith(
-      expect.anything(),
-      'spaces/space-A/transactions/transaction-A',
-    );
-    expect(firestoreTransaction.set).toHaveBeenCalledWith(
-      expect.objectContaining({ path: 'spaces/space-A/transactions/transaction-A' }),
-      expect.objectContaining({
-        id: 'transaction-A',
-        storeId: 'store-A',
-        type: 'cash_in',
-        amount: 125,
-        currency: 'TRY',
-      }),
-    );
-  });
-
-  it('rejects invalid Transaction type, currency, and amount before writing', async () => {
-    const invalidCases = [
-      ['transactionTypeInvalid', { type: 'invalid' }],
-      ['currencyInvalid', { currency: 'INVALID' }],
-      ['amountInvalid', { amount: -1 }],
-    ] as const;
-
-    for (const [error, changes] of invalidCases) {
-      storageMocks.validateCashTransactionDraft.mockReturnValueOnce(error as never);
-      await expect(createTransactionDocument(
-        'space-A',
-        { ...transaction, ...changes } as Transaction,
-      )).rejects.toThrow(error);
-    }
-
-    expect(firestoreMocks.runTransaction).not.toHaveBeenCalled();
-  });
-
-  it('rejects a duplicate Transaction ID atomically without overwriting', async () => {
-    const firestoreTransaction = configureTransaction({ id: 'transaction-A' });
-
-    await expect(createTransactionDocument('space-A', transaction))
-      .rejects.toThrow('transactionAlreadyExists');
-    expect(firestoreTransaction.set).not.toHaveBeenCalled();
-  });
 
   it('requires an authenticated Firebase user for Cloud reads and writes', async () => {
     firebaseMocks.getFirebaseAuth.mockReturnValue({ currentUser: null });
 
     await expect(listTransactionDocuments('space-A')).rejects.toThrow('firebaseUserRequired');
-    await expect(createTransactionDocument('space-A', transaction)).rejects.toThrow('firebaseUserRequired');
     expect(firestoreMocks.getDocs).not.toHaveBeenCalled();
-    expect(firestoreMocks.runTransaction).not.toHaveBeenCalled();
   });
 
   it('subscribes to the Workspace and cleans up the listener', () => {
