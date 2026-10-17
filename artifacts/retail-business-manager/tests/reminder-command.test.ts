@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import { HttpsError } from 'firebase-functions/v2/https';
 import { reminderCommandHandler, type ReminderRuntime } from '@/functions/src/reminderCommand';
 
 const runtime = {
@@ -45,6 +44,6 @@ describe('trusted reminder command', () => {
         },
       } as never,
       runtime,
-    )).rejects.toBeInstanceOf(HttpsError);
+    )).rejects.toMatchObject({ code: 'invalid-argument' });
   });
 });
