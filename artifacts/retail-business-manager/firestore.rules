@@ -89,9 +89,8 @@ service cloud.firestore {
 
     match /spaces/{spaceId}/transactions/{transactionId} {
       allow read: if isActiveMember(spaceId);
-      allow create: if isActiveMember(spaceId)
-        && isValidTransactionDocument(transactionId, request.resource.data);
-      allow update, delete: if false;
+      // All transaction writes must use the authenticated trusted backend command.
+      allow create, update, delete: if false;
     }
 
     match /customers/{document=**} {

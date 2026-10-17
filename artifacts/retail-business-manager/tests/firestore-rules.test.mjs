@@ -550,7 +550,7 @@ try {
           doc(userA.firestore(), 'spaces', 'space-A', 'transactions', 'transaction-A'),
           transactionDocument('transaction-A'),
         ),
-        'ALLOW',
+        'DENY',
       );
       await runCase(
         'Transaction — nonmember cannot read',
