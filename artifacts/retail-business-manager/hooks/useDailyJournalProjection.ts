@@ -115,7 +115,8 @@ export function useDailyJournalProjection(refreshToken = 0): DailyJournalProject
 
     setIsLoading(true);
     setError(null);
-    void projectCloudDailyJournalEvents(profile.id, {
+    if (!activeSpaceId) throw new Error('journalWorkspaceUnavailable');
+    void projectCloudDailyJournalEvents(activeSpaceId, profile.id, {
       transactions,
       debts: debts.debts,
       payments: payments.payments,
