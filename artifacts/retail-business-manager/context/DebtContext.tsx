@@ -122,7 +122,6 @@ export function DebtProvider({ children }: { children: ReactNode }) {
         throw new Error('debtWorkspaceUnavailable');
       }
       await updateDebtDocument(canonicalSpaceId, debt);
-      await reconcileCloudDebtReminders(canonicalSpaceId, profile.id);
       return;
     }
     throw new Error('localDebtUpdateUnsupported');
