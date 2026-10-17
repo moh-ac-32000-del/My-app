@@ -31,14 +31,16 @@ export async function createCashTransactionHandler(
   const db = runtime.firestore;
   const spaceRef = db.collection('spaces').doc(input.spaceId);
   const memberRef = spaceRef.collection('members').doc(uid);
+  const profileRef = spaceRef.collection('storeProfile').doc('profile');
   const transactionRef = spaceRef.collection('transactions').doc(input.transactionId);
   const receiptRef = spaceRef.collection('operationReceipts').doc(input.operationId);
 
   try {
     return await db.runTransaction(async (transaction) => {
-      const [spaceSnap, memberSnap, receiptSnap, transactionSnap] = await Promise.all([
+      const [spaceSnap, memberSnap, profileSnap, receiptSnap, transactionSnap] = await Promise.all([
         transaction.get(spaceRef),
         transaction.get(memberRef),
+        transaction.get(profileRef),
         transaction.get(receiptRef),
         transaction.get(transactionRef),
       ]);
@@ -47,6 +49,9 @@ export async function createCashTransactionHandler(
       }
       if (!memberSnap.exists || memberSnap.data()?.status !== 'active') {
         throw new HttpsError('permission-denied', 'Active workspace membership is required', { code: 'FORBIDDEN' });
+      }
+      if (!profileSnap.exists || profileSnap.data()?.storeId !== input.storeId) {
+        throw new HttpsError('permission-denied', 'Store profile does not match workspace', { code: 'STORE_SCOPE_MISMATCH' });
       }
       if (receiptSnap.exists) {
         const receipt = receiptSnap.data() ?? {};

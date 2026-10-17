@@ -32,6 +32,7 @@ export async function settleCustomerDebtHandler(
   const db = runtime.firestore;
   const spaceRef = db.collection('spaces').doc(input.spaceId);
   const memberRef = spaceRef.collection('members').doc(uid);
+  const profileRef = spaceRef.collection('storeProfile').doc('profile');
   const customerRef = spaceRef.collection('customers').doc(input.customerId);
   const receiptRef = spaceRef.collection('operationReceipts').doc(input.operationId);
   const debtsQuery = spaceRef.collection('debts')
@@ -39,9 +40,10 @@ export async function settleCustomerDebtHandler(
 
   try {
     return await db.runTransaction(async (transaction) => {
-      const [spaceSnap, memberSnap, customerSnap, receiptSnap, debtSnaps] = await Promise.all([
+      const [spaceSnap, memberSnap, profileSnap, customerSnap, receiptSnap, debtSnaps] = await Promise.all([
         transaction.get(spaceRef),
         transaction.get(memberRef),
+        transaction.get(profileRef),
         transaction.get(customerRef),
         transaction.get(receiptRef),
         transaction.get(debtsQuery),
@@ -52,6 +54,9 @@ export async function settleCustomerDebtHandler(
       }
       if (!memberSnap.exists || memberSnap.data()?.status !== 'active') {
         throw new HttpsError('permission-denied', 'Active workspace membership is required', { code: 'FORBIDDEN' });
+      }
+      if (!profileSnap.exists || profileSnap.data()?.storeId !== input.storeId) {
+        throw new HttpsError('permission-denied', 'Store profile does not match workspace', { code: 'STORE_SCOPE_MISMATCH' });
       }
       if (!customerSnap.exists || customerSnap.data()?.isActive !== true
         || customerSnap.data()?.id !== input.customerId
