@@ -429,9 +429,9 @@ try {
         'ALLOW',
       );
       await runCase(
-        'Customer — active member can delete a document',
+        'Customer — active member cannot hard-delete a document',
         () => deleteDoc(customerReference(userCForCustomers, 'space-A', 'customer-C')),
-        'ALLOW',
+        'DENY',
       );
       await runCase(
         'Customer — cross-Workspace read is denied',
