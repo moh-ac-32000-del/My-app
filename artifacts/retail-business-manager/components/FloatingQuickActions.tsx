@@ -22,11 +22,10 @@ import type { TranslationKey } from '@/constants/i18n';
 import { useCustomers } from '@/context/CustomerContext';
 import { useDebts } from '@/context/DebtContext';
 import { useStore } from '@/context/StoreContext';
-import { calculateDebtTotals, createReminder, filterDebtsByCustomer, loadNotificationTime, loadReminders, parseLocalizedAmountInput, saveReminders } from '@/services/storage';
+import { calculateDebtTotals, createReminder, filterDebtsByCustomer, loadNotificationTime, parseLocalizedAmountInput } from '@/services/storage';
 import type { CashTransactionDraft, Debt } from '@/types/business';
 import { useColors } from '@/hooks/useColors';
 import { useI18n } from '@/hooks/useI18n';
-import { isFirebaseConfigured } from '@/services/firebase';
 import { createCloudReminder } from '@/services/cloudReminders';
 
 type IconName = React.ComponentProps<typeof Ionicons>['name'];
@@ -407,13 +406,8 @@ function CustomerReminderSheet({ onClose }: { onClose: () => void }) {
     setIsSaving(true);
     try {
       const reminder = createReminder(profile.id, debtId, { remindAt });
-      if (isFirebaseConfigured) {
-        if (!activeSpaceId) throw new Error('cloudSpaceUnavailable');
-        await createCloudReminder(activeSpaceId, reminder, await loadNotificationTime());
-      } else {
-        const currentReminders = await loadReminders(profile.id);
-        await saveReminders(profile.id, [...currentReminders, reminder]);
-      }
+      if (!activeSpaceId) throw new Error('cloudSpaceUnavailable');
+      await createCloudReminder(activeSpaceId, reminder, await loadNotificationTime());
     } finally {
       saveInFlightRef.current = false;
       setIsSaving(false);
