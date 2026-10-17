@@ -26,6 +26,7 @@
   "exclude": [
     "functions/**/*",
     "tests/bootstrap-primary-space-function.test.ts",
+    "tests/reminder-command.test.ts",
     "node_modules",
     ".expo"
   ]
