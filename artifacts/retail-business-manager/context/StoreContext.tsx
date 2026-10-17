@@ -1,13 +1,11 @@
 import React, { createContext, ReactNode, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { User } from 'firebase/auth';
 import type { CashTransactionDraft, Debt, StoreProfile, Transaction } from '@/types/business';
-import type { SpaceIdentity } from '@/types/space';
 import { isRTL, normalizeLanguage, translate, type Language, type TranslationKey } from '@/constants/i18n';
 import { DEFAULT_CURRENCY, normalizeCurrency, normalizeQuickCurrencies, type CurrencyCode } from '@/constants/currencies';
 import { normalizeAccent, type AccentColor } from '@/constants/colors';
 import { isFirebaseConfigured } from '@/services/firebase';
 import { signOutFromFirebase, subscribeToFirebaseAuth } from '@/services/firebaseAuth';
-import { getOrCreateSpaceIdentity } from '@/services/spaceIdentity';
 import { discoverUserSpaces, validateUserSpaceMembership } from '@/services/firestore';
 import { bootstrapPrimarySpace } from '@/services/trustedBootstrap';
 import { createDebtDocument } from '@/services/debtFirestore';
@@ -49,7 +47,6 @@ interface StoreContextValue {
   retryActiveSpace: () => void;
   initializationError: string | null;
   retryInitialization: () => void;
-  spaceIdentity: SpaceIdentity | null;
   cloudSpace: Space | null;
   transactions: Transaction[];
   transactionsLoading: boolean;
@@ -70,29 +67,17 @@ export async function initializePostAuthCloudSession(
   isCurrentTransition: () => boolean,
   callbacks: {
     onProfile: (profile: StoreProfile) => void;
-    onSpaceIdentity: (identity: SpaceIdentity | null) => void;
     onReady: () => void;
     onError: (message: string | null) => void;
   },
   activeSpaceId: string | null = null,
 ): Promise<void> {
-  let identity: SpaceIdentity | null = null;
   if (!isCurrentTransition()) {
     return;
   }
   callbacks.onError(null);
 
   try {
-    try {
-      identity = await getOrCreateSpaceIdentity(user.uid);
-    } catch {
-      identity = null;
-    }
-    if (!isCurrentTransition()) {
-      return;
-    }
-    callbacks.onSpaceIdentity(identity);
-
     if (!isFirebaseConfigured) {
       throw new Error('firebaseNotConfigured');
     }
@@ -110,7 +95,6 @@ export async function initializePostAuthCloudSession(
     if (!isCurrentTransition()) {
       return;
     }
-    callbacks.onSpaceIdentity(null);
     callbacks.onError(error instanceof Error ? error.message : 'postAuthInitializationFailed');
     callbacks.onReady();
   }
@@ -122,14 +106,12 @@ export function isFirebaseSessionAuthenticated(user: User | null): boolean {
 
 export function clearFirebaseAuthSession(callbacks: {
   onFirebaseUser: (user: null) => void;
-  onSpaceIdentity: (identity: null) => void;
   onCloudSpace: (space: null) => void;
   onActiveSpaceId: (spaceId: null) => void;
   onInitializationError: (error: null) => void;
   onFirebaseReady: () => void;
 }): void {
   callbacks.onFirebaseUser(null);
-  callbacks.onSpaceIdentity(null);
   callbacks.onCloudSpace(null);
   callbacks.onActiveSpaceId(null);
   callbacks.onInitializationError(null);
@@ -164,7 +146,6 @@ export async function resolveActiveSpaceForUser(uid: string): Promise<string | n
 export function StoreProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<StoreProfile>(defaultProfile);
   const [firebaseUser, setFirebaseUser] = useState<User | null>(null);
-  const [spaceIdentity, setSpaceIdentity] = useState<SpaceIdentity | null>(null);
   const [cloudSpace, setCloudSpace] = useState<Space | null>(null);
   const [activeSpaceId, setActiveSpaceIdState] = useState<string | null>(null);
   const [activeSpaceLoading, setActiveSpaceLoading] = useState<boolean>(isFirebaseConfigured);
@@ -222,7 +203,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             profileRef.current = normalizedProfile;
             setProfile(normalizedProfile);
           },
-          onSpaceIdentity: setSpaceIdentity,
           onReady: () => setIsFirebaseReady(true),
           onError: setInitializationError,
         },
@@ -259,7 +239,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         authTransitionRef.current = transition;
         firebaseUserRef.current = user;
         setFirebaseUser(user);
-        setSpaceIdentity(null);
         setCloudSpace(null);
         setInitializationError(null);
         setIsFirebaseReady(false);
@@ -288,7 +267,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         initializationInFlightRef.current = null;
         clearFirebaseAuthSession({
           onFirebaseUser: setFirebaseUser,
-          onSpaceIdentity: setSpaceIdentity,
           onCloudSpace: setCloudSpace,
           onActiveSpaceId: setActiveSpaceIdState,
           onInitializationError: setInitializationError,
@@ -393,7 +371,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return () => {
       isActive = false;
     };
-  }, [activeSpaceId, initializationError, isAuthenticated, isReady, profile.id, spaceIdentity?.spaceId]);
+  }, [activeSpaceId, initializationError, isAuthenticated, isReady, profile.id]);
 
   const saveProfile = async (updates: Partial<StoreProfile>) => {
     const currentProfile = profileRef.current;
@@ -525,7 +503,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       retryActiveSpace,
       initializationError,
       retryInitialization,
-      spaceIdentity,
       cloudSpace,
       transactions,
        transactionsLoading,
@@ -552,7 +529,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       retryActiveSpace,
       retryInitialization,
       rtl,
-      spaceIdentity,
       transactions,
        transactionsError,
        transactionsLoading,
