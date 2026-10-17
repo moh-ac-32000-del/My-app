@@ -67,9 +67,13 @@ export async function trustedDebtCommandHandler(
       if (receiptSnap.exists) {
         const receipt = receiptSnap.data() ?? {};
         const result = receipt.result as Record<string, unknown> | undefined;
+        const payload = receipt.payload as Record<string, unknown> | undefined;
+        const receiptMatches = payload
+          ? samePayload(payload, input)
+          : sameLegacyDebtWrite(receipt, debtSnap.data() ?? {}, input);
         if (receipt.command !== 'trustedDebtCommand' || receipt.actorUserId !== uid
           || receipt.spaceId !== input.spaceId || result?.debtId !== input.debtId
-          || receipt.action !== input.action) {
+          || receipt.action !== input.action || !receiptMatches) {
           throw new HttpsError('already-exists', 'Operation ID was already used', { code: 'IDEMPOTENCY_CONFLICT' });
         }
         return { outcome: 'replayed', debtId: input.debtId, processedAt: String(receipt.processedAt ?? '') };
@@ -121,6 +125,7 @@ export async function trustedDebtCommandHandler(
         action: input.action,
         status: 'completed',
         processedAt: now,
+        payload: payloadForReceipt(input),
         result: { debtId: input.debtId },
       });
       return { outcome: input.action === 'create' ? 'created' : 'updated', debtId: input.debtId, processedAt: now };
@@ -180,6 +185,57 @@ function validateRequest(value: unknown): TrustedDebtCommandRequest {
     ...(typeof value.originalAmount === 'number' ? { originalAmount: value.originalAmount } : {}),
     ...(typeof value.settledAt === 'string' ? { settledAt: value.settledAt } : {}),
   };
+}
+
+function payloadForReceipt(input: TrustedDebtCommandRequest): Record<string, unknown> {
+  return {
+    action: input.action,
+    spaceId: input.spaceId,
+    storeId: input.storeId,
+    customerId: input.customerId,
+    debtId: input.debtId,
+    currency: input.currency,
+    amount: input.amount,
+    dueDate: input.dueDate ?? null,
+    updatedAt: input.updatedAt ?? null,
+    createdAt: input.createdAt ?? null,
+    originalAmount: input.originalAmount ?? null,
+    settledAt: input.settledAt ?? null,
+  };
+}
+
+function samePayload(receiptPayload: Record<string, unknown>, input: TrustedDebtCommandRequest): boolean {
+  return receiptPayload.action === input.action
+    && receiptPayload.spaceId === input.spaceId
+    && receiptPayload.storeId === input.storeId
+    && receiptPayload.customerId === input.customerId
+    && receiptPayload.debtId === input.debtId
+    && receiptPayload.currency === input.currency
+    && receiptPayload.amount === input.amount
+    && receiptPayload.dueDate === (input.dueDate ?? null)
+    && receiptPayload.updatedAt === (input.updatedAt ?? null)
+    && receiptPayload.createdAt === (input.createdAt ?? null)
+    && receiptPayload.originalAmount === (input.originalAmount ?? null)
+    && receiptPayload.settledAt === (input.settledAt ?? null);
+}
+
+function sameLegacyDebtWrite(
+  receipt: Record<string, unknown>,
+  debt: Record<string, unknown>,
+  input: TrustedDebtCommandRequest,
+): boolean {
+  if (debt.workspaceId !== input.spaceId || debt.storeId !== input.storeId
+    || debt.customerId !== input.customerId || debt.currency !== input.currency
+    || debt.amount !== input.amount || debt.dueDate !== input.dueDate) {
+    return false;
+  }
+  if (input.action === 'update') {
+    return debt.updatedAt === (input.updatedAt ?? receipt.processedAt);
+  }
+  return debt.originalAmount === input.originalAmount
+    && debt.settledAt === input.settledAt
+    && debt.createdAt === (input.createdAt ?? receipt.processedAt)
+    && debt.updatedAt === (input.updatedAt ?? receipt.processedAt);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
