@@ -1,12 +1,14 @@
 # Retail Business Manager — Project Handoff
 
+> **Architecture correction (2026-10-17):** This file contains a legacy snapshot and may describe the former local-first implementation. It is not authoritative for current architecture. `FIREBASE_SOURCE_OF_TRUTH.md` supersedes every conflicting statement here. Never implement local-first persistence, local business-data fallback, or local Backup/Restore as an alternate source of business truth.
+
 > **Current snapshot authority — 2026-08-31, Europe/Istanbul**
 >
 > This current-snapshot block supersedes older baseline wording later in this file wherever it conflicts. It was prepared from the current source tree at commit `4ed9d018b027a84dbe880b266f1561ad734c6f27` on branch `main`. The repository was clean before this documentation-only export. No application code, Firebase data, local data, or dependency graph was changed by the export.
 
 ## 0. Exact current state and transfer scope
 
-Retail Business Manager is a local-first, mobile-first Expo application for small retail/telecom/electronics/repair shops. The implemented foundation covers store profiles, customers, customer credit/debts, settlements, Cash In/Cash Out, per-currency balances, the derived Daily Journal, multiple same-day closings, immutable archive snapshots, and selected-archive sharing through the device share sheet (WhatsApp can be selected when installed).
+Retail Business Manager is a Firebase-first, mobile-first Expo application for small retail/telecom/electronics/repair shops. The implemented foundation covers store profiles, customers, customer credit/debts, settlements, Cash In/Cash Out, per-currency balances, the derived Daily Journal, multiple same-day closings, immutable archive snapshots, and selected-archive sharing through the device share sheet (WhatsApp can be selected when installed).
 
 The current release plan is intentionally limited to:
 
@@ -29,9 +31,9 @@ The project name is **Retail Business Manager**. It provides a generic store-man
 - pnpm monorepo/workspace with a locked dependency graph.
 - Expo SDK 54, React Native 0.81.5, React 19, Expo Router 6, TypeScript 5.9.
 - React Native Web support, React Query boundary, Reanimated, gesture/safe-area/keyboard support, Inter fonts, Expo file/document/sharing packages.
-- AsyncStorage as the active local business persistence layer.
+- Firebase Auth, Firestore, and trusted Firebase Functions are the authoritative business-data platform. Any remaining AsyncStorage business persistence described below is legacy code to be migrated and removed, not approved architecture.
 - Vitest unit/contract tests.
-- Firebase client configuration/Auth/Firestore callable boundary and Firebase Functions v2 source are present; cloud business synchronization is not implemented.
+- Firebase client configuration/Auth/Firestore callable boundary and Firebase Functions v2 trusted commands are actively being implemented. Cloud migration is incomplete; remaining local business paths are known migration work, not a supported fallback.
 - Separate Express 5 API artifact and Drizzle/PostgreSQL workspace packages exist, but they are not the current business-data source.
 
 ## 3. Important structure and entry points
@@ -94,7 +96,7 @@ The current customer settlement creates one inbound cash transaction and one lin
 
 ## 8. Storage and store isolation
 
-Business data is local in AsyncStorage. Legacy/default keys are:
+The following AsyncStorage business-data keys are legacy implementation details to remove as cloud migration completes; they are not an approved source of truth:
 
 - `@retail-business-manager/store-profile`
 - `@retail-business-manager/authenticated`
@@ -107,7 +109,7 @@ Business data is local in AsyncStorage. Legacy/default keys are:
 
 The current Space-aware namespace is `@retail-business-manager/spaces/` plus an encoded active Space ID. `setActiveSpaceId` selects the local namespace; the local `SpaceIdentity.spaceId` is not the store ID and is not the Firebase UID. Every business record still carries `storeId`. Reads filter by it; writes validate it and preserve records belonging to other stores. Archive keys contain store/date/closing information and reads re-check the stored `archive.storeId`.
 
-No automatic deletion, rename, migration, or movement of legacy local data is allowed.
+Legacy local business data is disposable test data for this project. Do not build a migration or preserve it as an alternate source of truth; remove legacy persistence paths after their Firebase replacements are verified.
 
 ## 9. Daily Journal, Archive, and multiple closings
 
@@ -133,7 +135,7 @@ Cash In/Cash Out validates a positive amount, valid currency, valid store, and t
 
 `Space`, `Membership`, `OwnerMembership`, `Invitation`, `CloudOperation`, `OperationReceipt`, and `SpaceIdentity` are contracts in `types/space.ts`. The intended authority is `spaces/{spaceId}/members/{uid}`; `users/{uid}/memberships/{spaceId}` is only a discovery index. Firebase UID, Cloud Space ID, local Space ID, and StoreProfile/store ID are separate identifiers.
 
-The membership UI, invitations, member management, role management, additional Space creation/switching workflows, and cloud business synchronization are not implemented. `activeSpaceId` alone is never proof of cloud authorization.
+The membership UI, invitations, member management, role management, and additional Space creation/switching workflows are incomplete. Firebase-backed business commands are being migrated incrementally; no local fallback is permitted while that work is incomplete. `activeSpaceId` alone is never proof of cloud authorization.
 
 ## 13. Trusted Bootstrap and Firestore
 
@@ -180,7 +182,7 @@ The user-facing Backup/Restore screen and complete product flow are still the ne
 
 ## 17. Important constraints for continuation
 
-Preserve UID/Space/store identity separation; keep local storage and Backup/Restore independent from Cloud Sync; keep membership under the Space as authorization authority; never treat a local active Space ID as cloud authorization; keep financial client writes restricted; preserve store isolation, per-currency arithmetic, settlement links, archive event-ID filtering, immutable snapshots, and multiple same-day closing semantics. Do not silently migrate or delete local data.
+Preserve UID/Space/store identity separation; Firebase is the only source of truth for all business data; do not retain local business persistence or a local fallback. Keep membership under the Space as authorization authority; never treat a local active Space ID as cloud authorization; keep business writes behind trusted backend commands or explicitly reviewed rules; preserve store isolation, per-currency arithmetic, settlement links, archive event-ID filtering, immutable snapshots, and multiple same-day closing semantics. Legacy local test data does not need migration.
 
 ## 18. Tests and verification
 
@@ -203,7 +205,7 @@ This handoff must not contain `.env` files, secret values, passwords, tokens, cr
 - Commit before documentation export: `4ed9d018b027a84dbe880b266f1561ad734c6f27`.
 - Working tree before documentation export: clean.
 - Budget/cost remaining: not available in the project state and therefore not inferred.
-- Files intentionally unchanged: all application source, Firebase configuration, Firestore Rules, AsyncStorage behavior, API source, lockfiles, dependencies, workflows, Git remotes, and data.
+- Historical snapshot note: its file list and AsyncStorage behavior descriptions are not current implementation instructions; use `FIREBASE_SOURCE_OF_TRUTH.md` for current architectural constraints.
 - Packaging output: `.agents/outputs/retail-business-manager-project-handoff-2026-08-31.zip`.
 
 ## 1. Purpose
@@ -246,12 +248,12 @@ The four handoff documents are intentionally created after the baseline commit a
 - React 19 and React Native 0.81.
 - React Native Web support exists in the dependency set.
 - `pnpm` workspaces.
-- AsyncStorage for the current local persistence layer.
+- Firebase/Firestore as the target authoritative business-data platform; remaining AsyncStorage persistence is legacy to remove.
 - Vitest for unit tests.
 - `@tanstack/react-query` is provided at the app shell boundary, although the current business data flow is local.
 - `react-native-gesture-handler`, `react-native-keyboard-controller`, `react-native-safe-area-context`, Expo Blur/Glass/Linear Gradient, and Expo vector icons support the UI.
 - Inter font family is loaded from `@expo-google-fonts/inter`.
-- An Express/PostgreSQL/Drizzle API workspace exists separately, but the Retail Business Manager baseline currently uses local AsyncStorage for its business state.
+- An Express/PostgreSQL/Drizzle API workspace exists separately and is not the authoritative business-data store. Firebase/Firestore is the only source of truth.
 - Firebase is represented only by a future configuration boundary; no Firebase client is initialized in the current starter build.
 
 ## 4. Workspace structure
@@ -384,7 +386,7 @@ Current keys in `services/storage.ts`:
 
 The current application does not yet expose a user-facing Backup/Restore flow and does not provide an AsyncStorage export/import function. The repository therefore cannot contain the current runtime values of the data above.
 
-To preserve live user data later, a Backup/Restore feature must read/write the exact AsyncStorage keys above, validate every record, preserve unknown stores, and maintain the existing store isolation and currency boundaries. Do not manually replace or clear these keys as part of ordinary development.
+Do not add Backup/Restore over legacy AsyncStorage business keys. Any future backup must export/import explicitly from the authoritative Firebase data model and must not create an alternate local source of truth.
 
 ## 10. Store Isolation
 
