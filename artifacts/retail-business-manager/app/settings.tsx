@@ -12,7 +12,6 @@ import { languageOptions, type Language, type TranslationKey } from '@/constants
 import { accentOptions, type AccentColor } from '@/constants/colors';
 import { CURRENCY_OPTIONS, getCurrency, type CurrencyCode } from '@/constants/currencies';
 import { useI18n } from '@/hooks/useI18n';
-import { createAndShareLocalBackup, pickLocalBackupFile } from '@/services/backupFile';
 import { DEFAULT_NOTIFICATION_TIME, loadNotificationTime, saveNotificationTime } from '@/services/storage';
 import { loadCloudReminders } from '@/services/cloudReminders';
 
@@ -55,8 +54,6 @@ export default function SettingsScreen() {
     saveProfile,
     toggleQuickCurrency,
     signOut,
-    restoreFromLocalBackup,
-    isAuthenticated,
     isReady,
   } = useStore();
   const { t, isRTL, language } = useI18n();
@@ -184,61 +181,16 @@ export default function SettingsScreen() {
   };
 
   const createBackup = async () => {
-    if (isFirebaseConfigured) {
-      setBackupStatus({ key: 'cloudBackupRestoreUnavailable', success: false });
-      return;
-    }
-    setIsBackupBusy(true);
-    setBackupStatus(null);
-    try {
-      await createAndShareLocalBackup(profile, isAuthenticated);
-      setBackupStatus({ key: 'backupCreated', success: true });
-      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } catch {
-      setBackupStatus({ key: 'backupFailed', success: false });
-      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-    } finally {
-      setIsBackupBusy(false);
-    }
+    setBackupStatus({ key: 'cloudBackupRestoreUnavailable', success: false });
   };
 
   const selectBackupForRestore = async () => {
-    if (isFirebaseConfigured) {
-      setBackupStatus({ key: 'cloudBackupRestoreUnavailable', success: false });
-      return;
-    }
-    setIsRestoreBusy(true);
-    setBackupStatus(null);
-    try {
-      const contents = await pickLocalBackupFile();
-      if (contents !== null) {
-        setPendingRestoreContents(contents);
-      }
-    } catch {
-      setBackupStatus({ key: 'restoreFailed', success: false });
-      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-    } finally {
-      setIsRestoreBusy(false);
-    }
+    setBackupStatus({ key: 'cloudBackupRestoreUnavailable', success: false });
   };
 
   const confirmRestore = async () => {
-    if (pendingRestoreContents === null) {
-      return;
-    }
-    setIsRestoreBusy(true);
-    try {
-      const restored = await restoreFromLocalBackup(pendingRestoreContents);
-      setPendingRestoreContents(null);
-      setBackupStatus({ key: 'restoreSucceeded', success: true });
-      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } catch {
-      setPendingRestoreContents(null);
-      setBackupStatus({ key: 'restoreFailed', success: false });
-      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-    } finally {
-      setIsRestoreBusy(false);
-    }
+    setPendingRestoreContents(null);
+    setBackupStatus({ key: 'cloudBackupRestoreUnavailable', success: false });
   };
 
   return (
@@ -453,13 +405,13 @@ export default function SettingsScreen() {
           <Pressable
             testID="create-backup-button"
             accessibilityRole="button"
-            disabled={isFirebaseConfigured || isBackupBusy || isRestoreBusy}
+            disabled={true}
             onPress={() => void createBackup()}
             style={({ pressed }) => [
               styles.backupAction,
               { backgroundColor: colors.primary, flexDirection: isRTL ? 'row-reverse' : 'row' },
               pressed && styles.pressed,
-              (isFirebaseConfigured || isBackupBusy || isRestoreBusy) && styles.disabled,
+              true && styles.disabled,
             ]}
           >
             {isBackupBusy
@@ -492,7 +444,7 @@ export default function SettingsScreen() {
             </View>
           </Pressable>
         </View>
-        {isFirebaseConfigured ? (
+        {(
           <View
             testID="cloud-backup-warning"
             style={[styles.backupStatus, { backgroundColor: `${colors.destructive}18` }]}
@@ -502,7 +454,7 @@ export default function SettingsScreen() {
               {t('cloudBackupRestoreUnavailable')}
             </Text>
           </View>
-        ) : null}
+        )}
         {backupStatus ? (
           <View
             testID="backup-status"
