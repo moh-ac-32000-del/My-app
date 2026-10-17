@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "pnpm exec expo start --port ${PORT:-8081}",
     "build": "node scripts/build.js",
+    "build:web": "expo export --platform web --output-dir dist",
     "serve": "node server/serve.js",
     "test": "vitest run",
     "test:rules": "pnpm dlx firebase-tools@15.34.0 emulators:exec --only firestore --project demo-firestore-rules --config firebase.rules-test.json \"node tests/firestore-rules.test.mjs\"",

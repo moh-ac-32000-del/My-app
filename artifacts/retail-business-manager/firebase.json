@@ -2,11 +2,17 @@
   "functions": {
     "source": "functions",
     "predeploy": [
-      "pnpm --dir \"$RESOURCE_DIR\" run build"
+      "pnpm --dir functions run build"
     ]
   },
   "firestore": {
     "rules": "firestore.rules"
+  },
+  "hosting": {
+    "site": "retail-business-manager",
+    "public": "dist",
+    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+    "rewrites": [{ "source": "**", "destination": "/index.html" }]
   },
   "emulators": {
     "firestore": {
