@@ -152,7 +152,10 @@ async function listAndReconcile(
     spaceRef.collection('debts').where('storeId', '==', input.storeId).get(),
     remindersRef.where('storeId', '==', input.storeId).get(),
   ]);
-  const debts = debtSnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+  const debts: Array<{ id: string; amount?: unknown; settledAt?: unknown; dueDate?: unknown }> = debtSnapshot.docs.map((doc) => ({
+    id: doc.id,
+    ...(doc.data() as { amount?: unknown; settledAt?: unknown; dueDate?: unknown }),
+  }));
   const existing = reminderSnapshot.docs
     .map((doc) => normalizeReminder(doc.id, doc.data(), input.spaceId, input.storeId))
     .filter((item): item is ReminderRecord => item !== null);
