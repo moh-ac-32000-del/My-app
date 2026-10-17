@@ -17,10 +17,8 @@ import { settleCustomerDebtInCloud } from '@/services/settlementFirestore';
 import { getOrCreateCloudStoreProfile, updateCloudStoreProfile } from '@/services/cloudStoreProfile';
 import type { Space } from '@/types/space';
 import {
-  clearLegacyLanguage,
   createCashTransaction,
   createDebt,
-  setActiveSpaceId,
   type SettlementDraft,
   type SettlementResult,
 } from '@/services/storage';
@@ -165,7 +163,6 @@ export async function resolveActiveSpaceForUser(uid: string): Promise<string | n
 
 export function StoreProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<StoreProfile>(defaultProfile);
-  const [isLocalReady, setIsLocalReady] = useState<boolean>(false);
   const [firebaseUser, setFirebaseUser] = useState<User | null>(null);
   const [spaceIdentity, setSpaceIdentity] = useState<SpaceIdentity | null>(null);
   const [cloudSpace, setCloudSpace] = useState<Space | null>(null);
@@ -186,16 +183,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const firebaseUserRef = useRef<User | null>(null);
   const initializationInFlightRef = useRef<number | null>(null);
 
-  useEffect(() => {
-    let active = true;
-    void clearLegacyLanguage().catch(() => undefined).finally(() => {
-      if (active) setIsLocalReady(true);
-    });
-    return () => {
-      active = false;
-    };
-  }, []);
-
   const startPostAuthCloudInitialization = React.useCallback((user: User, transition: number) => {
     if (initializationInFlightRef.current === transition) {
       return;
@@ -206,7 +193,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setActiveSpaceLoading(true);
     setActiveSpaceError(null);
     setActiveSpaceIdState(null);
-    setActiveSpaceId(null);
 
     void (async () => {
       let resolvedSpaceId: string | null = null;
@@ -219,14 +205,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         transactionLoadPromiseRef.current = Promise.resolve();
         setTransactions([]);
         setActiveSpaceIdState(resolvedSpaceId);
-        setActiveSpaceId(resolvedSpaceId);
         setActiveSpaceLoading(resolvedSpaceId === null);
       } catch (error) {
         if (authTransitionRef.current !== transition || firebaseUserRef.current !== user) {
           return;
         }
         setActiveSpaceIdState(null);
-        setActiveSpaceId(null);
         setActiveSpaceError(error instanceof Error ? error.message : 'activeWorkspaceUnavailable');
         setActiveSpaceLoading(false);
       }
@@ -264,7 +248,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    setActiveSpaceId(null);
     setActiveSpaceIdState(null);
     setActiveSpaceLoading(false);
     setActiveSpaceError(null);
@@ -280,7 +263,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         setCloudSpace(null);
         setInitializationError(null);
         setIsFirebaseReady(false);
-        setActiveSpaceId(null);
         setActiveSpaceIdState(null);
         setActiveSpaceLoading(Boolean(user));
         setActiveSpaceError(null);
@@ -308,7 +290,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           onFirebaseUser: setFirebaseUser,
           onSpaceIdentity: setSpaceIdentity,
           onCloudSpace: setCloudSpace,
-          onActiveSpaceId: setActiveSpaceId,
+          onActiveSpaceId: setActiveSpaceIdState,
           onInitializationError: setInitializationError,
           onFirebaseReady: () => setIsFirebaseReady(true),
         });
@@ -326,7 +308,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     );
   }, [startPostAuthCloudInitialization]);
 
-  const isReady = isLocalReady && isFirebaseReady;
+  const isReady = isFirebaseReady;
   const isAuthenticated = isFirebaseConfigured && isFirebaseSessionAuthenticated(firebaseUser);
 
   useEffect(() => {
