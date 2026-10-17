@@ -38,6 +38,6 @@ export const createPayment = onCall({ invoker: 'public' }, async (request) => (
   createPaymentHandler(request, trustedPaymentRuntime)
 ));
 
-export const reminderCommand = onCall({ invoker: 'public' }, async (request) => (
+export const storeProfileCommand = onCall({ invoker: 'public' }, async (request) => (\n  storeProfileCommandHandler(request, storeProfileRuntime)\n));\n\nexport const reminderCommand = onCall({ invoker: 'public' }, async (request) => (
   reminderCommandHandler(request, reminderRuntime)
 ));
