@@ -14,6 +14,16 @@ type JournalEvent = {
   sourceId: string;
 };
 
+type CloudPaymentRecord = {
+  id: string;
+  direction?: unknown;
+  transactionId?: unknown;
+  customerId?: unknown;
+  amount?: { amount?: unknown; currency?: unknown };
+  paidAt?: unknown;
+  note?: unknown;
+};
+
 type ArchiveRecord = {
   id: string;
   storeId: string;
@@ -84,7 +94,10 @@ export async function dailyArchiveCommandHandler(
   ]);
 
   const customers = new Map(customerSnap.docs.map((doc) => [doc.id, doc.data().name as string]));
-  const payments = paymentSnap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+  const payments: CloudPaymentRecord[] = paymentSnap.docs.map((doc) => ({
+    id: doc.id,
+    ...(doc.data() as Omit<CloudPaymentRecord, 'id'>),
+  }));
   const settlementTransactionIds = new Set(
     payments.filter((payment) => payment.direction === 'in' && typeof payment.transactionId === 'string')
       .map((payment) => payment.transactionId as string),
