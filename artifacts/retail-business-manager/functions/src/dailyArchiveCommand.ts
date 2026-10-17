@@ -85,18 +85,29 @@ export async function dailyArchiveCommandHandler(
   const date = input.date!;
   const startAt = input.startAt!;
   const endAt = input.endAt!;
-  const [transactionSnap, debtSnap, paymentSnap, customerSnap, existingArchives] = await Promise.all([
+  const [transactionSnap, debtSnap, paymentSnap, existingArchives] = await Promise.all([
     spaceRef.collection('transactions').where('storeId', '==', input.storeId).where('createdAt', '>=', startAt).where('createdAt', '<', endAt).get(),
     spaceRef.collection('debts').where('storeId', '==', input.storeId).where('createdAt', '>=', startAt).where('createdAt', '<', endAt).get(),
     spaceRef.collection('payments').where('storeId', '==', input.storeId).where('paidAt', '>=', startAt).where('paidAt', '<', endAt).get(),
-    spaceRef.collection('customers').where('storeId', '==', input.storeId).get(),
     archivesRef.where('storeId', '==', input.storeId).where('date', '==', date).get(),
   ]);
 
-  const customers = new Map(customerSnap.docs.map((doc) => [doc.id, doc.data().name as string]));
   const payments: CloudPaymentRecord[] = paymentSnap.docs.map((doc) => ({
     id: doc.id,
     ...(doc.data() as Omit<CloudPaymentRecord, 'id'>),
+  }));
+  const customerIds = new Set<string>();
+  for (const doc of debtSnap.docs) {
+    const customerId = doc.data().customerId;
+    if (typeof customerId === 'string' && customerId.trim()) customerIds.add(customerId);
+  }
+  for (const payment of payments) {
+    if (typeof payment.customerId === 'string' && payment.customerId.trim()) customerIds.add(payment.customerId);
+  }
+  const customerDocs = await Promise.all([...customerIds].map((id) => spaceRef.collection('customers').doc(id).get()));
+  const customers = new Map(customerDocs.flatMap((doc) => {
+    const name = doc.data()?.name;
+    return doc.exists && typeof name === 'string' ? [[doc.id, name] as const] : [];
   }));
   const settlementTransactionIds = new Set(
     payments.filter((payment) => payment.direction === 'in' && typeof payment.transactionId === 'string')
