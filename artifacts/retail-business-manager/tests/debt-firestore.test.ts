@@ -199,6 +199,12 @@ describe('Debt Firestore service', () => {
     expect(reminderMocks.loadCloudReminders).not.toHaveBeenCalled();
   });
 
+  it('does not hide trusted reminder reconciliation failures', async () => {
+    reminderMocks.loadCloudReminders.mockRejectedValueOnce(new Error('permission-denied'));
+
+    await expect(reconcileCloudDebtReminders('space-A', 'store-A')).rejects.toThrow('permission-denied');
+  });
+
   it('reconciles due-date reminders through the trusted cloud command', async () => {
     firestoreMocks.getDocs.mockResolvedValueOnce({
       docs: [{ id: 'debt-A', data: () => serializeDebtDocument(debt, 'space-A', 'user-A') }],
