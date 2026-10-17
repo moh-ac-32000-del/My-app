@@ -30,8 +30,11 @@ const trustedDebtMocks = vi.hoisted(() => ({
 }));
 
 const storageMocks = vi.hoisted(() => ({
-  loadNotificationTime: vi.fn().mockResolvedValue('09:00'),
   validateDebtInput: vi.fn(() => null),
+}));
+
+const preferenceMocks = vi.hoisted(() => ({
+  loadNotificationTime: vi.fn().mockResolvedValue('09:00'),
 }));
 
 const reminderMocks = vi.hoisted(() => ({
@@ -54,6 +57,7 @@ vi.mock('firebase/firestore', () => ({
 vi.mock('@/services/firebase', () => firebaseMocks);
 vi.mock('@/services/trustedDebtFirestore', () => trustedDebtMocks);
 vi.mock('@/services/storage', () => storageMocks);
+vi.mock('@/services/preferences', () => preferenceMocks);
 vi.mock('@/services/cloudReminders', () => reminderMocks);
 
 import {
@@ -125,7 +129,7 @@ describe('Debt Firestore service', () => {
       return firestoreMocks.unsubscribe;
     });
     firebaseMocks.getFirebaseAuth.mockReturnValue({ currentUser: { uid: 'user-A' } });
-    storageMocks.loadNotificationTime.mockResolvedValue('09:00');
+    preferenceMocks.loadNotificationTime.mockResolvedValue('09:00');
     reminderMocks.loadCloudReminders.mockResolvedValue([]);
     storageMocks.validateDebtInput.mockReturnValue(null);
   });
@@ -212,7 +216,7 @@ describe('Debt Firestore service', () => {
 
     await reconcileCloudDebtReminders('space-A', 'store-A');
 
-    expect(storageMocks.loadNotificationTime).toHaveBeenCalledOnce();
+    expect(preferenceMocks.loadNotificationTime).toHaveBeenCalledOnce();
     expect(reminderMocks.loadCloudReminders).toHaveBeenCalledWith('space-A', 'store-A', '09:00');
   });
 
