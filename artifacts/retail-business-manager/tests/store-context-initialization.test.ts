@@ -8,7 +8,6 @@ import {
 } from '@/context/StoreContext';
 
 const mocks = vi.hoisted(() => ({
-  getOrCreateSpaceIdentity: vi.fn(),
   getOrCreateCloudStoreProfile: vi.fn(),
   discoverUserSpaces: vi.fn(),
   validateUserSpaceMembership: vi.fn(),
@@ -19,9 +18,6 @@ vi.mock('@/services/firebase', () => ({ isFirebaseConfigured: true }));
 vi.mock('@/services/firebaseAuth', () => ({
   signOutFromFirebase: vi.fn(),
   subscribeToFirebaseAuth: vi.fn(),
-}));
-vi.mock('@/services/spaceIdentity', () => ({
-  getOrCreateSpaceIdentity: mocks.getOrCreateSpaceIdentity,
 }));
 vi.mock('@/services/firestore', () => ({
   discoverUserSpaces: mocks.discoverUserSpaces,
@@ -35,18 +31,11 @@ vi.mock('@/services/cloudStoreProfile', () => ({
   updateCloudStoreProfile: vi.fn(),
 }));
 vi.mock('@/services/storage', () => ({
-  clearLegacyLanguage: vi.fn().mockResolvedValue(undefined),
   createCashTransaction: vi.fn(),
   createDebt: vi.fn(),
-  setActiveSpaceId: vi.fn(),
 }));
 
 const firebaseUser = { uid: 'firebase-user', email: 'owner@example.com' } as User;
-const identity = {
-  uid: firebaseUser.uid,
-  spaceId: 'device-local-space',
-  createdAt: '2026-09-05T12:00:00.000Z',
-};
 const cloudProfile = {
   id: 'cloud-store-id',
   name: 'Cloud Store',
@@ -64,14 +53,12 @@ function createCallbacks() {
     onError: vi.fn(),
     onProfile: vi.fn(),
     onReady: vi.fn(),
-    onSpaceIdentity: vi.fn(),
   };
 }
 
 describe('post-auth cloud initialization', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.getOrCreateSpaceIdentity.mockResolvedValue(identity);
     mocks.getOrCreateCloudStoreProfile.mockResolvedValue(cloudProfile);
     mocks.discoverUserSpaces.mockReset();
     mocks.validateUserSpaceMembership.mockReset();
@@ -84,7 +71,6 @@ describe('post-auth cloud initialization', () => {
 
     expect(mocks.getOrCreateCloudStoreProfile).toHaveBeenCalledWith('space-A', expect.objectContaining({ id: '' }));
     expect(callbacks.onProfile).toHaveBeenCalledWith(cloudProfile);
-    expect(callbacks.onSpaceIdentity).toHaveBeenCalledWith(identity);
     expect(callbacks.onError).toHaveBeenNthCalledWith(1, null);
     expect(callbacks.onError).not.toHaveBeenCalledWith(expect.any(String));
     expect(callbacks.onReady).toHaveBeenCalledOnce();
@@ -174,7 +160,6 @@ describe('Firebase session identity', () => {
   it('clears Firebase auth and active workspace state on auth loss', () => {
     const callbacks = {
       onFirebaseUser: vi.fn(),
-      onSpaceIdentity: vi.fn(),
       onCloudSpace: vi.fn(),
       onActiveSpaceId: vi.fn(),
       onInitializationError: vi.fn(),
@@ -182,7 +167,6 @@ describe('Firebase session identity', () => {
     };
     clearFirebaseAuthSession(callbacks);
     expect(callbacks.onFirebaseUser).toHaveBeenCalledWith(null);
-    expect(callbacks.onSpaceIdentity).toHaveBeenCalledWith(null);
     expect(callbacks.onCloudSpace).toHaveBeenCalledWith(null);
     expect(callbacks.onActiveSpaceId).toHaveBeenCalledWith(null);
     expect(callbacks.onInitializationError).toHaveBeenCalledWith(null);
