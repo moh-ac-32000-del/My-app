@@ -109,14 +109,19 @@ export async function settleCustomerDebtHandler(
 
       const now = runtime.now();
       let amountToApply = input.amount;
-      const debtUpdates: Array<{ ref: typeof matchingDebts[number]['ref']; currentAmount: number; nextAmount: number }> = [];
+      const debtUpdates: Array<{ ref: (typeof matchingDebts)[number]['ref']; currentAmount: number; originalAmount: number; nextAmount: number }> = [];
       for (const debt of matchingDebts) {
         if (amountToApply <= 0) break;
         const currentAmount = Number(debt.data.amount);
         const applied = Math.min(currentAmount, amountToApply);
         const nextAmount = currentAmount - applied;
         amountToApply -= applied;
-        debtUpdates.push({ ref: debt.ref, currentAmount, nextAmount });
+        debtUpdates.push({
+          ref: debt.ref,
+          currentAmount,
+          originalAmount: typeof debt.data.originalAmount === 'number' ? debt.data.originalAmount : currentAmount,
+          nextAmount,
+        });
       }
       if (Math.abs(amountToApply) > 0.000001) {
         throw new HttpsError('failed-precondition', 'Settlement could not be fully applied', { code: 'SETTLEMENT_EXCEEDS_DEBT' });
@@ -126,9 +131,7 @@ export async function settleCustomerDebtHandler(
       for (const debt of debtUpdates) {
         transaction.update(debt.ref, {
           amount: debt.nextAmount,
-          originalAmount: typeof matchingDebts.find((candidate) => candidate.ref.path === debt.ref.path)?.data.originalAmount === 'number'
-            ? matchingDebts.find((candidate) => candidate.ref.path === debt.ref.path)?.data.originalAmount
-            : debt.currentAmount,
+          originalAmount: debt.originalAmount,
           ...(debt.nextAmount === 0 ? { settledAt: now } : {}),
           updatedAt: now,
         });
