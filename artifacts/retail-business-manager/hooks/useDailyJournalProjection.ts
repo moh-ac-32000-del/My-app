@@ -25,7 +25,6 @@ export function useDailyJournalProjection(refreshToken = 0): DailyJournalProject
     transactions,
     transactionsLoading,
     transactionsError,
-    journalRevision,
   } = useStore();
   const customers = useCustomers();
   const debts = useDebts();
@@ -141,7 +140,6 @@ export function useDailyJournalProjection(refreshToken = 0): DailyJournalProject
     initializationError,
     isAuthenticated,
     isReady,
-    journalRevision,
     payments.canonicalSpaceId,
     payments.error,
     payments.isLoading,
