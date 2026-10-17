@@ -12,7 +12,7 @@ import { languageOptions, type Language } from '@/constants/i18n';
 import { accentOptions, type AccentColor } from '@/constants/colors';
 import { CURRENCY_OPTIONS, getCurrency, type CurrencyCode } from '@/constants/currencies';
 import { useI18n } from '@/hooks/useI18n';
-import { DEFAULT_NOTIFICATION_TIME, loadNotificationTime, saveNotificationTime } from '@/services/storage';
+import { DEFAULT_NOTIFICATION_TIME, loadNotificationTime, saveNotificationTime } from '@/services/preferences';
 import { loadCloudReminders } from '@/services/cloudReminders';
 
 function SettingInput({ label, value, onChangeText, icon, multiline = false, placeholder }: { label: string; value: string; onChangeText: (value: string) => void; icon: React.ComponentProps<typeof Ionicons>['name']; multiline?: boolean; placeholder?: string }) {
