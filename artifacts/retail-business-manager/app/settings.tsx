@@ -14,6 +14,7 @@ import { CURRENCY_OPTIONS, getCurrency, type CurrencyCode } from '@/constants/cu
 import { useI18n } from '@/hooks/useI18n';
 import { createAndShareLocalBackup, pickLocalBackupFile } from '@/services/backupFile';
 import { DEFAULT_NOTIFICATION_TIME, loadNotificationTime, saveNotificationTime } from '@/services/storage';
+import { loadCloudReminders } from '@/services/cloudReminders';
 
 function SettingInput({ label, value, onChangeText, icon, multiline = false, placeholder }: { label: string; value: string; onChangeText: (value: string) => void; icon: React.ComponentProps<typeof Ionicons>['name']; multiline?: boolean; placeholder?: string }) {
   const colors = useColors();
@@ -50,6 +51,7 @@ export default function SettingsScreen() {
   const router = useRouter();
   const {
     profile,
+    activeSpaceId,
     saveProfile,
     toggleQuickCurrency,
     signOut,
@@ -151,6 +153,10 @@ export default function SettingsScreen() {
     const nextTime = formatNotificationTime(value);
     try {
       await saveNotificationTime(profile.id, nextTime);
+      if (isFirebaseConfigured) {
+        if (!activeSpaceId) throw new Error('cloudSpaceUnavailable');
+        await loadCloudReminders(activeSpaceId, profile.id, nextTime);
+      }
       setNotificationTime(nextTime);
       await Haptics.selectionAsync();
     } catch {

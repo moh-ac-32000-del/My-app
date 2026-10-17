@@ -75,25 +75,14 @@ export async function loadNotificationTime(): Promise<string> {
   return isValidNotificationTime(storedTime) ? storedTime : DEFAULT_NOTIFICATION_TIME;
 }
 
-export async function saveNotificationTime(storeId: string, value: string): Promise<void> {
+export async function saveNotificationTime(_storeId: string, value: string): Promise<void> {
   if (!isValidNotificationTime(value)) {
     throw new Error('notificationTimeInvalid');
   }
 
-  const key = getNotificationTimeKey();
-  const previousValue = await AsyncStorage.getItem(key);
-  await AsyncStorage.setItem(key, value);
-  try {
-    const debts = await loadDebts(storeId);
-    await reconcileDueDateReminders(storeId, debts, value);
-  } catch (error) {
-    if (previousValue === null) {
-      await AsyncStorage.removeItem(key);
-    } else {
-      await AsyncStorage.setItem(key, previousValue);
-    }
-    throw error;
-  }
+  // This is a device-local presentation preference only. Cloud reminder
+  // reconciliation is performed by the trusted Firebase callable in the UI flow.
+  await AsyncStorage.setItem(getNotificationTimeKey(), value);
 }
 
 export async function loadAuthenticatedState(): Promise<boolean> {

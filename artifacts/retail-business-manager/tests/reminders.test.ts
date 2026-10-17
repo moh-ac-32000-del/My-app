@@ -208,7 +208,7 @@ describe('debt reminders', () => {
     await expect(loadReminders('store-a')).resolves.toEqual([]);
   });
 
-  it('reconciles pending reminders when the global notification time changes', async () => {
+  it('saves notification time as a preference without mutating local reminder records', async () => {
     const dueDebt = createDebt(
       'store-a',
       'customer-a',
@@ -222,7 +222,7 @@ describe('debt reminders', () => {
     await expect(loadReminders('store-a')).resolves.toMatchObject([
       {
         debtId: dueDebt.id,
-        remindAt: '2026-09-30T10:30:00',
+        remindAt: '2026-09-30T09:00:00',
         status: 'pending',
       },
     ]);
