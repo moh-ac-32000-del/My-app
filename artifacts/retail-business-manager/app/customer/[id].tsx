@@ -17,7 +17,8 @@ import { useStore } from '@/context/StoreContext';
 import { useDebts } from '@/context/DebtContext';
 import { usePayments } from '@/context/PaymentContext';
 import { createCloudReminder, loadCloudReminders } from '@/services/cloudReminders';
-import { calculateDebtTotals, createReminder, filterDebtsByCustomer, filterPaymentsByCustomer, loadNotificationTime, parseLocalizedAmountInput } from '@/services/storage';
+import { calculateDebtTotals, createReminder, filterDebtsByCustomer, filterPaymentsByCustomer, parseLocalizedAmountInput } from '@/services/storage';
+import { loadNotificationTime } from '@/services/preferences';
 import type { Customer, Debt, Payment, Reminder } from '@/types/business';
 
 function DetailRow({ icon, label, value }: { icon: React.ComponentProps<typeof Ionicons>['name']; label: string; value: string }) {
