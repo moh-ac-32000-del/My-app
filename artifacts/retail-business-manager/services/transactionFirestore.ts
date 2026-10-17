@@ -1,10 +1,8 @@
 import {
   collection,
-  doc,
   getDocs,
   getFirestore,
   onSnapshot,
-  runTransaction,
   type DocumentData,
 } from 'firebase/firestore';
 import { getFirebaseApp, getFirebaseAuth, isFirebaseConfigured } from '@/services/firebase';
@@ -70,28 +68,6 @@ export async function listTransactionDocuments(spaceId: string): Promise<Transac
     ))
     .filter((transaction): transaction is Transaction => transaction !== null)
     .sort((first, second) => Date.parse(second.createdAt) - Date.parse(first.createdAt));
-}
-
-export async function createTransactionDocument(
-  spaceId: string,
-  transaction: Transaction,
-): Promise<void> {
-  getAuthenticatedUid();
-  const transactionId = requireTransactionId(transaction.id);
-  const transactionReference = doc(
-    getFirestoreInstance(),
-    workspaceBusinessDocumentPath(spaceId, 'transactions', transactionId),
-  );
-  const serializedTransaction = serializeTransactionDocument(transaction);
-
-  await runTransaction(getFirestoreInstance(), async (firestoreTransaction) => {
-    const existingTransaction = await firestoreTransaction.get(transactionReference);
-    if (existingTransaction.exists()) {
-      throw new Error('transactionAlreadyExists');
-    }
-
-    firestoreTransaction.set(transactionReference, serializedTransaction);
-  });
 }
 
 export function serializeTransactionDocument(
@@ -194,14 +170,6 @@ function requireSpaceId(value: string): string {
     throw new Error('spaceIdInvalid');
   }
   return spaceId;
-}
-
-function requireTransactionId(value: string): string {
-  const transactionId = typeof value === 'string' ? value.trim() : '';
-  if (!requireNonEmptyString(transactionId) || transactionId.includes('/')) {
-    throw new Error('transactionIdInvalid');
-  }
-  return transactionId;
 }
 
 function requireStoreId(value: string): string {
