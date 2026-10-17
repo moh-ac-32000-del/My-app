@@ -245,8 +245,10 @@ export interface SettlementDraft {
 }
 
 export interface SettlementResult {
-  debts: Debt[];
-  payments: Payment[];
+  /** Present for the local-only legacy implementation; cloud results use live subscriptions. */
+  debts?: Debt[];
+  /** Present for the local-only legacy implementation; cloud results use live subscriptions. */
+  payments?: Payment[];
   transaction: Transaction;
   payment: Payment;
 }
