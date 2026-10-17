@@ -4,7 +4,7 @@ import { useDebts } from '@/context/DebtContext';
 import { usePayments } from '@/context/PaymentContext';
 import { useStore } from '@/context/StoreContext';
 import { isFirebaseConfigured } from '@/services/firebase';
-import { loadDailyJournalEvents, type DailyJournalEvent } from '@/services/storage';
+import { type DailyJournalEvent } from '@/services/storage';
 import { projectCloudDailyJournalEvents } from '@/services/dailyJournalProjection';
 
 interface DailyJournalProjection {
@@ -47,22 +47,9 @@ export function useDailyJournalProjection(refreshToken = 0): DailyJournalProject
     }
 
     if (!isFirebaseConfigured) {
-      setIsLoading(true);
-      setError(null);
-      void loadDailyJournalEvents(profile.id).then((localEvents) => {
-        if (!active) {
-          return;
-        }
-        setEvents(localEvents);
-        setIsLoading(false);
-      }).catch((loadError) => {
-        if (!active) {
-          return;
-        }
-        setEvents([]);
-        setIsLoading(false);
-        setError(loadError instanceof Error ? loadError.message : 'journalLoadFailed');
-      });
+      setEvents([]);
+      setIsLoading(false);
+      setError('firebaseNotConfigured');
       return () => {
         active = false;
       };
