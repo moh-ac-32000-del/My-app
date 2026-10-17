@@ -14,6 +14,7 @@ import { createDebtDocument } from '@/services/debtFirestore';
 import { subscribeToTransactions } from '@/services/transactionFirestore';
 import { createTrustedCashTransaction } from '@/services/trustedTransactionFirestore';
 import { settleCustomerDebtInCloud } from '@/services/settlementFirestore';
+import { getOrCreateCloudStoreProfile, updateCloudStoreProfile } from '@/services/cloudStoreProfile';
 import type { Space } from '@/types/space';
 import {
   clearLegacyLanguage,
@@ -102,12 +103,17 @@ export async function initializePostAuthLocalSession(
     }
     callbacks.onSpaceIdentity(identity);
 
-    const storedProfile = await loadStoreProfile();
-    if (!isCurrentTransition()) {
-      return;
+    let normalizedProfile: StoreProfile;
+    if (isFirebaseConfigured) {
+      if (!activeSpaceId) {
+        throw new Error('cloudSpaceUnavailable');
+      }
+      normalizedProfile = await getOrCreateCloudStoreProfile(activeSpaceId, defaultProfile);
+    } else {
+      const storedProfile = await loadStoreProfile();
+      normalizedProfile = normalizeStoredStoreProfile(storedProfile, defaultProfile);
+      await saveStoreProfile(normalizedProfile);
     }
-    const normalizedProfile = normalizeStoredStoreProfile(storedProfile, defaultProfile);
-    await saveStoreProfile(normalizedProfile);
     if (!isCurrentTransition()) {
       return;
     }
@@ -233,8 +239,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setActiveSpaceId(null);
 
     void (async () => {
+      let resolvedSpaceId: string | null = null;
       try {
-        const resolvedSpaceId = await resolveActiveSpaceForUser(user.uid);
+        resolvedSpaceId = await resolveActiveSpaceForUser(user.uid);
         if (authTransitionRef.current !== transition || firebaseUserRef.current !== user) {
           return;
         }
@@ -265,6 +272,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           onReady: () => setIsFirebaseReady(true),
           onError: setInitializationError,
         },
+        resolvedSpaceId,
       );
       if (initializationInFlightRef.current === transition) {
         initializationInFlightRef.current = null;
@@ -453,10 +461,32 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     };
     profileRef.current = nextProfile;
     setProfile(nextProfile);
-    profileWriteQueueRef.current = profileWriteQueueRef.current
+    const queuedWrite = profileWriteQueueRef.current
       .catch(() => undefined)
-      .then(() => saveStoreProfile(nextProfile));
-    await profileWriteQueueRef.current;
+      .then(async () => {
+        if (isFirebaseConfigured) {
+          if (!activeSpaceId) {
+            throw new Error('cloudSpaceUnavailable');
+          }
+          const savedProfile = await updateCloudStoreProfile(activeSpaceId, nextProfile);
+          if (profileRef.current === nextProfile) {
+            profileRef.current = savedProfile;
+            setProfile(savedProfile);
+          }
+          return;
+        }
+        await saveStoreProfile(nextProfile);
+      });
+    profileWriteQueueRef.current = queuedWrite;
+    try {
+      await queuedWrite;
+    } catch (error) {
+      if (profileRef.current === nextProfile) {
+        profileRef.current = currentProfile;
+        setProfile(currentProfile);
+      }
+      throw error;
+    }
   };
 
   const toggleQuickCurrency = async (code: CurrencyCode) => {
