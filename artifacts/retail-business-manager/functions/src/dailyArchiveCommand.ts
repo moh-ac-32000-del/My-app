@@ -147,13 +147,23 @@ export async function dailyArchiveCommandHandler(
   const counterRef = spaceRef.collection('dailyClosingCounters').doc(`${input.storeId}_${date}`);
   const now = runtime.now();
   const created = await db.runTransaction(async (tx) => {
-    const counterSnap = await tx.get(counterRef);
+    const [counterSnap, sameDayArchives] = await Promise.all([
+      tx.get(counterRef),
+      tx.get(archivesRef.where('storeId', '==', input.storeId).where('date', '==', date)),
+    ]);
+    const archivedIds = new Set(sameDayArchives.docs.flatMap((doc) => {
+      const data = doc.data();
+      return Array.isArray(data.snapshot)
+        ? data.snapshot.filter((event) => event && typeof event.id === 'string').map((event) => event.id as string)
+        : [];
+    }));
+    const newEvents = events.filter((event) => !archivedIds.has(event.id));
     const closingNumber = (typeof counterSnap.data()?.lastClosingNumber === 'number'
       ? counterSnap.data()!.lastClosingNumber : 0) + 1;
     const id = `${date}_${String(closingNumber).padStart(6, '0')}`;
     const archive: ArchiveRecord = {
       id, storeId: input.storeId, workspaceId: input.spaceId, date,
-      closedAt: now, closingNumber, snapshot: events,
+      closedAt: now, closingNumber, snapshot: newEvents,
     };
     tx.set(counterRef, { storeId: input.storeId, date, lastClosingNumber: closingNumber, updatedAt: now });
     tx.create(archivesRef.doc(id), archive);
