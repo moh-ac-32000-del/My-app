@@ -19,7 +19,7 @@ import type { DailyJournalEvent } from '@/services/storage';
 export default function DashboardScreen() {
   const colors = useColors();
   const router = useRouter();
-  const { profile, isReady, isAuthenticated, initializationError, retryInitialization, transactions } = useStore();
+  const { profile, isReady, isAuthenticated, initializationError, retryInitialization, transactions, activeSpaceId } = useStore();
   const { t, isRTL, direction, language } = useI18n();
   const insets = useSafeAreaInsets();
   const balances = useMemo(
@@ -100,6 +100,7 @@ export default function DashboardScreen() {
       <SectionTitle title={t('recentActivity')} />
       <DailyClosingAction
         storeId={profile.id}
+        spaceId={activeSpaceId}
         testID="dashboard-close-day-button"
         onClosed={() => setJournalRefreshKey((value) => value + 1)}
       />
