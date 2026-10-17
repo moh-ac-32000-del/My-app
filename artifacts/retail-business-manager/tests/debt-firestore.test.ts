@@ -24,6 +24,11 @@ const firebaseMocks = vi.hoisted(() => ({
   isFirebaseConfigured: true,
 }));
 
+const trustedDebtMocks = vi.hoisted(() => ({
+  createTrustedDebt: vi.fn().mockResolvedValue(undefined),
+  updateTrustedDebt: vi.fn().mockResolvedValue(undefined),
+}));
+
 const storageMocks = vi.hoisted(() => ({
   reconcileDueDateReminders: vi.fn().mockResolvedValue(undefined),
   validateDebtInput: vi.fn(() => null),
@@ -43,6 +48,7 @@ vi.mock('firebase/firestore', () => ({
 }));
 
 vi.mock('@/services/firebase', () => firebaseMocks);
+vi.mock('@/services/trustedDebtFirestore', () => trustedDebtMocks);
 vi.mock('@/services/storage', () => storageMocks);
 
 import {
@@ -102,6 +108,8 @@ function configureTransaction(customerData: Record<string, unknown> | undefined 
 describe('Debt Firestore service', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    trustedDebtMocks.createTrustedDebt.mockResolvedValue(undefined);
+    trustedDebtMocks.updateTrustedDebt.mockResolvedValue(undefined);
     firestoreMocks.nextSnapshot = null;
     firestoreMocks.listenerError = null;
     firestoreMocks.getDoc.mockResolvedValue(snapshot(serializedCustomer()));
@@ -139,74 +147,21 @@ describe('Debt Firestore service', () => {
     expect(normalizeDebtDocument('debt-A', serialized, 'space-B')).toBeNull();
   });
 
-  it('creates a Debt at spaces/{spaceId}/debts/{debtId} only when the Customer exists', async () => {
-    const transaction = configureTransaction();
-
+  it('creates a Debt through the trusted backend after client-side validation', async () => {
     await createDebtDocument('space-A', debt);
-
-    expect(firestoreMocks.doc).toHaveBeenCalledWith(
-      expect.anything(),
-      'spaces/space-A/debts/debt-A',
-    );
-    expect(transaction.set).toHaveBeenCalledWith(
-      expect.objectContaining({ path: 'spaces/space-A/debts/debt-A' }),
-      expect.objectContaining({
-        id: 'debt-A',
-        workspaceId: 'space-A',
-        createdByUserId: 'user-A',
-      }),
-    );
+    expect(trustedDebtMocks.createTrustedDebt).toHaveBeenCalledWith('space-A', debt);
   });
 
-  it('rejects a missing or inactive Customer before creating a Debt', async () => {
-    configureTransaction({ id: 'customer-A', storeId: 'store-A', isActive: false });
-
-    await expect(createDebtDocument('space-A', debt)).rejects.toThrow('customerNotFound');
-    expect(firestoreMocks.setDoc).not.toHaveBeenCalled();
+  it('rejects invalid Debt input before calling the trusted backend', async () => {
+    storageMocks.validateDebtInput.mockReturnValueOnce('amountInvalid' as never);
+    await expect(createDebtDocument('space-A', { ...debt, amount: -1 })).rejects.toThrow('amountInvalid');
+    expect(trustedDebtMocks.createTrustedDebt).not.toHaveBeenCalled();
   });
 
-  it('rejects duplicate Debt document IDs without overwriting the existing document', async () => {
-    const transaction = configureTransaction(serializedCustomer(), { id: 'debt-A' });
-
-    await expect(createDebtDocument('space-A', debt)).rejects.toThrow('debtAlreadyExists');
-    expect(transaction.set).not.toHaveBeenCalled();
-  });
-
-  it.each([
-    ['currencyInvalid', { currency: 'INVALID' as Debt['currency'] }],
-    ['amountInvalid', { amount: -1 }],
-    ['dueDateInvalid', { dueDate: '2026-02-31' }],
-  ])('rejects a Debt with %s', async (error, changes) => {
-    storageMocks.validateDebtInput.mockReturnValueOnce(error as never);
-
-    await expect(createDebtDocument('space-A', { ...debt, ...changes })).rejects.toThrow(error);
-    expect(firestoreMocks.runTransaction).not.toHaveBeenCalled();
-  });
-
-  it('updates editable fields without sending immutable identity fields and preserves the document ID', async () => {
-    const updatedDebt = {
-      ...debt,
-      amount: 900,
-      dueDate: undefined,
-      updatedAt: '2026-09-11T10:00:00.000Z',
-    };
-
+  it('updates a Debt through the trusted backend after client-side validation', async () => {
+    const updatedDebt = { ...debt, amount: 900, dueDate: undefined, updatedAt: '2026-09-11T10:00:00.000Z' };
     await updateDebtDocument('space-A', updatedDebt);
-
-    expect(firestoreMocks.updateDoc).toHaveBeenCalledWith(
-      expect.objectContaining({ path: 'spaces/space-A/debts/debt-A' }),
-      expect.objectContaining({
-        customerId: 'customer-A',
-        amount: 900,
-        updatedAt: '2026-09-11T10:00:00.000Z',
-        dueDate: '__delete_field__',
-      }),
-    );
-    const update = firestoreMocks.updateDoc.mock.calls[0]?.[1] as Record<string, unknown>;
-    expect(update).not.toHaveProperty('id');
-    expect(update).not.toHaveProperty('storeId');
-    expect(update).not.toHaveProperty('workspaceId');
-    expect(update).not.toHaveProperty('createdAt');
+    expect(trustedDebtMocks.updateTrustedDebt).toHaveBeenCalledWith('space-A', updatedDebt);
   });
 
   it('subscribes to the active Workspace and cleans up the listener', () => {
