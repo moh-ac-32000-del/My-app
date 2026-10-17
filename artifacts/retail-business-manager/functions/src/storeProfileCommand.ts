@@ -101,9 +101,12 @@ function validateRequest(value: unknown): { action: 'getOrCreate' | 'update'; sp
 
 function validateProfile(value: unknown): StoreProfilePayload {
   if (!isRecord(value)) throw new HttpsError('invalid-argument', 'Store profile is invalid', { code: 'INVALID_ARGUMENT' });
-  if (typeof value.name !== 'string' || value.name.length > 1000
-    || typeof value.phone !== 'string' || value.phone.length > 1000
-    || typeof value.address !== 'string' || value.address.length > 1000) {
+  const name = value.name;
+  const phone = value.phone;
+  const address = value.address;
+  if (typeof name !== 'string' || name.length > 1000
+    || typeof phone !== 'string' || phone.length > 1000
+    || typeof address !== 'string' || address.length > 1000) {
     throw new HttpsError('invalid-argument', 'Store profile text fields are invalid', { code: 'INVALID_ARGUMENT' });
   }
   if (typeof value.currency !== 'string' || !SUPPORTED_CURRENCIES.has(value.currency)) {
@@ -123,9 +126,9 @@ function validateProfile(value: unknown): StoreProfilePayload {
     throw new HttpsError('invalid-argument', 'Logo URI is invalid', { code: 'INVALID_ARGUMENT' });
   }
   return {
-    name: value.name.trim().slice(0, 200),
-    phone: value.phone.trim().slice(0, 100),
-    address: value.address.trim().slice(0, 500),
+    name: name.trim().slice(0, 200),
+    phone: phone.trim().slice(0, 100),
+    address: address.trim().slice(0, 500),
     currency: value.currency,
     quickCurrencies: [...new Set(value.quickCurrencies as string[])],
     visibleCurrencies: [...new Set(value.visibleCurrencies as string[])],
