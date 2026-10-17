@@ -1,8 +1,6 @@
 import { getFunctions, httpsCallable, type Functions } from 'firebase/functions';
 import { getFirebaseApp, isFirebaseConfigured } from '@/services/firebase';
 import { createCashTransaction, createPayment, type SettlementDraft, type SettlementResult } from '@/services/storage';
-import { listDebtDocuments } from '@/services/debtFirestore';
-import { listPaymentDocuments } from '@/services/paymentFirestore';
 import type { Transaction } from '@/types/business';
 
 let functions: Functions | null = null;
@@ -90,16 +88,12 @@ export async function settleCustomerDebtInCloud(
     createdAt: processedAt,
     updatedAt: processedAt,
   };
-  const [debts, payments] = await Promise.all([
-    listDebtDocuments(spaceId),
-    listPaymentDocuments(spaceId),
-  ]);
-
+  // Debt and payment providers already subscribe to Firestore. Avoid re-reading
+  // both complete collections after a successful settlement.
   return {
-    debts: debts.filter((debt) => debt.storeId === storeId)
-      .sort((first, second) => Date.parse(second.createdAt) - Date.parse(first.createdAt)),
-    payments: payments.filter((item) => item.storeId === storeId)
-      .sort((first, second) => Date.parse(second.paidAt) - Date.parse(first.paidAt)),
+    // Cloud callers rely on live subscriptions; keep the legacy result shape intact.
+    debts: [],
+    payments: [],
     transaction: savedTransaction,
     payment: savedPayment,
   };
