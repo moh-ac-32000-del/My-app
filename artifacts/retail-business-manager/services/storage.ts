@@ -1881,10 +1881,7 @@ function validateBackupRelationships(backup: LocalBackup): string | null {
   }
   if (backup.data.dailyArchives.some((archive) => (
     archive.storeId !== backup.storeId
-    || archive.snapshot.some((event) => (
-      event.storeId !== backup.storeId
-      || (event.customerId !== undefined && !customerIds.has(event.customerId))
-    ))
+    || archive.snapshot.some((event) => event.storeId !== backup.storeId)
   ))) {
     return 'backupArchiveRelationshipInvalid';
   }
