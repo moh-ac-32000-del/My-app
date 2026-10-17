@@ -532,6 +532,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   };
 
   const restoreFromLocalBackup = async (contents: string): Promise<LocalBackup> => {
+    if (isFirebaseConfigured) {
+      throw new Error('cloudBackupRestoreUnavailable');
+    }
     await profileWriteQueueRef.current.catch(() => undefined);
     await transactionLoadPromiseRef.current.catch(() => undefined);
     const restored = await restoreLocalBackup(contents, profileRef.current.id);
