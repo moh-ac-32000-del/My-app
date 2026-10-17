@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Modal, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Modal, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
@@ -8,7 +8,7 @@ import { AppShell, GlassCard, PageHeader, SectionTitle } from '@/components/AppS
 import { useStore } from '@/context/StoreContext';
 import { isFirebaseConfigured } from '@/services/firebase';
 import { useColors } from '@/hooks/useColors';
-import { languageOptions, type Language, type TranslationKey } from '@/constants/i18n';
+import { languageOptions, type Language } from '@/constants/i18n';
 import { accentOptions, type AccentColor } from '@/constants/colors';
 import { CURRENCY_OPTIONS, getCurrency, type CurrencyCode } from '@/constants/currencies';
 import { useI18n } from '@/hooks/useI18n';
@@ -65,10 +65,6 @@ export default function SettingsScreen() {
   const draftInitializedRef = useRef<boolean>(false);
   const [isCurrencyPickerOpen, setIsCurrencyPickerOpen] = useState<boolean>(false);
   const [isLanguagePickerOpen, setIsLanguagePickerOpen] = useState<boolean>(false);
-  const [isBackupBusy, setIsBackupBusy] = useState<boolean>(false);
-  const [isRestoreBusy, setIsRestoreBusy] = useState<boolean>(false);
-  const [pendingRestoreContents, setPendingRestoreContents] = useState<string | null>(null);
-  const [backupStatus, setBackupStatus] = useState<{ key: TranslationKey; success: boolean } | null>(null);
   const [notificationTime, setNotificationTime] = useState<string>(DEFAULT_NOTIFICATION_TIME);
   const [isNotificationTimePickerOpen, setIsNotificationTimePickerOpen] = useState<boolean>(false);
 
@@ -178,19 +174,6 @@ export default function SettingsScreen() {
   const logout = async () => {
     await signOut();
     router.replace('/login');
-  };
-
-  const createBackup = async () => {
-    setBackupStatus({ key: 'cloudBackupRestoreUnavailable', success: false });
-  };
-
-  const selectBackupForRestore = async () => {
-    setBackupStatus({ key: 'cloudBackupRestoreUnavailable', success: false });
-  };
-
-  const confirmRestore = async () => {
-    setPendingRestoreContents(null);
-    setBackupStatus({ key: 'cloudBackupRestoreUnavailable', success: false });
   };
 
   return (
@@ -401,76 +384,15 @@ export default function SettingsScreen() {
 
       <SectionTitle title={t('backupRestore')} />
       <GlassCard testID="backup-restore-section" style={styles.card}>
-        <View style={styles.backupActions}>
-          <Pressable
-            testID="create-backup-button"
-            accessibilityRole="button"
-            disabled={true}
-            onPress={() => void createBackup()}
-            style={({ pressed }) => [
-              styles.backupAction,
-              { backgroundColor: colors.primary, flexDirection: isRTL ? 'row-reverse' : 'row' },
-              pressed && styles.pressed,
-              true && styles.disabled,
-            ]}
-          >
-            {isBackupBusy
-              ? <ActivityIndicator color={colors.primaryForeground} />
-              : <Ionicons name="download-outline" size={20} color={colors.primaryForeground} />}
-            <View style={[styles.backupCopy, { alignItems: isRTL ? 'flex-end' : 'flex-start' }]}>
-              <Text style={[styles.backupTitle, { color: colors.primaryForeground }]}>{t('backupData')}</Text>
-              <Text style={[styles.backupHint, { color: colors.primaryForeground, textAlign: isRTL ? 'right' : 'left' }]}>{t('backupDataHint')}</Text>
-            </View>
-          </Pressable>
-          <Pressable
-            testID="restore-backup-button"
-            accessibilityRole="button"
-            disabled={true}
-            onPress={() => void selectBackupForRestore()}
-            style={({ pressed }) => [
-              styles.backupAction,
-              { backgroundColor: colors.input, borderColor: colors.border, flexDirection: isRTL ? 'row-reverse' : 'row' },
-              styles.restoreAction,
-              pressed && styles.pressed,
-              styles.disabled,
-            ]}
-          >
-            {isRestoreBusy
-              ? <ActivityIndicator color={colors.primary} />
-              : <Ionicons name="push-outline" size={20} color={colors.primary} />}
-            <View style={[styles.backupCopy, { alignItems: isRTL ? 'flex-end' : 'flex-start' }]}>
-              <Text style={[styles.backupTitle, { color: colors.foreground }]}>{t('restoreData')}</Text>
-              <Text style={[styles.backupHint, { color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' }]}>{t('restoreDataHint')}</Text>
-            </View>
-          </Pressable>
-        </View>
         <View
-            testID="cloud-backup-warning"
-            style={[styles.backupStatus, { backgroundColor: `${colors.destructive}18` }]}
-          >
-            <Ionicons name="alert-circle-outline" size={18} color={colors.destructive} />
-            <Text style={[styles.backupStatusText, { color: colors.destructive }]}>
-              {t('cloudBackupRestoreUnavailable')}
-            </Text>
+          testID="cloud-backup-warning"
+          style={[styles.backupStatus, { backgroundColor: `${colors.destructive}18` }]}
+        >
+          <Ionicons name="alert-circle-outline" size={18} color={colors.destructive} />
+          <Text style={[styles.backupStatusText, { color: colors.destructive }]}>
+            {t('cloudBackupRestoreUnavailable')}
+          </Text>
         </View>
-        {backupStatus ? (
-          <View
-            testID="backup-status"
-            style={[
-              styles.backupStatus,
-              { backgroundColor: backupStatus.success ? colors.accent : `${colors.destructive}18` },
-            ]}
-          >
-            <Ionicons
-              name={backupStatus.success ? 'checkmark-circle-outline' : 'alert-circle-outline'}
-              size={18}
-              color={backupStatus.success ? colors.primary : colors.destructive}
-            />
-            <Text style={[styles.backupStatusText, { color: backupStatus.success ? colors.foreground : colors.destructive }]}>
-              {t(backupStatus.key)}
-            </Text>
-          </View>
-        ) : null}
       </GlassCard>
 
       <Pressable testID="save-settings" onPress={() => void save()} style={({ pressed }) => [styles.saveButton, { backgroundColor: colors.primary, flexDirection: isRTL ? 'row-reverse' : 'row' }, pressed && styles.pressed]}>
@@ -481,46 +403,7 @@ export default function SettingsScreen() {
         <Ionicons name="log-out-outline" size={18} color={colors.destructive} />
         <Text style={[styles.logoutText, { color: colors.destructive }]}>{t('logout')}</Text>
       </Pressable>
-      <Modal
-        visible={pendingRestoreContents !== null}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setPendingRestoreContents(null)}
-      >
-        <View style={styles.modalBackdrop}>
-          <View style={[styles.confirmCard, { backgroundColor: colors.glassStrong, borderColor: colors.border }]}>
-            <View style={[styles.confirmIcon, { backgroundColor: `${colors.destructive}18` }]}>
-              <Ionicons name="warning-outline" size={26} color={colors.destructive} />
-            </View>
-            <Text style={[styles.confirmTitle, { color: colors.foreground, textAlign: isRTL ? 'right' : 'left' }]}>
-              {t('restoreConfirmTitle')}
-            </Text>
-            <Text style={[styles.confirmMessage, { color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' }]}>
-              {t('restoreConfirmMessage')}
-            </Text>
-            <View style={[styles.confirmActions, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
-              <Pressable
-                testID="cancel-restore-button"
-                disabled={isRestoreBusy}
-                onPress={() => setPendingRestoreContents(null)}
-                style={({ pressed }) => [styles.confirmButton, { backgroundColor: colors.input, borderColor: colors.border }, pressed && styles.pressed]}
-              >
-                <Text style={[styles.confirmButtonText, { color: colors.foreground }]}>{t('cancel')}</Text>
-              </Pressable>
-              <Pressable
-                testID="confirm-restore-button"
-                disabled={isRestoreBusy}
-                onPress={() => void confirmRestore()}
-                style={({ pressed }) => [styles.confirmButton, { backgroundColor: colors.destructive }, pressed && styles.pressed, isRestoreBusy && styles.disabled]}
-              >
-                {isRestoreBusy
-                  ? <ActivityIndicator color={colors.primaryForeground} />
-                  : <Text style={[styles.confirmButtonText, { color: colors.primaryForeground }]}>{t('confirm')}</Text>}
-              </Pressable>
-            </View>
-          </View>
-        </View>
-      </Modal>
+
     </AppShell>
   );
 }
