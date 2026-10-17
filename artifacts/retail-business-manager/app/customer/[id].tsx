@@ -249,8 +249,8 @@ export default function CustomerDetailsScreen() {
         amount: parsedAmount,
         currency: settlementCurrency,
       });
-      setDebts(filterDebtsByCustomer(result.debts, customerId));
-      setPayments(filterPaymentsByCustomer(result.payments, customerId));
+      // Debt/payment providers refresh from their existing Firestore subscriptions.
+      // Avoid triggering extra full-collection reads just to refresh this screen.
       setSettlementAmount('');
       setIsSettlementVisible(false);
       Alert.alert(t('settlementSaved'));
