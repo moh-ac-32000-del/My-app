@@ -31,7 +31,7 @@ The project name is **Retail Business Manager**. It provides a generic store-man
 - pnpm monorepo/workspace with a locked dependency graph.
 - Expo SDK 54, React Native 0.81.5, React 19, Expo Router 6, TypeScript 5.9.
 - React Native Web support, React Query boundary, Reanimated, gesture/safe-area/keyboard support, Inter fonts, Expo file/document/sharing packages.
-- Firebase Auth, Firestore, and trusted Firebase Functions are the authoritative business-data platform. Any remaining AsyncStorage business persistence described below is legacy code to be migrated and removed, not approved architecture.
+- Firebase Auth, Firestore, and trusted Firebase Functions are the authoritative business-data platform. Any AsyncStorage business persistence described in historical sections below has been removed from the runtime; only a nonfinancial notification-time preference and Firebase Auth session persistence remain.
 - Vitest unit/contract tests.
 - Firebase client configuration/Auth/Firestore callable boundary and Firebase Functions v2 trusted commands are actively being implemented. Cloud migration is incomplete; remaining local business paths are known migration work, not a supported fallback.
 - Separate Express 5 API artifact and Drizzle/PostgreSQL workspace packages exist, but they are not the current business-data source.
@@ -117,13 +117,13 @@ Supported codes are TRY, USD, EUR, GBP, SAR, AED, and SYP; SAR is the default. C
 
 ## 11. Debt, Payment, and Cash behavior
 
-Debt amounts must be positive at creation. Settlement validates store/customer/currency/amount, rejects overpayment, applies the amount across matching debts, retains `originalAmount` and `settledAt` when a debt reaches zero, and creates a cash-in transaction plus cash payment with method `cash`. Settlement writes are serialized and restore prior AsyncStorage values if a multi-key write fails. The UI currently does not offer card/bank/other settlement even though the Payment contract supports those methods.
+Debt amounts must be positive at creation. Settlement validates store/customer/currency/amount, rejects overpayment, applies the amount across matching debts, retains `originalAmount` and `settledAt` when a debt reaches zero, and creates a cash-in transaction plus cash payment with method `cash`. Settlement is handled by a trusted Firebase callable and uses an atomic server-side operation; no local record is written on failure. The UI currently does not offer card/bank/other settlement even though the Payment contract supports those methods.
 
 Cash In/Cash Out validates a positive amount, valid currency, valid store, and trimmed note. Cash balances are derived from transactions, never converted across currencies, and are unaffected by archiving.
 
 ## 12. Authentication, Space Identity, and Multi-Space architecture
 
-`firebaseAuth.ts` contains Firebase email/password Auth and subscriptions. When Firebase configuration is incomplete, the app uses the persisted local authenticated flag for the local/demo mode. When configured, `StoreContext` observes Firebase Auth, creates/restores a UID-scoped local `SpaceIdentity`, sets the local active Space namespace, invokes trusted primary-Space bootstrap, and retains the returned `cloudSpace` separately from the local `StoreProfile`.
+`firebaseAuth.ts` contains Firebase email/password Auth and subscriptions. Firebase Auth is the only authentication truth. Missing Firebase configuration blocks business operations. `StoreContext` observes Firebase Auth, resolves active Space from cloud membership, invokes trusted primary-Space bootstrap, and loads the store profile from Firestore; no local auth flag or local Space identity is used.
 
 `Space`, `Membership`, `OwnerMembership`, `Invitation`, `CloudOperation`, `OperationReceipt`, and `SpaceIdentity` are contracts in `types/space.ts`. The intended authority is `spaces/{spaceId}/members/{uid}`; `users/{uid}/memberships/{spaceId}` is only a discovery index. Firebase UID, Cloud Space ID, local Space ID, and StoreProfile/store ID are separate identifiers.
 
@@ -240,7 +240,7 @@ The four handoff documents are intentionally created after the baseline commit a
 - React 19 and React Native 0.81.
 - React Native Web support exists in the dependency set.
 - `pnpm` workspaces.
-- Firebase/Firestore as the target authoritative business-data platform; remaining AsyncStorage persistence is legacy to remove.
+- Firebase/Firestore as the only authoritative business-data platform; only nonfinancial preference storage and Firebase Auth session persistence remain local.
 - Vitest for unit tests.
 - `@tanstack/react-query` is provided at the app shell boundary, although the current business data flow is local.
 - `react-native-gesture-handler`, `react-native-keyboard-controller`, `react-native-safe-area-context`, Expo Blur/Glass/Linear Gradient, and Expo vector icons support the UI.
