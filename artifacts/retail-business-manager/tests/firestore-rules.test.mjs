@@ -212,6 +212,22 @@ async function runCase(name, operation, expected) {
 
 try {
   await clearFirestore();
+  await runCase(
+    'Readiness — new user can list its empty discovery index before bootstrap',
+    () => getDocs(collection(userA.firestore(), 'users', 'user-A', 'memberships')),
+    'ALLOW',
+  );
+  await runCase(
+    'Readiness — anonymous cannot list a discovery index',
+    () => getDocs(collection(anonymous.firestore(), 'users', 'user-A', 'memberships')),
+    'DENY',
+  );
+  await runCase(
+    'Readiness — user cannot list another empty discovery index',
+    () => getDocs(collection(userA.firestore(), 'users', 'user-B', 'memberships')),
+    'DENY',
+  );
+  await clearFirestore();
   await seedSpace(userA, 'space-A', 'user-A');
   await runCase(
     'Test 1 — user A reads space A',
@@ -365,6 +381,35 @@ try {
       'Test 20 — user A reads own membership discovery index',
       () => getDoc(membershipIndexReference(userA, 'user-A', 'space-A')),
       'ALLOW',
+    );
+    await runCase(
+      'Readiness — signed-in user can list own membership discovery index',
+      () => getDocs(collection(userA.firestore(), 'users', 'user-A', 'memberships')),
+      'ALLOW',
+    );
+    await runCase(
+      'Readiness — user cannot list another user discovery index',
+      () => getDocs(collection(userA.firestore(), 'users', 'user-B', 'memberships')),
+      'DENY',
+    );
+    await testEnvironment.withSecurityRulesDisabled(async (context) => {
+      await setDoc(membershipIndexReference(context, 'user-A', 'space-stale'), membershipIndexDocument('space-stale', 'owner'));
+      await setDoc(multiSpaceReference(context, 'space-stale'), spaceDocument('space-stale', 'user-B'));
+    });
+    await runCase(
+      'Readiness — own stale discovery hint can be listed',
+      () => getDocs(collection(userA.firestore(), 'users', 'user-A', 'memberships')),
+      'ALLOW',
+    );
+    await runCase(
+      'Readiness — discovery hint does not authorize workspace access',
+      () => getDoc(multiSpaceReference(userA, 'space-stale')),
+      'DENY',
+    );
+    await runCase(
+      'Readiness — discovery hint does not authorize customer access',
+      () => getDocs(collection(userA.firestore(), 'spaces', 'space-stale', 'customers')),
+      'DENY',
     );
     await runCase(
       'Test 21 — user A cannot read another user membership discovery index',

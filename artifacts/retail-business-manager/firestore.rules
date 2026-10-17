@@ -29,8 +29,11 @@ service cloud.firestore {
     }
 
     match /users/{uid}/memberships/{spaceId} {
-      allow read: if isActiveMember(spaceId)
+      allow get: if isActiveMember(spaceId)
         && request.auth.uid == uid;
+      // Discovery lists are private hints, including before first bootstrap.
+      // Every workspace/business read still requires its canonical membership.
+      allow list: if isSignedIn() && request.auth.uid == uid;
       allow create, update, delete: if false;
     }
 
