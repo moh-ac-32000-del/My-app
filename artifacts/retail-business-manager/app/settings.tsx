@@ -223,11 +223,6 @@ export default function SettingsScreen() {
     setIsRestoreBusy(true);
     try {
       const restored = await restoreFromLocalBackup(pendingRestoreContents);
-      setName(restored.storeProfile.name);
-      setPhone(restored.storeProfile.phone);
-      setAddress(restored.storeProfile.address);
-      setCurrency(restored.storeProfile.currency);
-      setAccent(restored.storeProfile.accent);
       setPendingRestoreContents(null);
       setBackupStatus({ key: 'restoreSucceeded', success: true });
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);

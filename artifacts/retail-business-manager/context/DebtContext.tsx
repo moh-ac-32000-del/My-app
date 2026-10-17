@@ -2,7 +2,6 @@ import React, { createContext, ReactNode, useCallback, useEffect, useMemo, useSt
 import type { Debt } from '@/types/business';
 import { getFirebaseAuth, isFirebaseConfigured } from '@/services/firebase';
 import {
-  reconcileCloudDebtReminders,
   subscribeToDebts,
   updateDebtDocument,
 } from '@/services/debtFirestore';
@@ -90,11 +89,6 @@ export function DebtProvider({ children }: { children: ReactNode }) {
         setDebts(nextDebts);
         setIsLoading(false);
         setError(null);
-        void reconcileCloudDebtReminders(spaceId, profile.id, nextDebts).catch((reconcileError) => {
-          if (active) {
-            setError(reconcileError instanceof Error ? reconcileError.message : 'debtReminderReconciliationFailed');
-          }
-        });
       },
       (listenerError) => {
         if (!active) {
@@ -128,7 +122,6 @@ export function DebtProvider({ children }: { children: ReactNode }) {
         throw new Error('debtWorkspaceUnavailable');
       }
       await updateDebtDocument(canonicalSpaceId, debt);
-      await reconcileCloudDebtReminders(canonicalSpaceId, profile.id);
       return;
     }
     throw new Error('localDebtUpdateUnsupported');
