@@ -91,7 +91,7 @@ describe('Multi-Space domain contracts', () => {
 
     expect(uid).not.toBe(spaceId);
     expect(spaceId).toBe(space.spaceId);
-    expect(storeProfile.id).not.toBe(identity.spaceId);
+    expect(storeProfile.id).not.toBe(spaceId);
     expect(space).not.toHaveProperty('id');
   });
 
@@ -152,7 +152,7 @@ describe('Multi-Space domain contracts', () => {
     expect(result.memberships[0]).not.toHaveProperty('userId');
   });
 
-  it('separates local active-space state from the discovered Cloud identity', () => {
+  it('uses the active Space selected from cloud membership', () => {
     const selection: ActiveSpaceSelection = {
       activeSpaceId: 'space-discovered',
     };
