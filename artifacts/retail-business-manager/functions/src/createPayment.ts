@@ -42,10 +42,7 @@ export async function createPaymentHandler(
     return await db.runTransaction(async (tx) => {
       const spaceSnap = await tx.get(spaceRef);
       const memberSnap = await tx.get(memberRef);
-      const paymentSnap = await tx.get(paymentRef);
       const receiptSnap = await tx.get(receiptRef);
-      const customerSnap = customerRef ? await tx.get(customerRef) : null;
-      const transactionSnap = transactionRef ? await tx.get(transactionRef) : null;
 
       if (!spaceSnap.exists || spaceSnap.data()?.status !== 'active') {
         throw new HttpsError('failed-precondition', 'Workspace is unavailable', { code: 'SPACE_NOT_FOUND' });
@@ -66,6 +63,9 @@ export async function createPaymentHandler(
         return { outcome: 'replayed', paymentId: input.paymentId, processedAt: String(receipt.processedAt ?? '') };
       }
 
+      const paymentSnap = await tx.get(paymentRef);
+      const customerSnap = customerRef ? await tx.get(customerRef) : null;
+      const transactionSnap = transactionRef ? await tx.get(transactionRef) : null;
       if (paymentSnap.exists) {
         throw new HttpsError('already-exists', 'Payment ID already exists', { code: 'PAYMENT_ALREADY_EXISTS' });
       }
