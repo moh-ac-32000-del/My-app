@@ -137,7 +137,7 @@ The callable `bootstrapPrimarySpace` requires verified Auth context and an empty
 
 ## 14. Backup and Restore
 
-The storage layer contains a version-1 `LocalBackup` contract and validation/restore functions for the active store: profile, auth flag, customers, transactions, debts, payments, and daily archives. It validates JSON, format version, records, store ID, and relationships before writing, preserves other local stores, and has rollback logic for multi-key writes. `backupFile.ts` supplies the file picker/cache/document/share plumbing.
+Local backup/restore contracts, implementation, file handling, and tests have been removed. A future export/import must be cloud-backed and separately reviewed; it must not restore a local business database.
 
 Local Backup/Restore was removed. No cloud backup/export feature is currently implemented; if added later, it must read from Firebase and must never create an alternate local source of truth.
 
