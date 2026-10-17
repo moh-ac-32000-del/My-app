@@ -1,5 +1,7 @@
 # Current Project State
 
+> **Architecture supersession (2026-10-17):** This snapshot is historical and conflicts with the current Firebase-only business-data decision. Follow `FIREBASE_SOURCE_OF_TRUTH.md`; local AsyncStorage business persistence, local Backup/Restore, and local operation fallback are legacy code to remove, not approved behavior.
+
 > **Current snapshot correction — 2026-08-31, Europe/Istanbul**
 >
 > The entries below are the authoritative current state for this handoff. Older baseline notes in this file describe the 2026-08-29 product checkpoint and are retained only as history. Current source commit: `4ed9d018b027a84dbe880b266f1561ad734c6f27`, branch `main`. Git was clean before this documentation-only export.
@@ -9,7 +11,7 @@
 The current release has only these three focus areas:
 
 1. Sharing a selected Daily Archive through the device share sheet, including WhatsApp when installed.
-2. Backup and Restore of important local data.
+2. Firebase-backed backup/export only if later explicitly designed; no local business Backup/Restore.
 3. Login plus Spaces plus data isolation.
 
 Sales, Purchases, Inventory, Capital, and Reports are explicitly postponed and are not part of the current release unless requested later.
@@ -17,11 +19,11 @@ Sales, Purchases, Inventory, Capital, and Reports are explicitly postponed and a
 ## Current implementation snapshot
 
 - Expo SDK 54 / React Native app with Expo Router routes for login, dashboard, customers, customer detail, cash, archive, settings, and deliberate under-development routes for Sales, Purchases, Inventory, and Reports.
-- Local AsyncStorage persistence with store-scoped records and Space-aware namespace foundation.
+- Legacy AsyncStorage business persistence remains in code and is migration work; Firebase/Firestore is the only approved source of truth.
 - Customers, debts, partial/full cash settlements, Cash In/Cash Out, per-currency balances, derived Daily Journal, multiple same-day closings, immutable archive snapshots, and selected archive system sharing.
 - Arabic, English, and Turkish; Arabic RTL; English/Turkish LTR; accent settings.
-- Firebase Auth/configuration boundary, UID-scoped local SpaceIdentity, trusted primary-Space bootstrap, cloud Space state, and membership-oriented Rules foundation exist. Business cloud synchronization and member-facing Space management do not.
-- Local Backup/Restore format, validation, relationship checks, file picker/cache/share plumbing exist; the complete user-facing flow remains pending.
+- Firebase Auth, Firestore, trusted Functions, Space bootstrap, and membership checks are being developed as the authoritative path. Remaining local business paths must be removed; no local fallback is permitted.
+- Local business Backup/Restore must not be exposed or expanded. Any future export must be designed against Firebase as the source of truth.
 - Separate API server currently provides health functionality only and is not the business data source.
 
 ## Last recorded verification
@@ -50,7 +52,7 @@ No remaining project budget, credits, or cost allowance is present in the inspec
 
 - Do not treat a local `activeSpaceId` as proof of cloud authorization.
 - Do not enable production Firebase or unrestricted financial writes.
-- Do not migrate/delete legacy AsyncStorage keys automatically.
+- Legacy local business data is test data; do not preserve it as an alternate source of truth or build a migration for it.
 - Do not merge currencies, add implicit conversion, or change settlement/archive behavior.
 - Do not expand the release into Sales, Purchases, Inventory, Capital, or Reports.
 - Firebase Functions target Node 20; the development environment previously reported Node 24 and emitted an engine warning.
@@ -67,7 +69,7 @@ No remaining project budget, credits, or cost allowance is present in the inspec
 
 ## Working now
 
-The current local Expo application supports:
+The historical local Expo baseline supported the following; treat these as legacy behaviors to migrate to Firebase, not as current architecture:
 
 - Local login/session flag and protected dashboard routing.
 - Local store profile and store identity settings.
