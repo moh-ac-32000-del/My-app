@@ -1,10 +1,10 @@
 ---
-name: Firestore Space foundation
-description: Guardrails for the first cloud Space document and its relationship to local business data.
+name: Firebase authoritative Space foundation
+description: Firestore Space membership and trusted commands are the authoritative business-data boundary.
 ---
 
-Firestore stores only Space ownership metadata at this stage. The document ID is the existing local Space ID, and ownership is the Firebase UID; neither `StoreProfile.id` nor `local-store` is a cloud identity.
+Firestore and trusted Firebase Functions are the authoritative platform. A Space is not a local-only namespace; business data must be stored/read from Firestore and all sensitive operations must validate authenticated UID, active membership, and store/workspace identity.
 
-**Why:** Cloud ownership must be established without turning Firestore into a sync layer or risking the already-isolated AsyncStorage data when the network or rules fail.
+**Why:** The project explicitly forbids local-first behavior and local fallback for business data.
 
-**How to apply:** Keep cloud Space creation idempotent at one document per Space ID, enforce immutable ownership in rules, and treat Firestore failure as non-blocking for local login and local business operations until Cloud Sync is separately approved.
+**How to apply:** Keep cloud Space creation idempotent, enforce ownership and membership in rules/backend, and treat Firebase failure as blocking for business operations. Never use local login or local business data as an offline alternative. Do not deploy rules or write production data during this migration without separate authorization.
