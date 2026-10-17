@@ -91,6 +91,9 @@ export async function settleCustomerDebtInCloud(
   // Debt and payment providers already subscribe to Firestore. Avoid re-reading
   // both complete collections after a successful settlement.
   return {
+    // Cloud callers rely on live subscriptions; keep the legacy result shape intact.
+    debts: [],
+    payments: [],
     transaction: savedTransaction,
     payment: savedPayment,
   };
