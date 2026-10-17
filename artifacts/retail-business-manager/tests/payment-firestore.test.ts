@@ -23,6 +23,10 @@ const storageMocks = vi.hoisted(() => ({
   validatePaymentInput: vi.fn(() => null),
 }));
 
+const trustedPaymentMocks = vi.hoisted(() => ({
+  createTrustedPayment: vi.fn().mockResolvedValue(undefined),
+}));
+
 vi.mock('firebase/firestore', () => ({
   collection: firestoreMocks.collection,
   doc: firestoreMocks.doc,
@@ -34,6 +38,7 @@ vi.mock('firebase/firestore', () => ({
 
 vi.mock('@/services/firebase', () => firebaseMocks);
 vi.mock('@/services/storage', () => storageMocks);
+vi.mock('@/services/trustedPaymentFirestore', () => trustedPaymentMocks);
 
 import {
   createPaymentDocument,
@@ -101,6 +106,7 @@ describe('Payment Firestore service', () => {
     });
     firebaseMocks.getFirebaseAuth.mockReturnValue({ currentUser: { uid: 'user-A' } });
     storageMocks.validatePaymentInput.mockReturnValue(null);
+    trustedPaymentMocks.createTrustedPayment.mockResolvedValue(undefined);
   });
 
   it('serializes the Cloud document with canonical Workspace and authenticated ownership metadata', () => {
@@ -131,23 +137,11 @@ describe('Payment Firestore service', () => {
     expect(normalizePaymentDocument('payment-A', serialized, 'space-B')).toBeNull();
   });
 
-  it('creates a Payment at spaces/{spaceId}/payments/{paymentId} after validating the Customer', async () => {
-    const transaction = configureTransaction();
-
+  it('routes valid Payment creation through the trusted backend', async () => {
     await createPaymentDocument('space-A', payment);
 
-    expect(firestoreMocks.doc).toHaveBeenCalledWith(
-      expect.anything(),
-      'spaces/space-A/payments/payment-A',
-    );
-    expect(transaction.set).toHaveBeenCalledWith(
-      expect.objectContaining({ path: 'spaces/space-A/payments/payment-A' }),
-      expect.objectContaining({
-        id: 'payment-A',
-        workspaceId: 'space-A',
-        createdByUserId: 'user-A',
-      }),
-    );
+    expect(trustedPaymentMocks.createTrustedPayment).toHaveBeenCalledWith('space-A', payment);
+    expect(trustedPaymentMocks.createTrustedPayment).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -158,13 +152,6 @@ describe('Payment Firestore service', () => {
     const transaction = configureTransaction(customerData);
 
     await expect(createPaymentDocument('space-A', payment)).rejects.toThrow('customerNotFound');
-    expect(transaction.set).not.toHaveBeenCalled();
-  });
-
-  it('rejects duplicate Payment document IDs without overwriting the existing document', async () => {
-    const transaction = configureTransaction(undefined, { id: 'payment-A' });
-
-    await expect(createPaymentDocument('space-A', payment)).rejects.toThrow('paymentAlreadyExists');
     expect(transaction.set).not.toHaveBeenCalled();
   });
 
