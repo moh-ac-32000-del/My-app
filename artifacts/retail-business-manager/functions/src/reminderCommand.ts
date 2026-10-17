@@ -128,7 +128,7 @@ function validateRequest(value: unknown): ReminderCommandRequest {
     const reminder = input.reminder;
     if (!reminder || !validId(reminder.id) || !validId(reminder.debtId)
       || !validTimestamp(reminder.remindAt)
-      || (reminder.note !== undefined && (typeof reminder.note !== 'string' || reminder.note.length > 500))) {
+      || (reminder.note !== undefined && (typeof reminder.note !== 'string' || reminder.note.length > 500 || reminder.note === SYSTEM_DUE_DATE_NOTE))) {
       throw new HttpsError('invalid-argument', 'Reminder details are invalid', { code: 'INVALID_ARGUMENT' });
     }
   }
