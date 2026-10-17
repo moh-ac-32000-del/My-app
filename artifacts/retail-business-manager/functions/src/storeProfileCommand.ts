@@ -101,10 +101,10 @@ function validateRequest(value: unknown): { action: 'getOrCreate' | 'update'; sp
 
 function validateProfile(value: unknown): StoreProfilePayload {
   if (!isRecord(value)) throw new HttpsError('invalid-argument', 'Store profile is invalid', { code: 'INVALID_ARGUMENT' });
-  for (const field of ['name', 'phone', 'address'] as const) {
-    if (typeof value[field] !== 'string' || value[field].length > 1000) {
-      throw new HttpsError('invalid-argument', `Store profile ${field} is invalid`, { code: 'INVALID_ARGUMENT' });
-    }
+  if (typeof value.name !== 'string' || value.name.length > 1000
+    || typeof value.phone !== 'string' || value.phone.length > 1000
+    || typeof value.address !== 'string' || value.address.length > 1000) {
+    throw new HttpsError('invalid-argument', 'Store profile text fields are invalid', { code: 'INVALID_ARGUMENT' });
   }
   if (typeof value.currency !== 'string' || !SUPPORTED_CURRENCIES.has(value.currency)) {
     throw new HttpsError('invalid-argument', 'Currency is not supported', { code: 'INVALID_ARGUMENT' });
