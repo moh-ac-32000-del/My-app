@@ -16,9 +16,8 @@ import { useI18n } from '@/hooks/useI18n';
 import { useStore } from '@/context/StoreContext';
 import { useDebts } from '@/context/DebtContext';
 import { usePayments } from '@/context/PaymentContext';
-import { isFirebaseConfigured } from '@/services/firebase';
 import { createCloudReminder, loadCloudReminders } from '@/services/cloudReminders';
-import { calculateDebtTotals, createReminder, filterDebtsByCustomer, filterPaymentsByCustomer, loadNotificationTime, loadReminders, parseLocalizedAmountInput, saveReminders } from '@/services/storage';
+import { calculateDebtTotals, createReminder, filterDebtsByCustomer, filterPaymentsByCustomer, loadNotificationTime, parseLocalizedAmountInput } from '@/services/storage';
 import type { Customer, Debt, Payment, Reminder } from '@/types/business';
 
 function DetailRow({ icon, label, value }: { icon: React.ComponentProps<typeof Ionicons>['name']; label: string; value: string }) {
@@ -128,9 +127,8 @@ export default function CustomerDetailsScreen() {
       let active = true;
       setIsLoading(true);
       void (async () => {
-        const storedReminders = isFirebaseConfigured
-          ? await loadCloudReminders(activeSpaceId ?? '', profile.id, await loadNotificationTime())
-          : await loadReminders(profile.id);
+        if (!activeSpaceId) throw new Error('cloudSpaceUnavailable');
+        const storedReminders = await loadCloudReminders(activeSpaceId, profile.id, await loadNotificationTime());
         if (active) {
           setDebts(filterDebtsByCustomer(workspaceDebts, customerId));
           setPayments(filterPaymentsByCustomer(workspacePayments, customerId));
@@ -221,16 +219,10 @@ export default function CustomerDetailsScreen() {
       const reminder = createReminder(profile.id, debtId, {
         remindAt,
       });
-      if (isFirebaseConfigured) {
-        if (!activeSpaceId) throw new Error('cloudSpaceUnavailable');
-        const updated = await createCloudReminder(activeSpaceId, reminder, await loadNotificationTime());
-        const customerDebtIds = new Set(workspaceDebts.filter((item) => item.customerId === customerId).map((item) => item.id));
-        setReminders(updated.filter((item) => customerDebtIds.has(item.debtId)));
-      } else {
-        const currentReminders = await loadReminders(profile.id);
-        await saveReminders(profile.id, [...currentReminders, reminder]);
-        setReminders((current) => [reminder, ...current]);
-      }
+      if (!activeSpaceId) throw new Error('cloudSpaceUnavailable');
+      const updated = await createCloudReminder(activeSpaceId, reminder, await loadNotificationTime());
+      const customerDebtIds = new Set(workspaceDebts.filter((item) => item.customerId === customerId).map((item) => item.id));
+      setReminders(updated.filter((item) => customerDebtIds.has(item.debtId)));
       setIsReminderVisible(false);
       setReminderDebt(null);
     } finally {
