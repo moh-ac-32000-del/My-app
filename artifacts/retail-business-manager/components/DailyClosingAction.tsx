@@ -9,11 +9,13 @@ type ClosingStatus = 'created' | 'error' | null;
 
 export function DailyClosingAction({
   storeId,
+  spaceId,
   compact = false,
   testID,
   onClosed,
 }: {
   storeId: string;
+  spaceId: string | null;
   compact?: boolean;
   testID: string;
   onClosed?: () => void;
@@ -31,7 +33,8 @@ export function DailyClosingAction({
     setIsConfirmationVisible(false);
     setIsClosing(true);
     try {
-      setStatus(await runDailyClosing(storeId));
+      if (!spaceId) throw new Error('archiveWorkspaceUnavailable');
+      setStatus(await runDailyClosing(spaceId, storeId));
       onClosed?.();
     } catch (error) {
       console.error('Daily archive closing failed', error);
