@@ -1,14 +1,9 @@
 import {
   collection,
   doc,
-  getDoc,
   getDocs,
   getFirestore,
   onSnapshot,
-  runTransaction,
-  setDoc,
-  updateDoc,
-  deleteField,
   type DocumentData,
 } from 'firebase/firestore';
 import { getFirebaseApp, getFirebaseAuth, isFirebaseConfigured } from '@/services/firebase';
@@ -19,6 +14,7 @@ import {
 import { reconcileDueDateReminders } from '@/services/storage';
 import { validateDebtInput } from '@/services/storage';
 import type { Debt } from '@/types/business';
+import { createTrustedDebt, updateTrustedDebt } from '@/services/trustedDebtFirestore';
 
 type DebtSnapshot = {
   id: string;
@@ -70,55 +66,15 @@ export async function listDebtDocuments(spaceId: string): Promise<Debt[]> {
 }
 
 export async function createDebtDocument(spaceId: string, debt: Debt): Promise<void> {
-  const authenticatedUid = getAuthenticatedUid();
-  const debtId = requireDebtId(debt.id);
-  const debtReference = doc(
-    getFirestoreInstance(),
-    workspaceBusinessDocumentPath(spaceId, 'debts', debtId),
-  );
-  const customerReference = doc(
-    getFirestoreInstance(),
-    workspaceBusinessDocumentPath(spaceId, 'customers', requireCustomerId(debt.customerId)),
-  );
-  const serializedDebt = serializeDebtDocument(debt, spaceId, authenticatedUid);
-
-  await runTransaction(getFirestoreInstance(), async (transaction) => {
-    const customerSnapshot = await transaction.get(customerReference);
-    assertActiveCustomer(customerSnapshot, debt.customerId);
-
-    const debtSnapshot = await transaction.get(debtReference);
-    if (debtSnapshot.exists()) {
-      throw new Error('debtAlreadyExists');
-    }
-
-    transaction.set(debtReference, serializedDebt);
-  });
+  getAuthenticatedUid();
+  assertValidDebt(debt);
+  await createTrustedDebt(requireSpaceId(spaceId), debt);
 }
 
 export async function updateDebtDocument(spaceId: string, debt: Debt): Promise<void> {
   getAuthenticatedUid();
-  const debtId = requireDebtId(debt.id);
-  const customerId = requireCustomerId(debt.customerId);
-  const customerReference = doc(
-    getFirestoreInstance(),
-    workspaceBusinessDocumentPath(spaceId, 'customers', customerId),
-  );
-  const debtReference = doc(
-    getFirestoreInstance(),
-    workspaceBusinessDocumentPath(spaceId, 'debts', debtId),
-  );
-
   assertValidDebt(debt);
-  const customerSnapshot = await getDoc(customerReference);
-  assertActiveCustomer(customerSnapshot, customerId);
-
-  await updateDoc(debtReference, {
-    customerId,
-    currency: debt.currency,
-    amount: debt.amount,
-    dueDate: debt.dueDate ?? deleteField(),
-    updatedAt: debt.updatedAt,
-  });
+  await updateTrustedDebt(requireSpaceId(spaceId), debt);
 }
 
 export function serializeDebtDocument(
@@ -196,20 +152,6 @@ function assertValidDebt(debt: Debt): void {
   }
 }
 
-function assertActiveCustomer(
-  snapshot: { exists: () => boolean; data: () => DocumentData | undefined },
-  customerId: string,
-): void {
-  const data = snapshot.exists() ? snapshot.data() : undefined;
-  if (
-    !snapshot.exists()
-    || !data
-    || data.id !== customerId
-    || data.isActive !== true
-  ) {
-    throw new Error('customerNotFound');
-  }
-}
 
 function getFirestoreInstance(): ReturnType<typeof getFirestore> {
   if (!isFirebaseConfigured) {

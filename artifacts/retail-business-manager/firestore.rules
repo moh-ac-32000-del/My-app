@@ -67,19 +67,8 @@ service cloud.firestore {
 
     match /spaces/{spaceId}/debts/{debtId} {
       allow read: if isActiveMember(spaceId);
-      allow create: if isActiveMember(spaceId)
-        && isValidDebtDocument(spaceId, debtId, request.resource.data)
-        && hasActiveCustomer(spaceId, request.resource.data.customerId)
-        && request.resource.data.createdByUserId == request.auth.uid;
-      allow update: if isActiveMember(spaceId)
-        && isValidDebtDocument(spaceId, debtId, request.resource.data)
-        && hasActiveCustomer(spaceId, request.resource.data.customerId)
-        && request.resource.data.id == resource.data.id
-        && request.resource.data.storeId == resource.data.storeId
-        && request.resource.data.workspaceId == resource.data.workspaceId
-        && request.resource.data.createdByUserId == resource.data.createdByUserId
-        && request.resource.data.customerId == resource.data.customerId
-        && request.resource.data.createdAt == resource.data.createdAt;
+      // All debt creation and edits must pass through the authenticated trusted backend.
+      allow create, update, delete: if false;
     }
 
     match /spaces/{spaceId}/payments/{paymentId} {
