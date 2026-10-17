@@ -1,10 +1,10 @@
 ---
-name: Local persistence guardrails
-description: Constraints for evolving the retail manager's local persistence without premature architecture.
+name: Firebase-only business data guardrails
+description: Mandatory rule for removing legacy local business persistence and using Firebase as the only source of truth.
 ---
 
-Keep the AsyncStorage boundary as a very small set of direct read/write functions. Do not introduce repositories, dependency injection, adapters, factories, or a broad data layer merely to prepare for a future Firebase replacement.
+Firebase/Firestore is the only source of truth for all business data. Do not preserve AsyncStorage as a business persistence boundary and do not introduce local-first repositories, fallback paths, dual writes, or local business Backup/Restore.
 
-**Why:** The current phase is only isolating local persistence from UI state; premature abstractions would expand scope without serving current behavior.
+**Why:** The project has explicitly moved to Firebase-only business data. Legacy local business data is test data and does not need migration or preservation.
 
-**How to apply:** Add a schema version only when a concrete current-data migration cannot be handled safely by the existing normalization logic. Otherwise keep stored profiles versionless and validate them at runtime.
+**How to apply:** Audit every AsyncStorage/localStorage access and every Firebase-configured/local-mode branch. Keep only explicitly approved non-business UI preferences local; authentication comes from Firebase Auth, and a local Space ID is only a navigation hint. When Firebase is unavailable, show an actionable error and do not report success.
