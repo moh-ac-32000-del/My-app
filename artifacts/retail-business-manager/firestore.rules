@@ -35,7 +35,8 @@ service cloud.firestore {
     }
 
     match /spaces/{spaceId}/customers/{customerId} {
-      allow read, delete: if isActiveMember(spaceId);
+      allow read: if isActiveMember(spaceId);
+      // Customer history is retained; deletion is represented by isActive=false.
       allow create: if isActiveMember(spaceId)
         && isValidCustomerDocument(spaceId, customerId, request.resource.data)
         && (
