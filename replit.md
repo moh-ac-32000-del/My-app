@@ -1,5 +1,7 @@
 # Retail Business Manager
 
+> **Mandatory architecture:** See `FIREBASE_SOURCE_OF_TRUTH.md`. Firebase is the only source of truth for all business data. The local-first/AsyncStorage guidance below is obsolete; never restore local business persistence or fallback behavior.
+
 تطبيق موبايل لإدارة المحلات التجارية، يبدأ بمحلات الاتصالات والهواتف ومصمم للتوسع إلى أنواع نشاط مختلفة.
 
 ## Run & Operate
@@ -26,15 +28,15 @@
 
 - `artifacts/retail-business-manager/app/` — Expo Router screens for login, dashboard, business modules, and settings
 - `artifacts/retail-business-manager/components/` — reusable glass UI, metrics, quick actions, and shared shell
-- `artifacts/retail-business-manager/context/StoreContext.tsx` — locally persisted store identity and starter session state
+- `artifacts/retail-business-manager/context/StoreContext.tsx` — Firebase Auth/workspace state and transient UI state; any local business persistence is legacy to remove
 - `artifacts/retail-business-manager/constants/` — centralized colors and localization dictionaries
-- `artifacts/retail-business-manager/data/collections.ts` — future Firestore collection names and store-scoped document types
-- `artifacts/retail-business-manager/services/firebase.ts` — future Firebase configuration boundary using Expo environment variables
+- `artifacts/retail-business-manager/data/collections.ts` — Firestore collection names and store-scoped document types
+- `artifacts/retail-business-manager/services/firebase.ts` — Firebase configuration boundary using Expo environment variables
 
 ## Architecture decisions
 
 - Arabic RTL is the current interface language; English and Turkish dictionary keys are prepared for a later language switch.
-- Store identity is independent from the app name and persists locally until Firebase Authentication, Firestore, and Storage are connected.
+- Firebase Auth and Firestore are the authoritative platform; store identity/profile must be cloud-backed, not persisted as local business state.
 - Every future cloud document is expected to include `storeId`, enabling multiple stores and role-based access.
 - The first release focuses on navigation and a credible operational foundation; sales, purchasing, cash, inventory, and reporting modules have deliberate development states.
 
@@ -51,7 +53,7 @@ The starter app includes an Arabic RTL login flow, a black glass dashboard with 
 ## Gotchas
 
 - The mobile workflow is managed by the artifact and should be restarted through the workflow controls when dependencies or Metro configuration change.
-- Firebase environment variables are optional in the starter; the app intentionally uses AsyncStorage until the cloud stage is approved.
+- Missing Firebase configuration must block business operations with a clear error; the app must never fall back to AsyncStorage for business data.
 
 ## Pointers
 
