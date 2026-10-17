@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { createCashTransactionHandler } from '../functions/src/createCashTransaction';
 import { createPaymentHandler } from '../functions/src/createPayment';
+import { trustedDebtCommandHandler } from '../functions/src/trustedDebtCommand';
+import { settleCustomerDebtHandler } from '../functions/src/settleCustomerDebt';
 
 type Snapshot = { exists: boolean; data: () => Record<string, unknown> | undefined };
 
@@ -8,7 +10,11 @@ function reference(path: string) {
   return {
     path,
     collection(name: string) {
-      return { doc: (id: string) => reference(`${path}/${name}/${id}`) };
+      const collectionPath = `${path}/${name}`;
+      return {
+        doc: (id: string) => reference(`${collectionPath}/${id}`),
+        where: (field: string, operator: string, value: string) => ({ path: `${collectionPath}?${field}${operator}${value}` }),
+      };
     },
     doc(id: string) {
       return reference(`${path}/${id}`);
@@ -85,4 +91,46 @@ describe('trusted financial commands enforce the canonical store scope', () => {
       { firestore: fakeFirestore('store-canonical') as never, now: () => '2026-10-17T12:00:00.000Z' },
     )).rejects.toMatchObject({ code: 'permission-denied' });
   });
+  it('rejects debt writes when the requested store differs from the workspace profile', async () => {
+    const handlerRequest = {
+      auth: { uid: 'user-A' },
+      data: {
+        action: 'create',
+        spaceId: 'space-A',
+        storeId: 'store-forged',
+        customerId: 'customer-A',
+        debtId: 'debt-A',
+        operationId: 'operation-A',
+        currency: 'TRY',
+        amount: 100,
+      },
+    };
+
+    await expect(trustedDebtCommandHandler(
+      handlerRequest as never,
+      { firestore: fakeFirestore('store-canonical') as never, now: () => '2026-10-17T12:00:00.000Z' },
+    )).rejects.toMatchObject({ code: 'permission-denied' });
+  });
+
+  it('rejects settlements when the requested store differs from the workspace profile', async () => {
+    const handlerRequest = {
+      auth: { uid: 'user-A' },
+      data: {
+        spaceId: 'space-A',
+        storeId: 'store-forged',
+        customerId: 'customer-A',
+        amount: 100,
+        currency: 'TRY',
+        operationId: 'operation-A',
+        transactionId: 'transaction-A',
+        paymentId: 'payment-A',
+      },
+    };
+
+    await expect(settleCustomerDebtHandler(
+      handlerRequest as never,
+      { firestore: fakeFirestore('store-canonical') as never, now: () => '2026-10-17T12:00:00.000Z' },
+    )).rejects.toMatchObject({ code: 'permission-denied' });
+  });
+
 });
