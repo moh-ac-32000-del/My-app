@@ -346,6 +346,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             if (!isActive) {
               return;
             }
+            // A terminal Firestore listener error means this snapshot is no longer
+            // trustworthy for the active session. Do not keep showing stale cash data.
+            transactionsRef.current = [];
+            setTransactions([]);
             setTransactionsLoading(false);
             setTransactionsError(error.message);
             setInitializationError(error.message);
