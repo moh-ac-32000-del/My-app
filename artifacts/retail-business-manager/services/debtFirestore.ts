@@ -11,7 +11,8 @@ import {
   workspaceBusinessCollectionPath,
   workspaceBusinessDocumentPath,
 } from '@/data/firestoreWorkspace';
-import { reconcileDueDateReminders } from '@/services/storage';
+import { loadNotificationTime } from '@/services/storage';
+import { loadCloudReminders } from '@/services/cloudReminders';
 import { validateDebtInput } from '@/services/storage';
 import type { Debt } from '@/types/business';
 import { createTrustedDebt, updateTrustedDebt } from '@/services/trustedDebtFirestore';
@@ -141,8 +142,10 @@ export async function reconcileCloudDebtReminders(
   storeId: string,
   currentDebts?: Debt[],
 ): Promise<void> {
-  const debts = currentDebts ?? await listDebtDocuments(spaceId);
-  await reconcileDueDateReminders(storeId, debts);
+  // The trusted backend reads canonical debts and reconciles generated due-date reminders.
+  // Do not pass client-supplied debt records as an authority for reminder state.
+  void currentDebts;
+  await loadCloudReminders(spaceId, storeId, await loadNotificationTime());
 }
 
 function assertValidDebt(debt: Debt): void {
