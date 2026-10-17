@@ -134,9 +134,14 @@ describe('customer Firestore service', () => {
         name: 'Updated Customer',
       }),
     );
-    expect(firestoreMocks.updateDoc.mock.calls[0]?.[1]).not.toHaveProperty('id');
-    expect(firestoreMocks.updateDoc.mock.calls[0]?.[1]).not.toHaveProperty('storeId');
-    expect(firestoreMocks.updateDoc.mock.calls[0]?.[1]).not.toHaveProperty('isActive');
+    const updatePayload = firestoreMocks.updateDoc.mock.calls[0]?.[1];
+    expect(updatePayload).not.toHaveProperty('id');
+    expect(updatePayload).not.toHaveProperty('storeId');
+    expect(updatePayload).not.toHaveProperty('workspaceId');
+    expect(updatePayload).not.toHaveProperty('createdByUserId');
+    expect(updatePayload).not.toHaveProperty('createdAt');
+    // A stale Customer object must not reactivate a soft-deleted record.
+    expect(updatePayload).not.toHaveProperty('isActive');
   });
 
   it('soft-deletes a Customer by setting isActive false', async () => {
