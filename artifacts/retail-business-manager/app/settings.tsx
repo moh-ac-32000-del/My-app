@@ -425,14 +425,14 @@ export default function SettingsScreen() {
           <Pressable
             testID="restore-backup-button"
             accessibilityRole="button"
-            disabled={isFirebaseConfigured || isBackupBusy || isRestoreBusy}
+            disabled={true}
             onPress={() => void selectBackupForRestore()}
             style={({ pressed }) => [
               styles.backupAction,
               { backgroundColor: colors.input, borderColor: colors.border, flexDirection: isRTL ? 'row-reverse' : 'row' },
               styles.restoreAction,
               pressed && styles.pressed,
-              (isFirebaseConfigured || isBackupBusy || isRestoreBusy) && styles.disabled,
+              styles.disabled,
             ]}
           >
             {isRestoreBusy
@@ -444,8 +444,7 @@ export default function SettingsScreen() {
             </View>
           </Pressable>
         </View>
-        {(
-          <View
+        <View
             testID="cloud-backup-warning"
             style={[styles.backupStatus, { backgroundColor: `${colors.destructive}18` }]}
           >
@@ -453,8 +452,7 @@ export default function SettingsScreen() {
             <Text style={[styles.backupStatusText, { color: colors.destructive }]}>
               {t('cloudBackupRestoreUnavailable')}
             </Text>
-          </View>
-        )}
+        </View>
         {backupStatus ? (
           <View
             testID="backup-status"
