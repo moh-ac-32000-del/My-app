@@ -162,6 +162,15 @@ describe('trusted debt settlement command', () => {
       command: 'settleCustomerDebt',
       actorUserId: 'user-A',
       status: 'completed',
+      payload: {
+        spaceId: 'space-A',
+        storeId: 'store-A',
+        customerId: 'customer-A',
+        amount: 50,
+        currency: 'TRY',
+        transactionId: 'transaction-A',
+        paymentId: 'payment-A',
+      },
       result: { transactionId: 'transaction-A', paymentId: 'payment-A' },
     });
     expect(fake.created.map((entry) => entry.path).sort()).toEqual([
@@ -170,6 +179,24 @@ describe('trusted debt settlement command', () => {
       'spaces/space-A/transactions/transaction-A',
     ]);
     expect(fake.updated).toHaveLength(1);
+  });
+
+
+  it('rejects a reused operation ID when the settlement payload changes', async () => {
+    const fake = createFakeFirestore(baseSeed());
+    const runtime = { firestore: fake.firestore as never, now: () => '2026-10-17T12:00:00.000Z' };
+
+    await settleCustomerDebtHandler(request(50) as never, runtime);
+
+    await expect(settleCustomerDebtHandler(request(60) as never, runtime))
+      .rejects.toMatchObject({
+        code: 'already-exists',
+        details: { code: 'IDEMPOTENCY_CONFLICT' },
+      });
+
+    await expect(settleCustomerDebtHandler(request(50) as never, runtime))
+      .resolves.toMatchObject({ outcome: 'replayed' });
+    expect(fake.documents.get('spaces/space-A/debts/debt-A')?.amount).toBe(100);
   });
 
   it('rejects an amount greater than the outstanding debt without writing any records', async () => {
@@ -187,6 +214,34 @@ describe('trusted debt settlement command', () => {
 
   it('replays the same completed operation without applying the settlement twice', async () => {
     const seed = baseSeed();
+    seed['spaces/space-A/debts/debt-A'].amount = 100;
+    seed['spaces/space-A/debts/debt-A'].updatedAt = '2026-10-17T11:00:00.000Z';
+    seed['spaces/space-A/transactions/transaction-A'] = {
+      id: 'transaction-A',
+      storeId: 'store-A',
+      workspaceId: 'space-A',
+      createdByUserId: 'user-A',
+      type: 'cash_in',
+      amount: 50,
+      currency: 'TRY',
+      note: 'payment_customer-A',
+      createdAt: '2026-10-17T11:00:00.000Z',
+      updatedAt: '2026-10-17T11:00:00.000Z',
+    };
+    seed['spaces/space-A/payments/payment-A'] = {
+      id: 'payment-A',
+      storeId: 'store-A',
+      workspaceId: 'space-A',
+      createdByUserId: 'user-A',
+      customerId: 'customer-A',
+      transactionId: 'transaction-A',
+      amount: { amount: 50, currency: 'TRY' },
+      direction: 'in',
+      method: 'cash',
+      paidAt: '2026-10-17T11:00:00.000Z',
+      createdAt: '2026-10-17T11:00:00.000Z',
+      updatedAt: '2026-10-17T11:00:00.000Z',
+    };
     seed['spaces/space-A/operationReceipts/operation-A'] = {
       operationId: 'operation-A',
       spaceId: 'space-A',
@@ -211,6 +266,6 @@ describe('trusted debt settlement command', () => {
     });
     expect(fake.created).toHaveLength(0);
     expect(fake.updated).toHaveLength(0);
-    expect(fake.documents.get('spaces/space-A/debts/debt-A')?.amount).toBe(150);
+    expect(fake.documents.get('spaces/space-A/debts/debt-A')?.amount).toBe(100);
   });
 });
