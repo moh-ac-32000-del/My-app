@@ -30,8 +30,12 @@ const trustedDebtMocks = vi.hoisted(() => ({
 }));
 
 const storageMocks = vi.hoisted(() => ({
-  reconcileDueDateReminders: vi.fn().mockResolvedValue(undefined),
+  loadNotificationTime: vi.fn().mockResolvedValue('09:00'),
   validateDebtInput: vi.fn(() => null),
+}));
+
+const reminderMocks = vi.hoisted(() => ({
+  loadCloudReminders: vi.fn().mockResolvedValue([]),
 }));
 
 vi.mock('firebase/firestore', () => ({
@@ -50,6 +54,7 @@ vi.mock('firebase/firestore', () => ({
 vi.mock('@/services/firebase', () => firebaseMocks);
 vi.mock('@/services/trustedDebtFirestore', () => trustedDebtMocks);
 vi.mock('@/services/storage', () => storageMocks);
+vi.mock('@/services/cloudReminders', () => reminderMocks);
 
 import {
   createDebtDocument,
@@ -120,7 +125,8 @@ describe('Debt Firestore service', () => {
       return firestoreMocks.unsubscribe;
     });
     firebaseMocks.getFirebaseAuth.mockReturnValue({ currentUser: { uid: 'user-A' } });
-    storageMocks.reconcileDueDateReminders.mockResolvedValue(undefined);
+    storageMocks.loadNotificationTime.mockResolvedValue('09:00');
+    reminderMocks.loadCloudReminders.mockResolvedValue([]);
     storageMocks.validateDebtInput.mockReturnValue(null);
   });
 
@@ -190,17 +196,18 @@ describe('Debt Firestore service', () => {
     firestoreMocks.listenerError?.(new Error('permission-denied'));
 
     expect(onError).toHaveBeenCalledWith(expect.objectContaining({ message: 'permission-denied' }));
-    expect(storageMocks.reconcileDueDateReminders).not.toHaveBeenCalled();
+    expect(reminderMocks.loadCloudReminders).not.toHaveBeenCalled();
   });
 
-  it('lists Cloud Debts and reconciles local due-date reminders from the Cloud snapshot', async () => {
+  it('reconciles due-date reminders through the trusted cloud command', async () => {
     firestoreMocks.getDocs.mockResolvedValueOnce({
       docs: [{ id: 'debt-A', data: () => serializeDebtDocument(debt, 'space-A', 'user-A') }],
     });
 
     await reconcileCloudDebtReminders('space-A', 'store-A');
 
-    expect(storageMocks.reconcileDueDateReminders).toHaveBeenCalledWith('store-A', [debt]);
+    expect(storageMocks.loadNotificationTime).toHaveBeenCalledOnce();
+    expect(reminderMocks.loadCloudReminders).toHaveBeenCalledWith('space-A', 'store-A', '09:00');
   });
 
 });
