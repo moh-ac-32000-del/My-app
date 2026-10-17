@@ -13,7 +13,7 @@ import type { DailyJournalEvent } from '@/services/storage';
 
 export default function CashScreen() {
   const colors = useColors();
-  const { profile } = useStore();
+  const { profile, activeSpaceId } = useStore();
   const { t, isRTL, language } = useI18n();
   const [journalRefreshKey, setJournalRefreshKey] = useState(0);
   const {
@@ -55,6 +55,7 @@ export default function CashScreen() {
         action={
           <DailyClosingAction
             storeId={profile.id}
+            spaceId={activeSpaceId}
             compact
             testID="close-day-button"
             onClosed={() => setJournalRefreshKey((value) => value + 1)}
