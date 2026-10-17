@@ -1,123 +1,32 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { normalizeAccent } from '@/constants/colors';
-import { normalizeLanguage, type Language } from '@/constants/i18n';
-import { CURRENCY_OPTIONS, isCurrencyCode, normalizeCurrency, normalizeQuickCurrencies, type CurrencyCode } from '@/constants/currencies';
+/** Pure business logic shared by Firebase-backed services and UI. No persistence lives here. */
+import { CURRENCY_OPTIONS, isCurrencyCode, normalizeCurrency, type CurrencyCode } from '@/constants/currencies';
+import type { Language } from '@/constants/i18n';
 import type {
   CashTransactionDraft,
   Customer,
-  DailyArchive,
   Debt,
   Payment,
   Reminder,
   ReminderStatus,
-  StoreProfile,
   Transaction,
 } from '@/types/business';
-
-const PROFILE_KEY = '@retail-business-manager/store-profile';
-const AUTH_KEY = '@retail-business-manager/authenticated';
-const LEGACY_LANGUAGE_KEY = '@retail-business-manager/language';
-const CUSTOMERS_KEY = '@retail-business-manager/customers';
-const TRANSACTIONS_KEY = '@retail-business-manager/transactions';
-const DEBTS_KEY = '@retail-business-manager/debts';
-const PAYMENTS_KEY = '@retail-business-manager/payments';
-const REMINDERS_KEY = '@retail-business-manager/reminders';
-const NOTIFICATION_TIME_KEY = '@retail-business-manager/notification-time';
-const ARCHIVE_KEY_PREFIX = '@retail-business-manager/daily-archive/';
-export const SPACE_STORAGE_PREFIX = '@retail-business-manager/spaces/';
-export const DEFAULT_NOTIFICATION_TIME = '09:00';
-const DUE_DATE_REMINDER_NOTE = 'system:due-date';
 
 let transactionSequence = 0;
 let debtSequence = 0;
 let paymentSequence = 0;
 let reminderSequence = 0;
-let settlementQueue: Promise<void> = Promise.resolve();
-let reminderReconciliationQueue: Promise<void> = Promise.resolve();
-let archiveClosingQueue: Promise<void> = Promise.resolve();
-let activeSpaceId: string | null = null;
 
-export function setActiveSpaceId(spaceId: string | null): void {
-  activeSpaceId = spaceId?.trim() || null;
-}
 
-export function getActiveSpaceId(): string | null {
-  return activeSpaceId;
-}
 
-export async function loadStoreProfile(): Promise<unknown | null> {
-  const storedProfile = await AsyncStorage.getItem(getStoreProfileKey());
-  if (!storedProfile) {
-    return null;
-  }
 
-  try {
-    return JSON.parse(storedProfile) as unknown;
-  } catch {
-    return null;
-  }
-}
 
-export async function saveStoreProfile(profile: StoreProfile): Promise<void> {
-  await AsyncStorage.setItem(getStoreProfileKey(), JSON.stringify(profile));
-}
 
-export function isValidNotificationTime(value: unknown): value is string {
-  if (typeof value !== 'string' || !/^\d{2}:\d{2}$/.test(value)) {
-    return false;
-  }
-  const [hours, minutes] = value.split(':').map(Number);
-  return hours >= 0 && hours <= 23 && minutes >= 0 && minutes <= 59;
-}
 
-export async function loadNotificationTime(): Promise<string> {
-  const storedTime = await AsyncStorage.getItem(getNotificationTimeKey());
-  return isValidNotificationTime(storedTime) ? storedTime : DEFAULT_NOTIFICATION_TIME;
-}
 
-export async function saveNotificationTime(_storeId: string, value: string): Promise<void> {
-  if (!isValidNotificationTime(value)) {
-    throw new Error('notificationTimeInvalid');
-  }
 
-  // This is a device-local presentation preference only. Cloud reminder
-  // reconciliation is performed by the trusted Firebase callable in the UI flow.
-  await AsyncStorage.setItem(getNotificationTimeKey(), value);
-}
 
-export async function loadAuthenticatedState(): Promise<boolean> {
-  return (await AsyncStorage.getItem(AUTH_KEY)) === 'true';
-}
 
-export async function saveAuthenticatedState(value: boolean): Promise<void> {
-  await AsyncStorage.setItem(AUTH_KEY, String(value));
-}
 
-export async function loadLegacyLanguage(): Promise<string | null> {
-  return AsyncStorage.getItem(LEGACY_LANGUAGE_KEY);
-}
-
-export async function clearLegacyLanguage(): Promise<void> {
-  await AsyncStorage.removeItem(LEGACY_LANGUAGE_KEY);
-}
-
-export async function loadCustomers(storeId: string): Promise<Customer[]> {
-  try {
-    return (await loadAllCustomers()).filter((customer) => customer.storeId === storeId);
-  } catch {
-    return [];
-  }
-}
-
-export async function saveCustomers(storeId: string, customers: Customer[]): Promise<void> {
-  if (customers.some((customer) => customer.storeId !== storeId)) {
-    throw new Error('All customers must belong to the active store');
-  }
-
-  const storedCustomers = await loadAllCustomers();
-  const otherStoreCustomers = storedCustomers.filter((customer) => customer.storeId !== storeId);
-  await AsyncStorage.setItem(getCustomersKey(), JSON.stringify([...otherStoreCustomers, ...customers]));
-}
 
 export function createTransactionId(): string {
   transactionSequence += 1;
@@ -198,30 +107,7 @@ export function calculateVisibleCurrencyBalances(
     .map((currency) => ({ currency, amount: totals[currency] }));
 }
 
-export async function loadTransactions(storeId: string): Promise<Transaction[]> {
-  try {
-    const transactions = await loadAllTransactions();
-    return transactions
-      .filter((transaction) => transaction.storeId === storeId)
-      .sort((first, second) => Date.parse(second.createdAt) - Date.parse(first.createdAt));
-  } catch {
-    return [];
-  }
-}
 
-export async function saveTransactions(storeId: string, transactions: Transaction[]): Promise<void> {
-  if (transactions.some((transaction) => transaction.storeId !== storeId || !isStoredTransaction(transaction))) {
-    throw new Error('All transactions must be valid and belong to the active store');
-  }
-
-  const stored = await readStoredTransactions();
-  if (stored.isCorrupted) {
-    throw new Error('Stored transaction data is corrupted');
-  }
-
-  const otherStoreTransactions = stored.transactions.filter((transaction) => transaction.storeId !== storeId);
-  await AsyncStorage.setItem(getTransactionsKey(), JSON.stringify([...otherStoreTransactions, ...transactions]));
-}
 
 export function createDebtId(): string {
   debtSequence += 1;
@@ -334,30 +220,7 @@ export function buildDailyJournalEvents(
   return events.sort((first, second) => Date.parse(second.occurredAt) - Date.parse(first.occurredAt));
 }
 
-export async function loadDailyJournalEvents(
-  storeId: string,
-  now: Date = new Date(),
-): Promise<DailyJournalEvent[]> {
-  const [transactions, debts, payments, customers, archives] = await Promise.all([
-    loadTransactions(storeId),
-    loadDebts(storeId),
-    loadPayments(storeId),
-    loadCustomers(storeId),
-    loadDailyArchives(storeId),
-  ]);
-  const archivedEventIds = new Set(
-    archives
-      .filter((archive) => archive.date === getLocalDateKey(now))
-      .flatMap((archive) => archive.snapshot.map((event) => event.id)),
-  );
-  return buildDailyJournalEvents(storeId, transactions, debts, payments, customers, now)
-    .filter((event) => !archivedEventIds.has(event.id));
-}
 
-export interface DailyArchiveCloseResult {
-  archive: DailyArchive;
-  created: boolean;
-}
 
 export function getLocalDateKey(date: Date = new Date()): string {
   const year = date.getFullYear();
@@ -366,157 +229,14 @@ export function getLocalDateKey(date: Date = new Date()): string {
   return `${year}-${month}-${day}`;
 }
 
-export function createDailyArchive(
-  storeId: string,
-  date: string,
-  snapshot: DailyJournalEvent[],
-  closedAt: string,
-  closingNumber = 1,
-): DailyArchive {
-  if (typeof storeId !== 'string' || storeId.trim().length === 0) {
-    throw new Error('storeIdRequired');
-  }
-  if (!isValidArchiveDate(date)) {
-    throw new Error('archiveDateInvalid');
-  }
-  if (!isValidDateString(closedAt)) {
-    throw new Error('closedAtInvalid');
-  }
-  if (!Number.isInteger(closingNumber) || closingNumber < 1) {
-    throw new Error('closingNumberInvalid');
-  }
 
-  return {
-    id: `archive:${encodeURIComponent(storeId.trim())}:${date}:${closingNumber}`,
-    storeId: storeId.trim(),
-    date,
-    closedAt,
-    closingNumber,
-    snapshot: snapshot.map((event) => ({ ...event })),
-  };
-}
 
-export async function closeDailyArchive(
-  storeId: string,
-  now: Date = new Date(),
-): Promise<DailyArchiveCloseResult> {
-  const operation = archiveClosingQueue
-    .catch(() => undefined)
-    .then(() => closeDailyArchiveNow(storeId, now));
-  archiveClosingQueue = operation.then(() => undefined, () => undefined);
-  return operation;
-}
 
-async function closeDailyArchiveNow(
-  storeId: string,
-  now: Date,
-): Promise<DailyArchiveCloseResult> {
-  const date = getLocalDateKey(now);
-  const snapshot = await loadDailyJournalEvents(storeId, now);
-  const existingArchives = await loadDailyArchives(storeId);
-  const sameDayArchives = existingArchives.filter((archive) => archive.date === date);
-  const closingNumber = sameDayArchives.reduce(
-    (highest, archive) => Math.max(highest, archive.closingNumber),
-    0,
-  ) + 1;
-  const archive = createDailyArchive(storeId, date, snapshot, now.toISOString(), closingNumber);
-  const key = getDailyArchiveStorageKey(storeId, date, closingNumber);
-  await AsyncStorage.setItem(key, JSON.stringify(archive));
-  return { archive, created: true };
-}
 
-export async function loadDailyArchives(storeId: string): Promise<DailyArchive[]> {
-  if (typeof storeId !== 'string' || storeId.trim().length === 0) {
-    return [];
-  }
 
-  try {
-    const keys = await AsyncStorage.getAllKeys();
-    const prefix = getDailyArchiveStoragePrefix(storeId);
-    const archiveKeys = keys.filter((key) => key.startsWith(prefix));
-    const archives = await Promise.all(archiveKeys.map(async (key) => {
-      const raw = await AsyncStorage.getItem(key);
-      return raw === null ? null : parseStoredDailyArchive(raw);
-    }));
-    return archives
-      .filter((archive): archive is DailyArchive => archive !== null && archive.storeId === storeId.trim())
-      .sort((first, second) => {
-        const dateOrder = second.date.localeCompare(first.date);
-        if (dateOrder !== 0) {
-          return dateOrder;
-        }
-        return first.closingNumber - second.closingNumber;
-      });
-  } catch {
-    return [];
-  }
-}
 
-export async function loadDailyArchive(storeId: string, date: string): Promise<DailyArchive | null> {
-  const archives = await loadDailyArchives(storeId);
-  return archives.find((archive) => archive.date === date) ?? null;
-}
 
-function getDailyArchiveStorageKey(storeId: string, date: string, closingNumber: number): string {
-  return `${getDailyArchiveStoragePrefix(storeId)}${date}:${String(closingNumber).padStart(6, '0')}`;
-}
 
-function isValidArchiveDate(value: string): boolean {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-    return false;
-  }
-  const [year, month, day] = value.split('-').map(Number);
-  const parsed = new Date(year, month - 1, day);
-  return parsed.getFullYear() === year && parsed.getMonth() === month - 1 && parsed.getDate() === day;
-}
-
-function parseStoredDailyArchive(raw: string): DailyArchive | null {
-  try {
-    const parsed = JSON.parse(raw) as unknown;
-    if (!isRecord(parsed) || typeof parsed.id !== 'string' || typeof parsed.storeId !== 'string' || typeof parsed.date !== 'string' || typeof parsed.closedAt !== 'string' || !Array.isArray(parsed.snapshot)) {
-      return null;
-    }
-    if (!isValidArchiveDate(parsed.date) || !isValidDateString(parsed.closedAt)) {
-      return null;
-    }
-    const closingNumber = parsed.closingNumber === undefined ? 1 : parsed.closingNumber;
-    if (typeof closingNumber !== 'number' || !Number.isInteger(closingNumber) || closingNumber < 1) {
-      return null;
-    }
-    const snapshot = parsed.snapshot.filter(isDailyJournalEvent);
-    if (snapshot.length !== parsed.snapshot.length) {
-      return null;
-    }
-    return {
-      id: parsed.id,
-      storeId: parsed.storeId,
-      date: parsed.date,
-      closedAt: parsed.closedAt,
-      closingNumber,
-      snapshot: snapshot.map((event) => ({ ...event })),
-    };
-  } catch {
-    return null;
-  }
-}
-
-function isDailyJournalEvent(value: unknown): value is DailyJournalEvent {
-  if (!isRecord(value)) {
-    return false;
-  }
-  return typeof value.id === 'string'
-    && typeof value.storeId === 'string'
-    && (value.type === 'cash_in' || value.type === 'cash_out' || value.type === 'debt' || value.type === 'settlement')
-    && typeof value.amount === 'number'
-    && Number.isFinite(value.amount)
-    && isCurrencyCode(value.currency)
-    && (value.customerId === undefined || typeof value.customerId === 'string')
-    && (value.customerName === undefined || typeof value.customerName === 'string')
-    && (value.note === undefined || typeof value.note === 'string')
-    && typeof value.occurredAt === 'string'
-    && isValidDateString(value.occurredAt)
-    && typeof value.sourceId === 'string';
-}
 
 export function parseLocalizedAmountInput(value: string, language: Language): number | null {
   const input = value.trim().replace(/[\s\u00A0\u202F]/g, '');
@@ -598,7 +318,7 @@ export function validateDebtInput(input: {
   }
   if (
     input.dueDate !== undefined
-    && (typeof input.dueDate !== 'string' || !isValidArchiveDate(input.dueDate))
+    && (typeof input.dueDate !== 'string' || !isValidDateOnly(input.dueDate))
   ) {
     return 'dueDateInvalid';
   }
@@ -647,31 +367,7 @@ export function filterDebtsByCustomer(debts: Debt[], customerId: string): Debt[]
   return debts.filter((debt) => debt.customerId === customerId);
 }
 
-export async function loadDebts(storeId: string): Promise<Debt[]> {
-  try {
-    const debts = await loadAllDebts();
-    return debts
-      .filter((debt) => debt.storeId === storeId)
-      .sort((first, second) => Date.parse(second.createdAt) - Date.parse(first.createdAt));
-  } catch {
-    return [];
-  }
-}
 
-export async function saveDebts(storeId: string, debts: Debt[]): Promise<void> {
-  if (debts.some((debt) => debt.storeId !== storeId || !isStoredDebt(debt))) {
-    throw new Error('All debts must be valid and belong to the active store');
-  }
-
-  const stored = await readStoredDebts();
-  if (stored.isCorrupted) {
-    throw new Error('Stored debt data is corrupted');
-  }
-
-  const otherStoreDebts = stored.debts.filter((debt) => debt.storeId !== storeId);
-  await AsyncStorage.setItem(getDebtsKey(), JSON.stringify([...otherStoreDebts, ...debts]));
-  await reconcileDueDateReminders(storeId, debts);
-}
 
 export function createReminderId(): string {
   reminderSequence += 1;
@@ -751,139 +447,10 @@ export function filterRemindersByDebt(reminders: Reminder[], debtId: string): Re
   return reminders.filter((reminder) => reminder.debtId === debtId);
 }
 
-export async function loadReminders(storeId: string): Promise<Reminder[]> {
-  try {
-    const reminders = await loadAllReminders();
-    return reminders
-      .filter((reminder) => reminder.storeId === storeId)
-      .sort((first, second) => Date.parse(second.createdAt) - Date.parse(first.createdAt));
-  } catch {
-    return [];
-  }
-}
 
-export async function saveReminders(storeId: string, reminders: Reminder[]): Promise<void> {
-  if (reminders.some((reminder) => reminder.storeId !== storeId || !isStoredReminder(reminder))) {
-    throw new Error('All reminders must be valid and belong to the active store');
-  }
 
-  const stored = await readStoredReminders();
-  if (stored.isCorrupted) {
-    throw new Error('Stored reminder data is corrupted');
-  }
 
-  const otherStoreReminders = stored.reminders.filter((reminder) => reminder.storeId !== storeId);
-  await AsyncStorage.setItem(getRemindersKey(), JSON.stringify([...otherStoreReminders, ...reminders]));
-}
 
-export function buildDueDateReminderRemindAt(debt: Debt, notificationTime: string): string | null {
-  if (
-    debt.amount <= 0
-    || debt.settledAt
-    || !debt.dueDate
-    || !isValidArchiveDate(debt.dueDate)
-    || !isValidNotificationTime(notificationTime)
-  ) {
-    return null;
-  }
-
-  const [year, month, day] = debt.dueDate.split('-').map(Number);
-  const [hours, minutes] = notificationTime.split(':').map(Number);
-  const localDate = new Date(year, month - 1, day, hours, minutes, 0, 0);
-  if (
-    localDate.getFullYear() !== year
-    || localDate.getMonth() !== month - 1
-    || localDate.getDate() !== day
-    || localDate.getHours() !== hours
-    || localDate.getMinutes() !== minutes
-  ) {
-    return null;
-  }
-
-  return `${debt.dueDate}T${notificationTime}:00`;
-}
-
-export function reconcileDueDateReminders(
-  storeId: string,
-  debts: Debt[],
-  notificationTime?: string,
-): Promise<void> {
-  const operation = reminderReconciliationQueue
-    .catch(() => undefined)
-    .then(async () => {
-      const time = notificationTime ?? await loadNotificationTime();
-      await reconcileDueDateRemindersNow(storeId, debts, time);
-    });
-  reminderReconciliationQueue = operation.then(() => undefined, () => undefined);
-  return operation;
-}
-
-async function reconcileDueDateRemindersNow(
-  storeId: string,
-  debts: Debt[],
-  notificationTime: string,
-): Promise<void> {
-  if (!isValidNotificationTime(notificationTime)) {
-    throw new Error('notificationTimeInvalid');
-  }
-
-  const stored = await readStoredReminders();
-  if (stored.isCorrupted) {
-    throw new Error('Stored reminder data is corrupted');
-  }
-
-  const currentStoreReminders = stored.reminders.filter((reminder) => reminder.storeId === storeId);
-  const debtsById = new Map(debts.filter((debt) => debt.storeId === storeId).map((debt) => [debt.id, debt]));
-  const desiredRemindAt = new Map(
-    [...debtsById.values()]
-      .map((debt) => [debt.id, buildDueDateReminderRemindAt(debt, notificationTime)] as const)
-      .filter((entry): entry is readonly [string, string] => entry[1] !== null),
-  );
-  const scheduledKeys = new Set<string>();
-  const retained: Reminder[] = [];
-  const keptPendingKeys = new Set<string>();
-  let changed = false;
-
-  for (const reminder of currentStoreReminders) {
-    if (reminder.note !== DUE_DATE_REMINDER_NOTE) {
-      retained.push(reminder);
-      continue;
-    }
-
-    const desired = desiredRemindAt.get(reminder.debtId);
-    const scheduleKey = `${reminder.debtId}:${reminder.remindAt}`;
-    if (reminder.status !== 'pending') {
-      retained.push(reminder);
-      scheduledKeys.add(scheduleKey);
-      continue;
-    }
-
-    if (desired && reminder.remindAt === desired && !keptPendingKeys.has(scheduleKey)) {
-      retained.push(reminder);
-      keptPendingKeys.add(scheduleKey);
-      scheduledKeys.add(scheduleKey);
-    } else {
-      changed = true;
-    }
-  }
-
-  for (const [debtId, remindAt] of desiredRemindAt) {
-    const scheduleKey = `${debtId}:${remindAt}`;
-    if (scheduledKeys.has(scheduleKey)) {
-      continue;
-    }
-    retained.push(createReminder(storeId, debtId, {
-      remindAt,
-      note: DUE_DATE_REMINDER_NOTE,
-    }));
-    scheduledKeys.add(scheduleKey);
-    changed = true;
-  }
-
-  if (changed) {
-    await saveReminders(storeId, retained);
-  }
-}
 
 export function createPaymentId(): string {
   paymentSequence += 1;
@@ -966,157 +533,21 @@ export function filterPaymentsByCustomer(payments: Payment[], customerId: string
   return payments.filter((payment) => payment.customerId === customerId);
 }
 
-export async function loadPayments(storeId: string): Promise<Payment[]> {
-  try {
-    const payments = await loadAllPayments();
-    return payments
-      .filter((payment) => payment.storeId === storeId)
-      .sort((first, second) => Date.parse(second.paidAt) - Date.parse(first.paidAt));
-  } catch {
-    return [];
-  }
-}
 
-export async function savePayments(storeId: string, payments: Payment[]): Promise<void> {
-  if (payments.some((payment) => payment.storeId !== storeId || !isStoredPayment(payment))) {
-    throw new Error('All payments must be valid and belong to the active store');
-  }
 
-  const stored = await readStoredPayments();
-  if (stored.isCorrupted) {
-    throw new Error('Stored payment data is corrupted');
-  }
 
-  const otherStorePayments = stored.payments.filter((payment) => payment.storeId !== storeId);
-  await AsyncStorage.setItem(getPaymentsKey(), JSON.stringify([...otherStorePayments, ...payments]));
-}
-
-export function settleCustomerDebt(
-  storeId: string,
-  customerId: string,
-  draft: SettlementDraft,
-  now: string = new Date().toISOString(),
-): Promise<SettlementResult> {
-  const operation = settlementQueue
-    .catch(() => undefined)
-    .then(() => settleCustomerDebtNow(storeId, customerId, draft, now));
-  settlementQueue = operation.then(() => undefined, () => undefined);
-  return operation;
-}
-
-async function settleCustomerDebtNow(
-  storeId: string,
-  customerId: string,
-  draft: SettlementDraft,
-  now: string,
-): Promise<SettlementResult> {
-  if (typeof storeId !== 'string' || storeId.trim().length === 0) {
-    throw new Error('storeIdRequired');
-  }
-  if (typeof customerId !== 'string' || customerId.trim().length === 0) {
-    throw new Error('customerIdRequired');
-  }
-  if (typeof draft.amount !== 'number' || !Number.isFinite(draft.amount) || draft.amount <= 0) {
-    throw new Error('settlementAmountInvalid');
-  }
-  if (!isCurrencyCode(draft.currency)) {
-    throw new Error('currencyInvalid');
-  }
-
-  const [debtsStored, transactionsStored, paymentsStored] = await Promise.all([
-    readStoredDebts(),
-    readStoredTransactions(),
-    readStoredPayments(),
-  ]);
-  if (debtsStored.isCorrupted || transactionsStored.isCorrupted || paymentsStored.isCorrupted) {
-    throw new Error('storedSettlementDataCorrupted');
-  }
-
-  const currentDebts = debtsStored.debts.filter((debt) => debt.storeId === storeId);
-  const customerDebts = currentDebts.filter((debt) => debt.customerId === customerId);
-  const remaining = calculateDebtTotals(customerDebts)[draft.currency];
-  if (draft.amount > remaining) {
-    throw new Error('settlementExceedsDebt');
-  }
-
-  let amountToApply = draft.amount;
-  const nextDebts = debtsStored.debts.map((debt) => {
-    if (debt.storeId !== storeId || debt.customerId !== customerId || debt.currency !== draft.currency || debt.amount <= 0 || amountToApply <= 0) {
-      return debt;
-    }
-
-    const originalAmount = debt.originalAmount ?? debt.amount;
-    const applied = Math.min(debt.amount, amountToApply);
-    amountToApply -= applied;
-    const nextAmount = debt.amount - applied;
-    return {
-      ...debt,
-      amount: nextAmount,
-      ...(nextAmount === 0 ? { originalAmount, settledAt: now } : { originalAmount }),
-      updatedAt: now,
-    };
-  });
-
-  if (amountToApply !== 0) {
-    throw new Error('settlementExceedsDebt');
-  }
-
-  const transaction = createCashTransaction(storeId, {
-    type: 'cash_in',
-    amount: draft.amount,
-    currency: draft.currency,
-    note: `payment_${customerId}`,
-  }, now);
-  const payment = createPayment(storeId, customerId, {
-    amount: draft.amount,
-    currency: draft.currency,
-    transactionId: transaction.id,
-  }, now);
-  const currentTransactions = transactionsStored.transactions.filter((transactionItem) => transactionItem.storeId === storeId);
-  const currentPayments = paymentsStored.payments.filter((paymentItem) => paymentItem.storeId === storeId);
-  const nextTransactions = [...currentTransactions, transaction];
-  const nextPayments = [...currentPayments, payment];
-  const snapshots = await Promise.all([
-    AsyncStorage.getItem(getDebtsKey()),
-    AsyncStorage.getItem(getTransactionsKey()),
-    AsyncStorage.getItem(getPaymentsKey()),
-    AsyncStorage.getItem(getRemindersKey()),
-  ]);
-
-  try {
-    await saveDebts(storeId, nextDebts.filter((debt) => debt.storeId === storeId));
-    await saveTransactions(storeId, nextTransactions);
-    await savePayments(storeId, nextPayments);
-  } catch (error) {
-    await restoreStorageValue(getDebtsKey(), snapshots[0]);
-    await restoreStorageValue(getTransactionsKey(), snapshots[1]);
-    await restoreStorageValue(getPaymentsKey(), snapshots[2]);
-    await restoreStorageValue(getRemindersKey(), snapshots[3]);
-    throw error;
-  }
-
-  return {
-    debts: nextDebts.filter((debt) => debt.storeId === storeId).sort((first, second) => Date.parse(second.createdAt) - Date.parse(first.createdAt)),
-    payments: nextPayments.sort((first, second) => Date.parse(second.paidAt) - Date.parse(first.paidAt)),
-    transaction,
-    payment,
-  };
-}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function readString(record: Record<string, unknown>, key: string, fallback: string): string {
-  return typeof record[key] === 'string' ? record[key] : fallback;
-}
 
-function readOptionalString(record: Record<string, unknown>, key: string): string | undefined {
-  if (typeof record[key] !== 'string') {
-    return undefined;
-  }
-  const value = record[key].trim();
-  return value || undefined;
+
+function isValidDateOnly(value: unknown): value is string {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const [year, month, day] = value.split('-').map(Number);
+  const date = new Date(year, month - 1, day);
+  return date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day;
 }
 
 function isValidDateString(value: unknown): value is string {
@@ -1153,461 +584,36 @@ function isSameLocalDay(value: string, now: Date): boolean {
     && date.getDate() === now.getDate();
 }
 
-async function loadAllCustomers(): Promise<Customer[]> {
-  const storedCustomers = await AsyncStorage.getItem(getCustomersKey());
-  if (!storedCustomers) {
-    return [];
-  }
-
-  const parsed = JSON.parse(storedCustomers) as unknown;
-  if (!Array.isArray(parsed)) {
-    return [];
-  }
-
-  return parsed
-    .map(normalizeStoredCustomer)
-    .filter((customer): customer is Customer => customer !== null);
-}
-
-async function loadAllTransactions(): Promise<Transaction[]> {
-  return (await readStoredTransactions()).transactions;
-}
-
-async function loadAllDebts(): Promise<Debt[]> {
-  return (await readStoredDebts()).debts;
-}
-
-async function loadAllReminders(): Promise<Reminder[]> {
-  return (await readStoredReminders()).reminders;
-}
-
-async function loadAllPayments(): Promise<Payment[]> {
-  return (await readStoredPayments()).payments;
-}
-
-async function readStoredTransactions(): Promise<{ transactions: Transaction[]; isCorrupted: boolean }> {
-  const storedTransactions = await AsyncStorage.getItem(getTransactionsKey());
-  if (!storedTransactions) {
-    return { transactions: [], isCorrupted: false };
-  }
-
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(storedTransactions) as unknown;
-  } catch {
-    return { transactions: [], isCorrupted: true };
-  }
-
-  if (!Array.isArray(parsed)) {
-    return { transactions: [], isCorrupted: true };
-  }
-
-  return {
-    transactions: parsed
-      .map(normalizeStoredTransaction)
-      .filter((transaction): transaction is Transaction => transaction !== null),
-    isCorrupted: false,
-  };
-}
-
-function isStoredTransaction(value: unknown): value is Transaction {
-  return normalizeStoredTransaction(value) !== null;
-}
-
-function isStoredDebt(value: unknown): value is Debt {
-  return normalizeStoredDebt(value) !== null;
-}
-
-function isStoredReminder(value: unknown): value is Reminder {
-  return normalizeStoredReminder(value) !== null;
-}
-
-function normalizeStoredTransaction(value: unknown): Transaction | null {
-  if (!isRecord(value)) {
-    return null;
-  }
-
-  const id = readOptionalString(value, 'id');
-  const storeId = readOptionalString(value, 'storeId');
-  const type = value.type;
-  const amount = value.amount;
-  const currency = value.currency;
-  const createdAt = value.createdAt;
-  const updatedAt = value.updatedAt;
-
-  if (
-    !id ||
-    !storeId ||
-    (type !== 'cash_in' && type !== 'cash_out') ||
-    typeof amount !== 'number' ||
-    !Number.isFinite(amount) ||
-    amount <= 0 ||
-    !isCurrencyCode(currency) ||
-    !isValidDateString(createdAt) ||
-    !isValidDateString(updatedAt)
-  ) {
-    return null;
-  }
-
-  const note = readOptionalString(value, 'note');
-  return {
-    id,
-    storeId,
-    type,
-    amount,
-    currency,
-    ...(note ? { note } : {}),
-    createdAt,
-    updatedAt,
-  };
-}
-
-async function readStoredDebts(): Promise<{ debts: Debt[]; isCorrupted: boolean }> {
-  const storedDebts = await AsyncStorage.getItem(getDebtsKey());
-  if (!storedDebts) {
-    return { debts: [], isCorrupted: false };
-  }
-
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(storedDebts) as unknown;
-  } catch {
-    return { debts: [], isCorrupted: true };
-  }
-
-  if (!Array.isArray(parsed)) {
-    return { debts: [], isCorrupted: true };
-  }
-
-  return {
-    debts: parsed
-      .map(normalizeStoredDebt)
-      .filter((debt): debt is Debt => debt !== null),
-    isCorrupted: false,
-  };
-}
-
-async function readStoredReminders(): Promise<{ reminders: Reminder[]; isCorrupted: boolean }> {
-  const storedReminders = await AsyncStorage.getItem(getRemindersKey());
-  if (!storedReminders) {
-    return { reminders: [], isCorrupted: false };
-  }
-
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(storedReminders) as unknown;
-  } catch {
-    return { reminders: [], isCorrupted: true };
-  }
-
-  if (!Array.isArray(parsed)) {
-    return { reminders: [], isCorrupted: true };
-  }
-
-  return {
-    reminders: parsed
-      .map(normalizeStoredReminder)
-      .filter((reminder): reminder is Reminder => reminder !== null),
-    isCorrupted: false,
-  };
-}
-
-function normalizeStoredDebt(value: unknown): Debt | null {
-  if (!isRecord(value)) {
-    return null;
-  }
-
-  const debt = {
-    id: readOptionalString(value, 'id'),
-    storeId: readOptionalString(value, 'storeId'),
-    customerId: readOptionalString(value, 'customerId'),
-    currency: value.currency,
-    amount: value.amount,
-    createdAt: value.createdAt,
-    updatedAt: value.updatedAt,
-    dueDate: value.dueDate,
-    originalAmount: value.originalAmount,
-    settledAt: value.settledAt,
-  };
-
-  if (validateDebtInput(debt)) {
-    return null;
-  }
-
-  return {
-    id: debt.id as string,
-    storeId: debt.storeId as string,
-    customerId: debt.customerId as string,
-    currency: debt.currency as CurrencyCode,
-    amount: debt.amount as number,
-    ...(typeof debt.dueDate === 'string' ? { dueDate: debt.dueDate } : {}),
-    ...(typeof debt.originalAmount === 'number' ? { originalAmount: debt.originalAmount } : {}),
-    ...(typeof debt.settledAt === 'string' ? { settledAt: debt.settledAt } : {}),
-    createdAt: debt.createdAt as string,
-    updatedAt: debt.updatedAt as string,
-  };
-}
-
-function normalizeStoredReminder(value: unknown): Reminder | null {
-  if (!isRecord(value)) {
-    return null;
-  }
-
-  const reminder = {
-    id: readOptionalString(value, 'id'),
-    storeId: readOptionalString(value, 'storeId'),
-    debtId: readOptionalString(value, 'debtId'),
-    remindAt: value.remindAt,
-    status: value.status,
-    note: readOptionalString(value, 'note'),
-    completedAt: value.completedAt,
-    createdAt: value.createdAt,
-    updatedAt: value.updatedAt,
-  };
-
-  if (validateReminderInput(reminder)) {
-    return null;
-  }
-
-  return {
-    id: reminder.id as string,
-    storeId: reminder.storeId as string,
-    debtId: reminder.debtId as string,
-    remindAt: reminder.remindAt as string,
-    status: reminder.status as ReminderStatus,
-    ...(reminder.note ? { note: reminder.note } : {}),
-    ...(typeof reminder.completedAt === 'string' ? { completedAt: reminder.completedAt } : {}),
-    createdAt: reminder.createdAt as string,
-    updatedAt: reminder.updatedAt as string,
-  };
-}
-
-async function readStoredPayments(): Promise<{ payments: Payment[]; isCorrupted: boolean }> {
-  const storedPayments = await AsyncStorage.getItem(getPaymentsKey());
-  if (!storedPayments) {
-    return { payments: [], isCorrupted: false };
-  }
-
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(storedPayments) as unknown;
-  } catch {
-    return { payments: [], isCorrupted: true };
-  }
-
-  if (!Array.isArray(parsed)) {
-    return { payments: [], isCorrupted: true };
-  }
-
-  return {
-    payments: parsed
-      .map(normalizeStoredPayment)
-      .filter((payment): payment is Payment => payment !== null),
-    isCorrupted: false,
-  };
-}
-
-function isStoredPayment(value: unknown): value is Payment {
-  return normalizeStoredPayment(value) !== null;
-}
-
-function normalizeStoredPayment(value: unknown): Payment | null {
-  if (!isRecord(value)) {
-    return null;
-  }
-
-  const payment = {
-    id: readOptionalString(value, 'id'),
-    storeId: readOptionalString(value, 'storeId'),
-    amount: value.amount,
-    direction: value.direction,
-    method: value.method,
-    customerId: readOptionalString(value, 'customerId'),
-    transactionId: readOptionalString(value, 'transactionId'),
-    paidAt: value.paidAt,
-    createdAt: value.createdAt,
-    updatedAt: value.updatedAt,
-    note: readOptionalString(value, 'note'),
-  };
-
-  if (validatePaymentInput(payment)) {
-    return null;
-  }
-
-  const amount = payment.amount as { amount: number; currency: CurrencyCode };
-  return {
-    id: payment.id as string,
-    storeId: payment.storeId as string,
-    amount: { amount: amount.amount, currency: amount.currency },
-    direction: payment.direction as Payment['direction'],
-    method: payment.method as Payment['method'],
-    ...(payment.customerId ? { customerId: payment.customerId } : {}),
-    ...(payment.transactionId ? { transactionId: payment.transactionId } : {}),
-    paidAt: payment.paidAt as string,
-    ...(payment.note ? { note: payment.note } : {}),
-    createdAt: payment.createdAt as string,
-    updatedAt: payment.updatedAt as string,
-  };
-}
-
-async function restoreStorageValue(key: string, value: string | null): Promise<void> {
-  if (value === null) {
-    await AsyncStorage.removeItem(key);
-  } else {
-    await AsyncStorage.setItem(key, value);
-  }
-}
-
-function normalizeStoredCustomer(value: unknown): Customer | null {
-  if (!isRecord(value)) {
-    return null;
-  }
-
-  const id = readOptionalString(value, 'id');
-  const savedStoreId = readOptionalString(value, 'storeId');
-  const name = readOptionalString(value, 'name');
-  const createdAt = value.createdAt;
-  const updatedAt = value.updatedAt;
-
-  if (!id || !savedStoreId || !name || !isValidDateString(createdAt) || !isValidDateString(updatedAt)) {
-    return null;
-  }
-
-  return {
-    id,
-    storeId: savedStoreId,
-    name,
-    phone: readOptionalString(value, 'phone'),
-    address: readOptionalString(value, 'address'),
-    notes: readOptionalString(value, 'notes'),
-    createdAt,
-    updatedAt,
-    isActive: typeof value.isActive === 'boolean' ? value.isActive : true,
-  };
-}
-
-export function normalizeStoredStoreProfile(
-  value: unknown,
-  fallback: StoreProfile,
-  legacyLanguage?: unknown,
-): StoreProfile {
-  if (!isRecord(value)) {
-    return { ...fallback, language: normalizeLanguage(legacyLanguage ?? fallback.language) };
-  }
-
-  const currency = normalizeCurrency(value.currency, fallback.currency);
-  const savedName = readString(value, 'name', fallback.name);
-  const name = ['متجري', 'My store', 'Mağazam'].includes(savedName) ? '' : savedName;
-  const logoUri = typeof value.logoUri === 'string' ? value.logoUri : fallback.logoUri;
-
-  return {
-    ...fallback,
-    id: readString(value, 'id', fallback.id) || fallback.id,
-    name,
-    phone: readString(value, 'phone', fallback.phone),
-    address: readString(value, 'address', fallback.address),
-    currency,
-    quickCurrencies: normalizeQuickCurrencies(value.quickCurrencies, [currency]),
-    visibleCurrencies: normalizeQuickCurrencies(value.visibleCurrencies, [currency]),
-    language: normalizeLanguage(value.language ?? legacyLanguage ?? fallback.language),
-    accent: normalizeAccent(value.accent ?? fallback.accent),
-    ...(logoUri === undefined ? {} : { logoUri }),
-  };
-}
-
-interface StoredArrayResult<T> {
-  values: T[];
-  isCorrupted: boolean;
-}
-
-
-async function readStoredArray<T>(
-  key: string,
-  normalize: (value: unknown) => T | null,
-): Promise<StoredArrayResult<T>> {
-  const raw = await AsyncStorage.getItem(key);
-  if (raw === null) {
-    return { values: [], isCorrupted: false };
-  }
-
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw) as unknown;
-  } catch {
-    return { values: [], isCorrupted: true };
-  }
-  if (!Array.isArray(parsed)) {
-    return { values: [], isCorrupted: true };
-  }
-
-  const normalized = parsed.map(normalize);
-  return {
-    values: normalized.filter((value): value is T => value !== null),
-    isCorrupted: normalized.some((value) => value === null),
-  };
-}
-
-async function readStoredArchives(storeId: string): Promise<StoredArrayResult<DailyArchive>> {
-  const keys = await AsyncStorage.getAllKeys();
-  const prefix = getDailyArchiveStoragePrefix(storeId);
-  const archiveKeys = keys.filter((key) => key.startsWith(prefix));
-  const values: DailyArchive[] = [];
-  let isCorrupted = false;
-
-  for (const key of archiveKeys) {
-    const raw = await AsyncStorage.getItem(key);
-    const archive = raw === null ? null : parseStoredDailyArchive(raw);
-    if (archive === null || archive.storeId !== storeId) {
-      isCorrupted = true;
-      continue;
-    }
-    values.push(archive);
-  }
-
-  return { values, isCorrupted };
-}
-
-function getDailyArchiveStoragePrefix(storeId: string): string {
-  const archivePrefix = activeSpaceId
-    ? `${getSpaceStoragePrefix(activeSpaceId)}daily-archive/`
-    : ARCHIVE_KEY_PREFIX;
-  return `${archivePrefix}${encodeURIComponent(storeId.trim())}:`;
-}
-
-function getStoreProfileKey(): string {
-  return getSpaceStorageKey(PROFILE_KEY, 'store-profile');
-}
-
-function getCustomersKey(): string {
-  return getSpaceStorageKey(CUSTOMERS_KEY, 'customers');
-}
-
-function getTransactionsKey(): string {
-  return getSpaceStorageKey(TRANSACTIONS_KEY, 'transactions');
-}
-
-function getDebtsKey(): string {
-  return getSpaceStorageKey(DEBTS_KEY, 'debts');
-}
-
-function getPaymentsKey(): string {
-  return getSpaceStorageKey(PAYMENTS_KEY, 'payments');
-}
-
-function getRemindersKey(): string {
-  return getSpaceStorageKey(REMINDERS_KEY, 'reminders');
-}
-
-function getNotificationTimeKey(): string {
-  return getSpaceStorageKey(NOTIFICATION_TIME_KEY, 'notification-time');
-}
-
-function getSpaceStorageKey(legacyKey: string, dataName: string): string {
-  return activeSpaceId
-    ? `${getSpaceStoragePrefix(activeSpaceId)}${dataName}`
-    : legacyKey;
-}
-
-function getSpaceStoragePrefix(spaceId: string): string {
-  return `${SPACE_STORAGE_PREFIX}${encodeURIComponent(spaceId)}/`;
-}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

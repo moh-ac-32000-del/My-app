@@ -11,7 +11,7 @@ import {
   workspaceBusinessCollectionPath,
   workspaceBusinessDocumentPath,
 } from '@/data/firestoreWorkspace';
-import { loadNotificationTime } from '@/services/storage';
+import { loadNotificationTime } from '@/services/preferences';
 import { loadCloudReminders } from '@/services/cloudReminders';
 import { validateDebtInput } from '@/services/storage';
 import type { Debt } from '@/types/business';
