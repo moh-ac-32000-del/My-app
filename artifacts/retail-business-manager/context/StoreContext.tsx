@@ -63,7 +63,6 @@ interface StoreContextValue {
   saveProfile: (updates: Partial<StoreProfile>) => Promise<void>;
   toggleQuickCurrency: (code: CurrencyCode) => Promise<void>;
   signOut: () => Promise<void>;
-  restoreFromLocalBackup: (contents: string) => Promise<never>;
 }
 
 const StoreContext = createContext<StoreContextValue | null>(null);
@@ -522,10 +521,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return result;
   };
 
-  const restoreFromLocalBackup = async (_contents: string): Promise<never> => {
-    throw new Error('cloudBackupRestoreUnavailable');
-  };
-
   const signOut = async () => {
     if (!isFirebaseConfigured) throw new Error('firebaseNotConfigured');
     await signOutFromFirebase();
@@ -560,7 +555,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       saveProfile,
       toggleQuickCurrency,
       signOut,
-      restoreFromLocalBackup,
     }),
     [
       activeSpaceError,
