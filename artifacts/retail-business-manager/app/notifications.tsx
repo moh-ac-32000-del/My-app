@@ -9,7 +9,7 @@ import { useColors } from '@/hooks/useColors';
 import { useI18n } from '@/hooks/useI18n';
 import { formatLocalizedDateTime } from '@/constants/i18n';
 import { formatMoney } from '@/constants/currencies';
-import { loadCloudReminders, updateCloudReminderStatus } from '@/services/cloudReminders';
+import { deleteCloudReminder, loadCloudReminders, updateCloudReminderStatus } from '@/services/cloudReminders';
 import { buildFollowUpSummary } from '@/services/followUpSummary';
 import { FollowUpOverview } from '@/components/FollowUpOverview';
 import { getFirebaseAuth, isFirebaseConfigured } from '@/services/firebase';
@@ -30,6 +30,7 @@ export default function NotificationsScreen() {
   const [refresh, setRefresh] = useState(0);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [actionError, setActionError] = useState(false);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
   const busy = useRef(false);
   const currentScope = useRef('');
   const actorUid = isFirebaseConfigured && isAuthenticated ? getFirebaseAuth().currentUser?.uid : null;
@@ -41,6 +42,7 @@ export default function NotificationsScreen() {
     setError(false);
     setLoading(true);
     setActionError(false);
+    setDeleteId(null);
     if (isReady && !isAuthenticated) {
       router.replace('/login');
       return () => { active = false; };
@@ -66,7 +68,7 @@ export default function NotificationsScreen() {
   const align = { textAlign: isRTL ? 'right' as const : 'left' as const };
   const summary = activeSpaceId && debtSpaceId === activeSpaceId && !loading && !error
     ? buildFollowUpSummary(debts, reminders, activeSpaceId, profile.id, new Date()) : null;
-  const mark = async (reminder: Reminder, status: 'completed' | 'dismissed') => {
+  const mark = async (reminder: Reminder, status: 'completed' | 'dismissed' | 'delete') => {
     if (busy.current || loading || error || !isAuthenticated || !activeSpaceId || debtSpaceId !== activeSpaceId) return;
     const scope = `${actorUid}/${activeSpaceId}/${profile.id}`;
     if (!actorUid || currentScope.current !== scope) return;
@@ -76,8 +78,10 @@ export default function NotificationsScreen() {
     try {
       const time = await loadNotificationTime();
       if (currentScope.current !== scope) return;
-      const records = await updateCloudReminderStatus(activeSpaceId, profile.id, reminder.id, status, time);
-      if (currentScope.current === scope) setReminders(records);
+      const records = status === 'delete'
+        ? await deleteCloudReminder(activeSpaceId, profile.id, reminder.id, time)
+        : await updateCloudReminderStatus(activeSpaceId, profile.id, reminder.id, status, time);
+      if (currentScope.current === scope) { setReminders(records); setDeleteId(null); }
     } catch { if (currentScope.current === scope) setActionError(true); }
     finally { busy.current = false; setBusyId(null); }
   };
@@ -119,6 +123,17 @@ export default function NotificationsScreen() {
                         <Text style={[styles.title, { color: colors.mutedForeground }]}>{t('followUpDismiss')}</Text>
                       </Pressable>
                     </View> : null}
+                    {deleteId === reminder.id ? <View testID={`confirm-delete-${reminder.id}`} style={[styles.card, { borderWidth: 1, borderColor: colors.destructive, borderRadius: 14, padding: 12 }]}>
+                      <Text style={[styles.text, align, { color: colors.foreground }]}>{t('reminderDeleteHint')}</Text>
+                      <View style={[styles.actions, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
+                        <Pressable accessibilityRole="button" disabled={busyId !== null} onPress={() => void mark(reminder, 'delete')} style={styles.statusAction}>
+                          <Text style={[styles.title, { color: colors.destructive }]}>{busyId === reminder.id ? t('followUpSaving') : t('reminderDeleteConfirm')}</Text>
+                        </Pressable>
+                        <Pressable accessibilityRole="button" disabled={busyId !== null} onPress={() => setDeleteId(null)} style={styles.statusAction}><Text style={[styles.title, { color: colors.mutedForeground }]}>{t('cancel')}</Text></Pressable>
+                      </View>
+                    </View> : <Pressable accessibilityRole="button" disabled={busyId !== null} onPress={() => setDeleteId(reminder.id)} style={styles.action}>
+                      <Text style={[styles.text, align, { color: colors.destructive }]}>{t('reminderDelete')}</Text>
+                    </Pressable>}
                     {debt && customer ? <Pressable accessibilityRole="button" onPress={() => router.push({ pathname: '/customer/[id]', params: { id: debt.customerId } })} style={styles.action}>
                       <Text style={[styles.title, align, { color: colors.primary }]}>{t('notificationCenterOpenCustomer')}</Text>
                     </Pressable> : null}
