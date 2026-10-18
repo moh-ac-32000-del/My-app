@@ -23,6 +23,10 @@ function eventLabel(event: DailyJournalEvent, t: Translate): string {
     : `${t('settlementFrom')} ${customerName}`;
 }
 
+function eventIcon(event: DailyJournalEvent): string {
+  return { cash_in: '📥', cash_out: '📤', debt: '📝', settlement: '✅' }[event.type];
+}
+
 export function buildArchiveShareMessage(
   archive: DailyArchive,
   storeName: string,
@@ -36,16 +40,18 @@ export function buildArchiveShareMessage(
     `📅 ${t('archiveDate')}: ${formatLocalizedDate(parseArchiveDate(archive.date), language)}`,
     `🔒 ${t('closeDay')} #${archive.closingNumber}`,
     `🕒 ${t('archiveClosedAt')}: ${formatLocalizedDateTime(new Date(archive.closedAt), language)}`,
+    `ℹ️ ${t('shareSelectedClosingOnly')}`,
     '',
     `🧾 ${t('archiveEvents')}:`,
   ];
 
   archive.snapshot.forEach((event, index) => {
     lines.push(
-      `${index + 1}. ${t('archiveOperation')}: ${eventLabel(event, t)}`,
-      `   ${formatMoney(event.amount, event.currency, language)} (${event.currency})`,
-      `   ${formatLocalizedDateTime(new Date(event.occurredAt), language)}`,
-      ...(event.note ? [`   ${t('optionalNote')}: ${event.note}`] : []),
+      `${index + 1}. ${eventIcon(event)} ${eventLabel(event, t)}`,
+      `   💵 ${formatMoney(event.amount, event.currency, language)} (${event.currency})`,
+      `   🕒 ${formatLocalizedDateTime(new Date(event.occurredAt), language)}`,
+      ...(event.note ? [`   🗒️ ${t('optionalNote')}: ${event.note}`] : []),
+      '',
     );
   });
 
