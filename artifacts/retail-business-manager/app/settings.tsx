@@ -6,7 +6,8 @@ import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import { AppShell, GlassCard, PageHeader, SectionTitle } from '@/components/AppShell';
 import { useStore } from '@/context/StoreContext';
-import { isFirebaseConfigured } from '@/services/firebase';
+import { getFirebaseAuth, isFirebaseConfigured } from '@/services/firebase';
+import { FollowUpSettings } from '@/components/FollowUpSettings';
 import { useColors } from '@/hooks/useColors';
 import { languageOptions, type Language } from '@/constants/i18n';
 import { accentOptions, type AccentColor } from '@/constants/colors';
@@ -55,8 +56,10 @@ export default function SettingsScreen() {
     toggleQuickCurrency,
     signOut,
     isReady,
+    isAuthenticated,
   } = useStore();
   const { t, isRTL, language, setLanguage } = useI18n();
+  const followUpUid = isFirebaseConfigured && isAuthenticated ? getFirebaseAuth().currentUser?.uid : null;
   const [name, setName] = useState<string>('');
   const [phone, setPhone] = useState<string>('');
   const [address, setAddress] = useState<string>('');
@@ -376,6 +379,8 @@ export default function SettingsScreen() {
           />
         ) : null}
       </GlassCard>
+
+      <FollowUpSettings scope={followUpUid && activeSpaceId ? { uid: followUpUid, spaceId: activeSpaceId, storeId: profile.id } : null} />
 
       <GlassCard style={[styles.cloudCard, { borderColor: colors.primary, flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
         <View style={[styles.cloudIcon, { backgroundColor: colors.accent }]}><Ionicons name="cloud-done-outline" size={22} color={colors.primary} /></View>
