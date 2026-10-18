@@ -68,7 +68,7 @@ export default function NotificationsScreen() {
   const align = { textAlign: isRTL ? 'right' as const : 'left' as const };
   const summary = activeSpaceId && debtSpaceId === activeSpaceId && !loading && !error
     ? buildFollowUpSummary(debts, reminders, activeSpaceId, profile.id, new Date()) : null;
-  const mark = async (reminder: Reminder, status: 'completed' | 'dismissed' | 'delete') => {
+  const mark = async (reminder: Reminder, status: 'completed' | 'delete') => {
     if (busy.current || loading || error || !isAuthenticated || !activeSpaceId || debtSpaceId !== activeSpaceId) return;
     const scope = `${actorUid}/${activeSpaceId}/${profile.id}`;
     if (!actorUid || currentScope.current !== scope) return;
@@ -118,9 +118,6 @@ export default function NotificationsScreen() {
                     {status === 'pending' ? <View style={[styles.actions, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
                       <Pressable accessibilityRole="button" disabled={busyId !== null} onPress={() => void mark(reminder, 'completed')} style={[styles.statusAction, { backgroundColor: colors.accent }]}>
                         <Text style={[styles.title, { color: colors.primary }]}>{busyId === reminder.id ? t('followUpSaving') : t('followUpMarkDone')}</Text>
-                      </Pressable>
-                      <Pressable accessibilityRole="button" disabled={busyId !== null} onPress={() => void mark(reminder, 'dismissed')} style={styles.statusAction}>
-                        <Text style={[styles.title, { color: colors.mutedForeground }]}>{t('followUpDismiss')}</Text>
                       </Pressable>
                     </View> : null}
                     {deleteId === reminder.id ? <View testID={`confirm-delete-${reminder.id}`} style={[styles.card, { borderWidth: 1, borderColor: colors.destructive, borderRadius: 14, padding: 12 }]}>
