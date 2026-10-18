@@ -88,6 +88,7 @@ export default function LoginScreen() {
             testID={`login-language-${option.code}`}
             accessibilityRole="radio"
             accessibilityState={{ checked: language === option.code }}
+            aria-checked={language === option.code}
             accessibilityLabel={t(option.labelKey)}
             disabled={isSubmitting}
             onPress={() => void selectLanguage(option.code)}

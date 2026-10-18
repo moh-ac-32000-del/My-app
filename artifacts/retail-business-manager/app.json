@@ -33,6 +33,12 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "7cc829f1-b0ee-4dfc-a340-88d1de0b83bc"
+      }
+    },
+    "owner": "majams-team"
   }
 }
