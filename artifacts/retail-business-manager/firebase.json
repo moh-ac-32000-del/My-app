@@ -6,7 +6,8 @@
     ]
   },
   "firestore": {
-    "rules": "firestore.rules"
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
   },
   "hosting": {
     "site": "retail-business-manager",
