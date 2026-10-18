@@ -17,3 +17,34 @@ export const exportLabels = {
     store: 'Mağaza', scope: 'Çalışma alanı kimliği', storeId: 'Mağaza kimliği', exportedAt: 'Dışa aktarma UTC', version: 'Biçim sürümü', source: 'Veri kaynağı', warning: 'Okunabilir, şifrelenmemiş inceleme dosyasıdır. Uygulama geri yükleme yedeği değildir. Farklı para birimlerini toplamayın. Borç tutarı kalan borçtur; ödemeler, kasa hareketleri ve olaylar ayrı görünümlerdir, birlikte toplanmamalıdır. Eski kapanış bakiyesinin bulunmaması sıfır olduğu anlamına gelmez.',
   },
 } satisfies Record<Language, Record<string, string>>;
+
+/** Reader-facing values, not translations of names or notes written by the user. */
+export const exportReportLabels = {
+  ar: {
+    remainingDebt: 'الدين المتبقي', customerPhone: 'هاتف العميل', archiveLabel: 'الإغلاق',
+    isActive: 'الحالة', active: 'نشط', inactive: 'غير نشط', yes: 'نعم', no: 'لا',
+    missingCustomer: 'اسم العميل غير متاح محليًا', unnamedCustomer: 'اسم العميل غير مسجل', noCustomer: 'غير مرتبط بعميل',
+    localSource: 'بيانات محمّلة من Firebase في جلسة التطبيق',
+    technicalHint: 'مراجع الربط التقنية محفوظة في أعمدة مخفية بنهاية الجداول. الأسماء والملاحظات كما كتبها المستخدم. أوقات البيانات بالتوقيت العالمي (UTC).',
+    cash_in: 'إيداع في الصندوق', cash_out: 'سحب من الصندوق', debt: 'دين', settlement: 'سداد دين',
+    in: 'وارد', out: 'صادر', cash: 'نقدًا', card: 'بطاقة', 'bank-transfer': 'تحويل بنكي', other: 'أخرى',
+  },
+  en: {
+    remainingDebt: 'Remaining debt', customerPhone: 'Customer phone', archiveLabel: 'Closing',
+    isActive: 'Status', active: 'Active', inactive: 'Inactive', yes: 'Yes', no: 'No',
+    missingCustomer: 'Customer name unavailable locally', unnamedCustomer: 'Customer name not recorded', noCustomer: 'Not linked to a customer',
+    localSource: 'Data received from Firebase in the app session',
+    technicalHint: 'Technical references remain in hidden columns at the end of each table. User-entered names and notes are unchanged. Data times are UTC.',
+    cash_in: 'Cash deposit', cash_out: 'Cash withdrawal', debt: 'Debt', settlement: 'Debt repayment',
+    in: 'Incoming', out: 'Outgoing', cash: 'Cash', card: 'Card', 'bank-transfer': 'Bank transfer', other: 'Other',
+  },
+  tr: {
+    remainingDebt: 'Kalan borç', customerPhone: 'Müşteri telefonu', archiveLabel: 'Kapanış',
+    isActive: 'Durum', active: 'Aktif', inactive: 'Pasif', yes: 'Evet', no: 'Hayır',
+    missingCustomer: 'Müşteri adı yerel veride yok', unnamedCustomer: 'Müşteri adı kaydedilmemiş', noCustomer: 'Müşteriye bağlı değil',
+    localSource: 'Uygulama oturumunda Firebase üzerinden alınan veriler',
+    technicalHint: 'Teknik referanslar tabloların sonundaki gizli sütunlarda korunur. Kullanıcının yazdığı adlar ve notlar değiştirilmez. Veri saatleri UTC olarak gösterilir.',
+    cash_in: 'Kasaya para girişi', cash_out: 'Kasadan para çıkışı', debt: 'Borç', settlement: 'Borç ödemesi',
+    in: 'Gelen', out: 'Giden', cash: 'Nakit', card: 'Kart', 'bank-transfer': 'Banka havalesi', other: 'Diğer',
+  },
+} satisfies Record<Language, Record<string, string>>;

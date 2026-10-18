@@ -1,40 +1,49 @@
 import * as XLSX from 'xlsx';
 import type { Language } from '@/constants/i18n';
-import { exportLabels } from '@/constants/exportLabels';
+import { exportLabels, exportReportLabels } from '@/constants/exportLabels';
 import { EXPORT_COLUMNS, type ExportTableName, type ExportValue, type SpreadsheetExportSnapshot } from '@/types/spreadsheetExport';
+import { spreadsheetPresentation, TECHNICAL_COLUMNS } from './spreadsheetPresentation';
 
 export const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 const DATE_COLUMNS = new Set(['createdAt', 'updatedAt', 'paidAt', 'settledAt', 'dueDate', 'closedAt', 'date', 'occurredAt']);
 
 export function buildSpreadsheetWorkbook(snapshot: SpreadsheetExportSnapshot, language: Language): XLSX.WorkBook {
   if (snapshot.version !== 1 || !snapshot.tables || !Number.isFinite(Date.parse(snapshot.exportedAt))) throw new Error('exportResponseInvalid');
-  const labels = exportLabels[language];
+  const labels = { ...exportLabels[language], ...exportReportLabels[language] };
+  const presentation = spreadsheetPresentation(snapshot, language);
   const book = XLSX.utils.book_new();
   book.Workbook = { Views: [{ RTL: language === 'ar' }] };
   book.Props = { Title: 'My app — financial export', Author: 'My app', CreatedDate: new Date(snapshot.exportedAt) };
   const details: ExportValue[][] = [
-    ['My app', ''], [labels.store, snapshot.storeName], [labels.scope, snapshot.spaceId], [labels.storeId, snapshot.storeId],
-    [labels.exportedAt, snapshot.exportedAt], [labels.version, snapshot.version], [labels.source, 'Firebase → local session copy'],
-    ...Object.entries(snapshot.capturedAt).map(([name, time]): ExportValue[] => [labels[name as ExportTableName] + ' (UTC)', time]),
+    ['My app', ''], [labels.store, snapshot.storeName],
+    [labels.exportedAt, readableTime(snapshot.exportedAt)], [labels.source, labels.localSource],
+    ...Object.entries(snapshot.capturedAt).map(([name, time]): ExportValue[] => [labels[name as ExportTableName] + ' (UTC)', readableTime(time)]),
     ...wrapWarning(labels.warning).map((line): ExportValue[] => [line, null]),
+    ...wrapWarning(labels.technicalHint).map((line): ExportValue[] => [line, null]),
+    [labels.scope, snapshot.spaceId], [labels.storeId, snapshot.storeId], [labels.version, snapshot.version],
   ];
   const info = sheet(details, ['label', 'value']);
-  info['!cols'] = [{ wch: 78 }, { wch: 38 }];
+  info['!cols'] = [{ wch: 58 }, { wch: 38 }];
   info['!rows'] = details.map(() => ({ hpt: 28 }));
-  XLSX.utils.book_append_sheet(book, info, labels.info);
   for (const name of Object.keys(EXPORT_COLUMNS) as ExportTableName[]) {
-    const columns = EXPORT_COLUMNS[name];
-    const rows = snapshot.tables[name];
-    if (!Array.isArray(rows) || rows.length > 10_000 || rows.some((row) => !Array.isArray(row) || row.length !== columns.length)) throw new Error('exportResponseInvalid');
-    const headers = columns.map((key) => labels[key]);
+    const { columns, rows } = presentation[name];
+    const headers = columns.map((key) => labels[key as keyof typeof labels]);
     // A debt's amount is the stored remaining debt, not a newly calculated balance.
-    if (name === 'debts') headers[columns.indexOf('amount' as never)] = language === 'ar' ? 'الدين المتبقي' : language === 'tr' ? 'Kalan borç' : 'Remaining debt';
+    if (name === 'debts') headers[columns.indexOf('amount')] = labels.remainingDebt;
     const data = sheet([headers, ...rows], columns);
     data['!autofilter'] = { ref: XLSX.utils.encode_range({ r: 0, c: 0 }, { r: rows.length, c: columns.length - 1 }) };
-    data['!cols'] = columns.map((key, index) => ({ wch: Math.max(headers[index].length + 3, key === 'note' || key === 'notes' ? 36 : DATE_COLUMNS.has(key) ? 25 : key === 'amount' || key === 'originalAmount' ? 23 : 27) }));
+    data['!cols'] = columns.map((key, index) => ({ hidden: TECHNICAL_COLUMNS.has(key), wch: Math.max(headers[index].length + 3, key === 'note' || key === 'notes' ? 36 : DATE_COLUMNS.has(key) ? 25 : key === 'amount' || key === 'originalAmount' ? 23 : 27) }));
+    data['!rows'] = [{ hpt: 28 }, ...rows.map(() => ({ hpt: 24 }))];
     XLSX.utils.book_append_sheet(book, data, labels[name]);
   }
+  // Open on useful customer names, not a page of workspace IDs and diagnostic metadata.
+  XLSX.utils.book_append_sheet(book, info, labels.info);
   return book;
+}
+
+function readableTime(value: string): string {
+  if (!Number.isFinite(Date.parse(value))) throw new Error('exportResponseInvalid');
+  return new Date(value).toISOString().slice(0, 19).replace('T', ' ') + ' UTC';
 }
 
 function wrapWarning(message: string): string[] {
