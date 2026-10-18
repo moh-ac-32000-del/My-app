@@ -18,7 +18,10 @@ export function FollowUpSettings({ scope }: { scope: FollowUpScope | null }) {
   useEffect(() => { setDraft(preferences); setMessage(null); setPicker(false); }, [preferences]);
   const align = { textAlign: isRTL ? 'right' as const : 'left' as const };
   const row = { flexDirection: isRTL ? 'row-reverse' as const : 'row' as const };
-  const change = (next: FollowUpPreferences) => { setDraft(next); setMessage(null); };
+  const change = (patch: Partial<FollowUpPreferences>) => {
+    setDraft((current) => current ? { ...current, ...patch } : current);
+    setMessage(null);
+  };
   const ready = !!scope && !!preferences && !!draft;
   const selectedDate = new Date();
   if (draft) { const [hours, minutes] = draft.time.split(':').map(Number); selectedDate.setHours(hours, minutes, 0, 0); }
@@ -37,7 +40,8 @@ export function FollowUpSettings({ scope }: { scope: FollowUpScope | null }) {
             <Text style={[styles.title, align, { color: colors.foreground }]}>{t('followUpTime')}</Text>
             {Platform.OS === 'web' ? React.createElement('input', {
               type: 'time', value: draft.time, 'aria-label': t('followUpTime'), disabled: saving,
-              onChange: (event: React.ChangeEvent<HTMLInputElement>) => change({ ...draft, time: event.target.value }),
+              onChange: (event: React.ChangeEvent<HTMLInputElement>) => change({ time: event.target.value }),
+              onInput: (event: React.FormEvent<HTMLInputElement>) => change({ time: event.currentTarget.value }),
               style: { color: colors.foreground, background: colors.input, border: `1px solid ${colors.border}`, borderRadius: 12, padding: 10, fontSize: 20, width: 145, colorScheme: 'dark' },
             }) : <Pressable accessibilityRole="button" accessibilityLabel={t('followUpTime')} disabled={saving} onPress={() => setPicker(true)} style={styles.timeButton}>
               <Text style={[styles.time, { color: colors.primary }]}>{draft.time}</Text>
@@ -45,14 +49,14 @@ export function FollowUpSettings({ scope }: { scope: FollowUpScope | null }) {
           </View>
           {picker && Platform.OS !== 'web' ? <DateTimePicker value={selectedDate} mode="time" is24Hour themeVariant="dark" display={Platform.OS === 'ios' ? 'spinner' : 'default'} onChange={(event, value) => {
             setPicker(false);
-            if (event.type === 'set' && value) change({ ...draft, time: `${String(value.getHours()).padStart(2, '0')}:${String(value.getMinutes()).padStart(2, '0')}` });
+            if (event.type === 'set' && value) change({ time: `${String(value.getHours()).padStart(2, '0')}:${String(value.getMinutes()).padStart(2, '0')}` });
           }} /> : null}
           {(['overdueEnabled', 'pendingEnabled'] as const).map((key) => <View key={key} style={[styles.option, row, { borderBottomColor: colors.border }]}>
             <View style={styles.copy}>
               <Text style={[styles.title, align, { color: colors.foreground }]}>{t(key === 'overdueEnabled' ? 'followUpOverdue' : 'followUpPending')}</Text>
               <Text style={[styles.hint, align, { color: colors.mutedForeground }]}>{t(key === 'overdueEnabled' ? 'followUpOverdueHint' : 'followUpPendingHint')}</Text>
             </View>
-            <Switch accessibilityLabel={t(key === 'overdueEnabled' ? 'followUpOverdue' : 'followUpPending')} disabled={saving} value={draft[key]} onValueChange={(value) => change({ ...draft, [key]: value })} trackColor={{ false: colors.border, true: colors.primary }} thumbColor={colors.foreground} />
+            <Switch accessibilityLabel={t(key === 'overdueEnabled' ? 'followUpOverdue' : 'followUpPending')} disabled={saving} value={draft[key]} onValueChange={(value) => change({ [key]: value })} trackColor={{ false: colors.border, true: colors.primary }} thumbColor={colors.foreground} />
           </View>)}
           <Pressable testID="save-follow-up-preferences" accessibilityRole="button" disabled={saving} onPress={() => {
             setMessage(null);
