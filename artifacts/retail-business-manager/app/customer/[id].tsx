@@ -9,7 +9,7 @@ import { DebtForm, type DebtDraft } from '@/components/DebtForm';
 import { KeyboardAwareScrollViewCompat } from '@/components/KeyboardAwareScrollViewCompat';
 import { ReminderForm } from '@/components/ReminderForm';
 import { CURRENCY_OPTIONS, formatMoney, type CurrencyCode } from '@/constants/currencies';
-import { formatLocalizedDate, formatLocalizedDateTime, type Language, type TranslationKey } from '@/constants/i18n';
+import { formatLocalizedDate, formatLocalizedDateTime, type TranslationKey } from '@/constants/i18n';
 import { useCustomers } from '@/context/CustomerContext';
 import { useColors } from '@/hooks/useColors';
 import { useI18n } from '@/hooks/useI18n';
@@ -19,6 +19,7 @@ import { usePayments } from '@/context/PaymentContext';
 import { createCloudReminder, loadCloudReminders } from '@/services/cloudReminders';
 import { calculateDebtTotals, createReminder, filterDebtsByCustomer, filterPaymentsByCustomer, parseLocalizedAmountInput } from '@/services/storage';
 import { loadNotificationTime } from '@/services/preferences';
+import { buildCustomerStatement } from '@/services/customerSharing';
 import type { Customer, Debt, Payment, Reminder } from '@/types/business';
 
 function DetailRow({ icon, label, value }: { icon: React.ComponentProps<typeof Ionicons>['name']; label: string; value: string }) {
@@ -35,33 +36,6 @@ function DetailRow({ icon, label, value }: { icon: React.ComponentProps<typeof I
       </View>
     </View>
   );
-}
-
-function buildCustomerStatement(
-  customer: Customer,
-  debts: Debt[],
-  language: Language,
-  t: (key: TranslationKey) => string,
-): string {
-  const totals = calculateDebtTotals(debts);
-  const debtLines = CURRENCY_OPTIONS
-    .filter(({ code }) => totals[code] > 0)
-    .map(({ code }) => `${code}: ${formatMoney(totals[code], code, language)}`);
-  const lines = [
-    '━━━━━━━━━━━━━━',
-    `📋 ${t('customerStatementTitle')}`,
-    '',
-    `👤 ${t('statementCustomer')}: ${customer.name}`,
-    customer.phone ? `📞 ${t('statementPhone')}: ${customer.phone}` : null,
-    debtLines.length > 0 ? `💰 ${t('statementDebt')}:` : `💰 ${t('statementDebt')}: ${t('statementNoDebtData')}`,
-    ...debtLines,
-    `📅 ${t('statementDate')}: ${formatLocalizedDate(new Date(), language)}`,
-    '',
-    '━━━━━━━━━━━━━━',
-    t('statementRegards') + ' 🌷',
-    '━━━━━━━━━━━━━━',
-  ];
-  return lines.filter((line): line is string => line !== null).join('\n');
 }
 
 export default function CustomerDetailsScreen() {
@@ -295,7 +269,7 @@ export default function CustomerDetailsScreen() {
       return;
     }
 
-    const message = buildCustomerStatement(customer, debts, language, t);
+    const message = buildCustomerStatement(customer, debts, language, t, profile.name);
     try {
       await Linking.openURL(`whatsapp://send?text=${encodeURIComponent(message)}`);
     } catch {

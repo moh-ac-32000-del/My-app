@@ -78,6 +78,16 @@ const archiveTwo: DailyArchive = {
 const t = (key: Parameters<typeof translate>[0]) => translate(key, 'en');
 
 describe('archive sharing', () => {
+  it.each(['ar', 'en', 'tr'] as const)('labels selected-closing scope and operation icons in %s', (language) => {
+    const localized = (key: Parameters<typeof translate>[0]) => translate(key, language);
+    const message = buildArchiveShareMessage(archiveTwo, 'My shop', language, localized);
+    expect(message).toContain(localized('shareSelectedClosingOnly'));
+    expect(message).toContain(`📥 ${localized('cashIn')}`);
+    expect(message).toContain(`📤 ${localized('cashOut')}`);
+    expect(message).toContain(`📝 ${localized('archiveDebt')}`);
+    expect(message).toContain(`✅ ${localized('settlementFrom')}`);
+    expect(message).not.toContain('Opening');
+  });
   it('shares only the selected closing snapshot with all event details and independent currencies', () => {
     const before = JSON.stringify(archiveTwo);
     const message = buildArchiveShareMessage(archiveTwo, 'Acme Electronics', 'en', t);
