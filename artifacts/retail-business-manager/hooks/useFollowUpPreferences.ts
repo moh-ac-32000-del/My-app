@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
 import { followUpScopeKey, loadFollowUpPreferences, saveFollowUpPreferences, type FollowUpPreferences, type FollowUpScope } from '@/services/followUpPreferences';
+import { syncAndroidFollowUp } from '@/services/androidPush';
 
 export function useFollowUpPreferences(scope: FollowUpScope | null) {
   const key = scope ? followUpScopeKey(scope) : null;
@@ -27,6 +28,9 @@ export function useFollowUpPreferences(scope: FollowUpScope | null) {
     busy.current = true;
     setSaving(true);
     try {
+      // Connected Android devices must acknowledge settings before reporting success.
+      // Offline errors remain visible; a retry safely repeats this metadata-only update.
+      await syncAndroidFollowUp(scope, value);
       await saveFollowUpPreferences(scope, value);
       if (currentKey.current === key) setState({ key, value, error: false });
       return currentKey.current === key;

@@ -37,8 +37,45 @@ describe('Android Push client lifecycle with mocked native APIs (not a device te
     await client.connectAndroidPush(scope);
     expect(mocks.call).toHaveBeenCalledWith(expect.objectContaining({ action: 'register', actorUid: 'u', spaceId: 's', storeId: 'store' }));
     expect(mocks.call).toHaveBeenCalledTimes(1);
+    expect(mocks.call.mock.calls[0][0].followUp).toEqual({ time: '17:00', overdueEnabled: true, pendingEnabled: true, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone });
     await client.testAndroidPush(scope);
     expect(mocks.call).toHaveBeenLastCalledWith(expect.objectContaining({ action: 'test' }));
+  });
+  it('registers the stored scoped settings instead of silently resetting to 17:00', async () => {
+    const client = await import('@/services/androidPush.android');
+    mocks.getItem.mockImplementation(async (key: string) => key.includes('/follow-up/') ? JSON.stringify({ time: '18:30', overdueEnabled: false, pendingEnabled: true }) : null);
+    await client.connectAndroidPush(scope);
+    expect(mocks.call).toHaveBeenCalledWith(expect.objectContaining({ followUp: expect.objectContaining({ time: '18:30', overdueEnabled: false }) }));
+  });
+  it('does not report a connection when reading local settings fails', async () => {
+    const client = await import('@/services/androidPush.android');
+    mocks.getItem.mockImplementation(async (key: string) => { if (key.includes('/follow-up/')) throw new Error('storage failed'); return null; });
+    await expect(client.connectAndroidPush(scope)).rejects.toThrow('storage failed');
+    expect(mocks.call).not.toHaveBeenCalled();
+  });
+  it('syncs settings for the connected device without re-registering or requesting permissions', async () => {
+    const client = await import('@/services/androidPush.android'); mocks.getItem.mockResolvedValue(saved);
+    const preferences = { time: '16:45', overdueEnabled: true, pendingEnabled: false };
+    await client.syncAndroidFollowUp(scope, preferences);
+    expect(mocks.call).toHaveBeenCalledWith(expect.objectContaining({ action: 'preferences', actorUid: 'u', followUp: { ...preferences, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone } }));
+    expect(mocks.request).not.toHaveBeenCalled(); expect(mocks.token).not.toHaveBeenCalled();
+  });
+  it('does not opt in an unconnected device or overwrite a different workspace', async () => {
+    const client = await import('@/services/androidPush.android');
+    const preferences = { time: '17:00', overdueEnabled: true, pendingEnabled: true };
+    await client.syncAndroidFollowUp(scope, preferences);
+    mocks.getItem.mockResolvedValue(saved);
+    await client.syncAndroidFollowUp({ ...scope, spaceId: 'other' }, preferences);
+    expect(mocks.call).not.toHaveBeenCalled(); expect(mocks.request).not.toHaveBeenCalled();
+  });
+  it('surfaces offline and changed-account sync errors instead of claiming success', async () => {
+    const client = await import('@/services/androidPush.android'); mocks.getItem.mockResolvedValue(saved);
+    const preferences = { time: '17:00', overdueEnabled: false, pendingEnabled: false };
+    mocks.call.mockRejectedValueOnce(new Error('offline'));
+    await expect(client.syncAndroidFollowUp(scope, preferences)).rejects.toThrow('offline');
+    mocks.auth.currentUser = { uid: 'other' };
+    await expect(client.syncAndroidFollowUp(scope, preferences)).rejects.toThrow('pushAccountChanged');
+    expect(mocks.call).toHaveBeenCalledTimes(1);
   });
   it('compensates a cloud registration when local persistence fails', async () => {
     const client = await import('@/services/androidPush.android');
