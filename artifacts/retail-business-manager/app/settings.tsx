@@ -9,6 +9,7 @@ import { useStore } from '@/context/StoreContext';
 import { getFirebaseAuth, isFirebaseConfigured } from '@/services/firebase';
 import { FollowUpSettings } from '@/components/FollowUpSettings';
 import { AndroidPushSettings } from '@/components/AndroidPushSettings';
+import { SpreadsheetExportSettings } from '@/components/SpreadsheetExportSettings';
 import { useColors } from '@/hooks/useColors';
 import { languageOptions, type Language } from '@/constants/i18n';
 import { accentOptions, type AccentColor } from '@/constants/colors';
@@ -390,6 +391,7 @@ export default function SettingsScreen() {
       </GlassCard>
 
       <SectionTitle title={t('backupRestore')} />
+      <SpreadsheetExportSettings />
       <GlassCard testID="backup-restore-section" style={styles.card}>
         <View
           testID="cloud-backup-warning"

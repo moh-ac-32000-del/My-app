@@ -1,3 +1,4 @@
+import { observeForLocalExport } from './localExportObservation';
 import {
   collection,
   getDocs,
@@ -34,9 +35,12 @@ export function subscribeToTransactions(
     workspaceBusinessCollectionPath(spaceId, 'transactions'),
   );
 
+  const exportObservation = observeForLocalExport(spaceId, 'transactions');
   return onSnapshot(
     transactionsReference,
+    { includeMetadataChanges: true },
     (snapshot: TransactionCollectionSnapshot) => {
+      exportObservation.receive(snapshot);
       const transactions = snapshot.docs
         .map((snapshotDocument) => normalizeTransactionDocument(
           snapshotDocument.id,
@@ -48,6 +52,7 @@ export function subscribeToTransactions(
       onTransactions(transactions);
     },
     (error) => {
+      exportObservation.invalidate();
       onError(error instanceof Error ? error : new Error('transactionListenerFailed'));
     },
   );

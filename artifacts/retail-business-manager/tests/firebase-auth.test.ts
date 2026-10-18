@@ -67,7 +67,7 @@ describe('Firebase Authentication boundary', () => {
 
     const unsubscribe = subscribeToFirebaseAuth(onUser);
 
-    expect(onAuthStateChangedMock).toHaveBeenCalledWith(authInstance, onUser, undefined);
+    expect(onAuthStateChangedMock).toHaveBeenCalledWith(authInstance, expect.any(Function), undefined);
     expect(onUser).toHaveBeenCalledWith(firebaseUser);
     expect(unsubscribe).toBe(unsubscribeMock);
   });

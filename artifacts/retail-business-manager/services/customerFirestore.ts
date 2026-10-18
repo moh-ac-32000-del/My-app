@@ -1,3 +1,4 @@
+import { observeForLocalExport } from './localExportObservation';
 import {
   collection,
   doc,
@@ -37,9 +38,12 @@ export function subscribeToCustomers(
     workspaceBusinessCollectionPath(spaceId, 'customers'),
   );
 
+  const exportObservation = observeForLocalExport(spaceId, 'customers');
   return onSnapshot(
     customersReference,
+    { includeMetadataChanges: true },
     (snapshot: CustomerCollectionSnapshot) => {
+      exportObservation.receive(snapshot);
       const customers = snapshot.docs
         .map((snapshotDocument) => normalizeCustomer(snapshotDocument.id, snapshotDocument.data()))
         .filter((customer): customer is Customer => customer !== null && customer.isActive)
@@ -47,6 +51,7 @@ export function subscribeToCustomers(
       onCustomers(customers);
     },
     (error) => {
+      exportObservation.invalidate();
       onError(error instanceof Error ? error : new Error('customerListenerFailed'));
     },
   );

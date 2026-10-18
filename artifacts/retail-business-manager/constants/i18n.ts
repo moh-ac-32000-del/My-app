@@ -1,6 +1,19 @@
 export type Language = 'ar' | 'en' | 'tr';
 
 const ar = {
+  exportLocalCoverage: "الأقسام المتاحة محليًا:",
+  exportSpreadsheetTitle: "تصدير Excel وGoogle Sheets",
+  exportSpreadsheetHint: "ملف XLSX محلي: العملاء والديون والدفعات وحركات الصندوق والإغلاقات. لا رفع تلقائي إلى Google.",
+  exportScopeHint: "الحفظ نفسه محلي بلا قراءات Firestore إضافية. يستخدم بيانات الأقسام التي حمّلتها الشاشات أثناء هذه الجلسة، حتى 1000 سجل للقسم. فتح الشاشات والمزامنة المعتادة قد يستهلكان قراءات كالمعتاد.",
+  exportPrivacyWarning: "ملف مقروء غير مشفر، وليس نسخة لاستعادة التطبيق. لا يضمن أحدث بيانات السحابة أو لقطة موحدة؛ يذكر وقت البيانات لكل قسم. احفظه في مكان آمن.",
+  exportConfirmHint: "سننسخ البيانات المحمّلة في جلسة التطبيق فقط دون اتصال جديد بالسحابة. تشمل غير النشطين والمسدّد إذا وصلوا ضمن هذه البيانات. لا نرفع إلى Google؛ ترفعه بنفسك إن أردت.",
+  exportConfirm: "أوافق، تجهيز الملف",
+  exportSpreadsheetAction: "حفظ ملف الجداول",
+  exportPreparing: "جارٍ تجهيز الملف…",
+  exportSaved: "تم حفظ الملف والتحقق من قراءته. يمكنك نقله من المجلد المختار إلى فلاشة أو بطاقة SD إذا كان جهازك يدعمهما.",
+  exportShared: "فُتحت خيارات المشاركة. اختر الحفظ في الملفات وتحقق بنفسك من وجود النسخة.",
+  exportDownloadRequested: "أُرسل الملف إلى تنزيلات المتصفح. تحقق من اكتمال التنزيل قبل الاعتماد عليه.",
+  exportFailed: "تعذر تجهيز أو حفظ الملف كاملًا. بعض الأقسام قد تكون غير متاحة محليًا أو البيانات غير صالحة أو تجاوزت الحد أو فشل إذن المجلد. لا نعالج ذلك بقراءات سحابية. لا تعتمد على ملف غير مكتمل بعد خطأ الحفظ.",
   pushAndroidTitle: 'ربط إشعارات Android',
   pushDeviceConnected: 'هذا الهاتف مرتبط بـFirebase لهذه المساحة.',
   pushDeviceNotConnected: 'اربط هذا الهاتف بعد منح إذن الإشعارات. لا يظهر رمز الهاتف ولا يُشارك مع المستخدمين.',
@@ -320,6 +333,19 @@ const ar = {
 export type TranslationKey = keyof typeof ar;
 
 const en: Record<TranslationKey, string> = {
+  exportLocalCoverage: "Locally available sections:",
+  exportSpreadsheetTitle: "Excel and Google Sheets export",
+  exportSpreadsheetHint: "Local XLSX: customers, debts, payments, cash movements and closings. No automatic Google upload.",
+  exportScopeHint: "Saving itself is local, with no additional Firestore reads. Uses sections already received by normal screens in this session, up to 1,000 records each. Normal screen loading and synchronization can still incur reads.",
+  exportPrivacyWarning: "Readable, unencrypted review export, not a restore backup. Does not guarantee current cloud data or a single point-in-time snapshot. Each section includes its capture time. Store securely.",
+  exportConfirmHint: "Copy only records already loaded in this app session, without a new cloud connection. Includes inactive/settled records when received. No Google upload; upload it yourself if desired.",
+  exportConfirm: "Agree and prepare file",
+  exportSpreadsheetAction: "Save spreadsheet file",
+  exportPreparing: "Preparing file…",
+  exportSaved: "File saved and read-back verified. You can move it from the chosen folder to USB or SD storage if your device supports it.",
+  exportShared: "Sharing options opened. Choose Save to Files and verify that a copy exists.",
+  exportDownloadRequested: "Download requested from your browser. Verify completion before relying on the file.",
+  exportFailed: "Could not prepare or save the complete file. Sections may be unavailable locally, invalid or over the limit, or folder access failed. We do not fetch cloud data to fill gaps. Do not rely on an incomplete file after a write failure.",
   pushAndroidTitle: 'Connect Android notifications',
   pushDeviceConnected: 'This phone is connected to Firebase for this workspace.',
   pushDeviceNotConnected: 'Connect this phone after granting notification permission. Its token is never displayed or shared with users.',
@@ -637,6 +663,19 @@ const en: Record<TranslationKey, string> = {
 };
 
 const tr: Record<TranslationKey, string> = {
+  exportLocalCoverage: "Yerelde mevcut bölümler:",
+  exportSpreadsheetTitle: "Excel ve Google Sheets dışa aktarma",
+  exportSpreadsheetHint: "Yerel XLSX: müşteriler, borçlar, ödemeler, kasa hareketleri ve kapanışlar. Google’a otomatik yüklenmez.",
+  exportScopeHint: "Kaydetme yereldir, ek Firestore okuması yapmaz. Bu oturumda normal ekranlardan alınmış bölüm başına en fazla 1.000 kaydı kullanır. Normal ekran yükleme ve eşitleme okumaları devam edebilir.",
+  exportPrivacyWarning: "Okunabilir, şifrelenmemiş inceleme dosyasıdır; geri yükleme yedeği değildir. Güncel bulut verisi veya tek anlık görüntü garantisi vermez. Her bölümün alınma zamanı bulunur. Güvenli saklayın.",
+  exportConfirmHint: "Yeni bulut bağlantısı olmadan yalnızca bu oturumda yüklenen kayıtlar kopyalanır. Alınmışsa pasif/kapanmış kayıtlar da dahil edilir. Google’a otomatik yüklenmez.",
+  exportConfirm: "Kabul et ve dosyayı hazırla",
+  exportSpreadsheetAction: "Tablo dosyasını kaydet",
+  exportPreparing: "Dosya hazırlanıyor…",
+  exportSaved: "Dosya kaydedildi ve tekrar okunarak doğrulandı. Cihazınız destekliyorsa seçilen klasörden USB veya SD karta taşıyabilirsiniz.",
+  exportShared: "Paylaşım seçenekleri açıldı. Dosyalara kaydetmeyi seçin ve kopyanın varlığını doğrulayın.",
+  exportDownloadRequested: "Tarayıcıdan indirme istendi. Dosyaya güvenmeden önce indirmenin tamamlandığını doğrulayın.",
+  exportFailed: "Tam dosya hazırlanamadı veya kaydedilemedi. Bölümler yerelde yok, geçersiz veya sınırı aşmış olabilir. Eksikler için bulut okuması yapmayız. Yazma hatasından kalan eksik dosyaya güvenmeyin.",
   pushAndroidTitle: 'Android bildirimlerini bağla',
   pushDeviceConnected: 'Bu telefon, bu çalışma alanı için Firebase’e bağlı.',
   pushDeviceNotConnected: 'Bildirim izni verdikten sonra bu telefonu bağlayın. Cihaz belirteci gösterilmez veya kullanıcılarla paylaşılmaz.',

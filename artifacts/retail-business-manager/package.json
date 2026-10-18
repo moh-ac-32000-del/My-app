@@ -66,6 +66,7 @@
     "expo-file-system": "~19.0.24",
     "expo-notifications": "~0.32.17",
     "expo-sharing": "~14.0.8",
-    "firebase": "^12.18.0"
+    "firebase": "^12.18.0",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   }
 }

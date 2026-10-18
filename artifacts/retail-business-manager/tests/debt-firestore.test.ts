@@ -123,7 +123,7 @@ describe('Debt Firestore service', () => {
     firestoreMocks.listenerError = null;
     firestoreMocks.getDoc.mockResolvedValue(snapshot(serializedCustomer()));
     firestoreMocks.getDocs.mockResolvedValue({ docs: [] });
-    firestoreMocks.onSnapshot.mockImplementation((_reference, next, error) => {
+    firestoreMocks.onSnapshot.mockImplementation((_reference, _options, next, error) => {
       firestoreMocks.nextSnapshot = next;
       firestoreMocks.listenerError = error;
       return firestoreMocks.unsubscribe;
