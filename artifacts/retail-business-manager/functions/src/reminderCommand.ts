@@ -5,7 +5,7 @@ const SYSTEM_DUE_DATE_NOTE = 'system:due-date';
 const STATUSES = new Set(['pending', 'completed', 'dismissed']);
 
 type ReminderCommandRequest = {
-  action: 'list' | 'create' | 'updateStatus';
+  action: 'list' | 'create' | 'updateStatus' | 'delete';
   spaceId: string;
   storeId: string;
   reminder?: {
@@ -28,6 +28,7 @@ type ReminderRecord = {
   status: 'pending' | 'completed' | 'dismissed';
   note?: string;
   completedAt?: string;
+  deletedAt?: string;
   createdAt: string;
   updatedAt: string;
 };
@@ -78,7 +79,7 @@ export async function reminderCommandHandler(
     }
     if (existingSnap.exists) {
       const existing = normalizeReminder(reminder.id, existingSnap.data(), input.spaceId, input.storeId);
-      if (existing && existing.debtId === reminder.debtId && existing.remindAt === reminder.remindAt && existing.note === reminder.note) {
+      if (existing && !existing.deletedAt && existing.debtId === reminder.debtId && existing.remindAt === reminder.remindAt && existing.note === reminder.note) {
         return { reminders: await listAndReconcile(input, runtime, remindersRef, spaceRef), processedAt: runtime.now() };
       }
       throw new HttpsError('already-exists', 'Reminder ID already exists', { code: 'REMINDER_EXISTS' });
@@ -91,21 +92,22 @@ export async function reminderCommandHandler(
       createdAt: now, updatedAt: now,
     };
     await remindersRef.doc(record.id).create(record);
-  } else if (input.action === 'updateStatus') {
+  } else if (input.action === 'updateStatus' || input.action === 'delete') {
     const reminderRef = remindersRef.doc(input.reminderId!);
-    const snapshot = await reminderRef.get();
-    const existing = normalizeReminder(input.reminderId!, snapshot.data(), input.spaceId, input.storeId);
-    if (!snapshot.exists || !existing) {
-      throw new HttpsError('not-found', 'Reminder was not found', { code: 'REMINDER_NOT_FOUND' });
-    }
-    if (existing.note === SYSTEM_DUE_DATE_NOTE && input.status === 'pending') {
-      throw new HttpsError('failed-precondition', 'Generated reminders cannot be reset manually', { code: 'SYSTEM_REMINDER_STATUS' });
-    }
-    const now = runtime.now();
-    await reminderRef.update({
-      status: input.status,
-      updatedAt: now,
-      ...(input.status === 'completed' ? { completedAt: now } : { completedAt: null }),
+    await db.runTransaction(async (transaction) => {
+      const snapshot = await transaction.get(reminderRef);
+      const existing = normalizeReminder(input.reminderId!, snapshot.data(), input.spaceId, input.storeId);
+      if (!snapshot.exists || !existing || (existing.deletedAt && input.action !== 'delete')) {
+        throw new HttpsError('not-found', 'Reminder was not found', { code: 'REMINDER_NOT_FOUND' });
+      }
+      if (existing.deletedAt) return;
+      if (existing.note === SYSTEM_DUE_DATE_NOTE && input.status === 'pending') {
+        throw new HttpsError('failed-precondition', 'Generated reminders cannot be reset manually', { code: 'SYSTEM_REMINDER_STATUS' });
+      }
+      const now = runtime.now();
+      transaction.update(reminderRef, input.action === 'delete'
+        ? { deletedAt: now, status: 'dismissed', updatedAt: now }
+        : { status: input.status, updatedAt: now, completedAt: input.status === 'completed' ? now : null });
     });
   }
 
@@ -118,7 +120,7 @@ export function createReminderRuntime(firestore: Firestore): ReminderRuntime {
 
 function validateRequest(value: unknown): ReminderCommandRequest {
   if (!isRecord(value)
-    || !['list', 'create', 'updateStatus'].includes(String(value.action))
+    || !['list', 'create', 'updateStatus', 'delete'].includes(String(value.action))
     || typeof value.spaceId !== 'string' || !value.spaceId.trim() || value.spaceId.includes('/')
     || typeof value.storeId !== 'string' || !value.storeId.trim() || value.storeId.includes('/')) {
     throw new HttpsError('invalid-argument', 'Reminder command is invalid', { code: 'INVALID_ARGUMENT' });
@@ -135,6 +137,9 @@ function validateRequest(value: unknown): ReminderCommandRequest {
   if (input.action === 'updateStatus'
     && (!validId(input.reminderId) || !STATUSES.has(String(input.status)))) {
     throw new HttpsError('invalid-argument', 'Reminder status update is invalid', { code: 'INVALID_ARGUMENT' });
+  }
+  if (input.action === 'delete' && !validId(input.reminderId)) {
+    throw new HttpsError('invalid-argument', 'Reminder identifier is invalid', { code: 'INVALID_ARGUMENT' });
   }
   if (input.notificationTime !== undefined && !/^([01]\d|2[0-3]):[0-5]\d$/.test(input.notificationTime)) {
     throw new HttpsError('invalid-argument', 'Notification time is invalid', { code: 'INVALID_ARGUMENT' });
@@ -174,19 +179,20 @@ async function listAndReconcile(
     const remindAt = `${debt.dueDate}T${notificationTime}:00`;
     const previous = byId.get(id);
     if (!previous) {
-      batch.set(reference, {
+      // Never overwrite a concurrently created/deleted reminder with a stale list snapshot.
+      batch.create(reference, {
         id, storeId: input.storeId, workspaceId: input.spaceId, debtId: debt.id,
         remindAt, status: 'pending', note: SYSTEM_DUE_DATE_NOTE, createdAt: now, updatedAt: now,
       });
       writes += 1;
-    } else if (previous.note === SYSTEM_DUE_DATE_NOTE && previous.status === 'pending' && previous.remindAt !== remindAt) {
+    } else if (!previous.deletedAt && previous.note === SYSTEM_DUE_DATE_NOTE && previous.status === 'pending' && previous.remindAt !== remindAt) {
       batch.update(reference, { remindAt, updatedAt: now });
       writes += 1;
     }
   }
 
   for (const reminder of existing) {
-    if (reminder.note !== SYSTEM_DUE_DATE_NOTE || reminder.status !== 'pending') continue;
+    if (reminder.deletedAt || reminder.note !== SYSTEM_DUE_DATE_NOTE || reminder.status !== 'pending') continue;
     const debt = byDebt.get(reminder.debtId);
     const shouldExist = Boolean(debt && typeof debt.amount === 'number' && debt.amount > 0 && !debt.settledAt
       && typeof debt.dueDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(debt.dueDate));
@@ -204,6 +210,7 @@ async function listAndReconcile(
   return finalSnapshot.docs
     .map((doc) => normalizeReminder(doc.id, doc.data(), input.spaceId, input.storeId))
     .filter((item): item is ReminderRecord => item !== null)
+    .filter((item) => !item.deletedAt)
     .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
 }
 
@@ -221,6 +228,7 @@ function normalizeReminder(
     status: value.status as ReminderRecord['status'],
     ...(typeof value.note === 'string' ? { note: value.note } : {}),
     ...(typeof value.completedAt === 'string' ? { completedAt: value.completedAt } : {}),
+    ...(typeof value.deletedAt === 'string' ? { deletedAt: value.deletedAt } : {}),
     createdAt: value.createdAt, updatedAt: value.updatedAt,
   };
 }

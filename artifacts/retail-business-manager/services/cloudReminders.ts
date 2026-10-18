@@ -49,9 +49,13 @@ export async function updateCloudReminderStatus(
   return data.reminders;
 }
 
+export async function deleteCloudReminder(spaceId: string, storeId: string, reminderId: string, notificationTime = '09:00'): Promise<Reminder[]> {
+  return (await send({ action: 'delete', spaceId, storeId, reminderId, notificationTime })).reminders;
+}
+
 async function send(
   input: {
-    action: 'list' | 'create' | 'updateStatus';
+    action: 'list' | 'create' | 'updateStatus' | 'delete';
     spaceId: string;
     storeId: string;
     reminder?: { id: string; debtId: string; remindAt: string; note?: string };

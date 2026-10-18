@@ -1,6 +1,9 @@
 export type Language = 'ar' | 'en' | 'tr';
 
 const ar = {
+  reminderDelete: 'حذف التذكير',
+  reminderDeleteConfirm: 'نعم، حذف التذكير',
+  reminderDeleteHint: 'سيُحذف التذكير من القائمة دون حذف الدين أو تغيير الرصيد. لن يُعاد إنشاء تذكير الاستحقاق المحذوف تلقائيًا. هذا لا يحذف حدثًا أضفته إلى تقويم الهاتف.',
   appName: 'إدارة المتجر',
   appSubtitle: 'كل شيء في مكان واحد',
   welcome: 'مرحباً بك',
@@ -305,6 +308,9 @@ const ar = {
 export type TranslationKey = keyof typeof ar;
 
 const en: Record<TranslationKey, string> = {
+  reminderDelete: 'Delete reminder',
+  reminderDeleteConfirm: 'Yes, delete reminder',
+  reminderDeleteHint: 'Remove this reminder without deleting the debt or changing the balance. A deleted due-date reminder will not be regenerated automatically. This does not remove an event you added to your phone calendar.',
   appName: 'Store Manager',
   appSubtitle: 'Everything in one place',
   welcome: 'Welcome',
@@ -607,6 +613,9 @@ const en: Record<TranslationKey, string> = {
 };
 
 const tr: Record<TranslationKey, string> = {
+  reminderDelete: 'Hatırlatıcıyı sil',
+  reminderDeleteConfirm: 'Evet, hatırlatıcıyı sil',
+  reminderDeleteHint: 'Borcu silmeden veya bakiyeyi değiştirmeden hatırlatıcıyı kaldırın. Silinen vade hatırlatıcısı otomatik olarak yeniden oluşturulmaz. Telefon takviminize eklediğiniz bir etkinlik silinmez.',
   appName: 'Mağaza Yönetimi',
   appSubtitle: 'Her şey tek yerde',
   welcome: 'Hoş geldiniz',

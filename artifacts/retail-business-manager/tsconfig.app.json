@@ -30,6 +30,7 @@
     "tests/daily-archive-backend.test.ts",
     "tests/closing-cash-balances.test.ts",
     "tests/reminder-command.test.ts",
+    "tests/reminder-delete.test.ts",
     "tests/trusted-financial-store-scope.test.ts",
     "tests/settlement-trusted-backend.test.ts",
     "tests/trusted-debt-idempotency.test.ts",
