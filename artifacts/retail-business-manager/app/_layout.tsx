@@ -20,6 +20,7 @@ import { DebtProvider } from '@/context/DebtContext';
 import { CustomerProvider } from '@/context/CustomerContext';
 import { PaymentProvider } from '@/context/PaymentContext';
 import { FloatingQuickActions } from '@/components/FloatingQuickActions';
+import { AndroidPushObserver } from '@/components/AndroidPushObserver';
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
@@ -32,6 +33,7 @@ function RootLayoutNav() {
   const showQuickActions = isReady && isAuthenticated && pathname === '/';
   return (
     <View style={{ flex: 1 }}>
+      <AndroidPushObserver />
       <Stack screenOptions={{ headerShown: false, animation: 'fade' }} />
       {showQuickActions ? <FloatingQuickActions /> : null}
     </View>

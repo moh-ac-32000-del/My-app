@@ -1,5 +1,7 @@
 import { initializeApp } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
+import { getMessaging } from 'firebase-admin/messaging';
+import { pushDeviceCommandHandler } from './pushDeviceCommand.js';
 import { onCall } from 'firebase-functions/v2/https';
 import { bootstrapPrimarySpaceHandler, createDefaultBootstrapRuntime } from './bootstrapPrimarySpace.js';
 import { createSettlementRuntime, settleCustomerDebtHandler } from './settleCustomerDebt.js';
@@ -13,6 +15,9 @@ import { createDailyArchiveRuntime, dailyArchiveCommandHandler } from './dailyAr
 initializeApp();
 
 const firestore = getFirestore();
+export const pushDeviceCommand = onCall({ invoker: 'public', minInstances: 0, maxInstances: 1, concurrency: 1, memory: '256MiB', cpu: 'gcf_gen1', timeoutSeconds: 30 }, (request) => (
+  pushDeviceCommandHandler(request, { firestore, messaging: getMessaging(), now: () => Date.now() })
+));
 const runtime = createDefaultBootstrapRuntime(firestore);
 const settlementRuntime = createSettlementRuntime(firestore);
 const cashTransactionRuntime = createCashTransactionRuntime(firestore);

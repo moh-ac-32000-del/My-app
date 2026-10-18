@@ -19,6 +19,7 @@
     },
     "android": {
       "package": "com.retailbusinessmanager.app",
+      "googleServicesFile": "./google-services.json",
       "versionCode": 1
     },
     "web": {
@@ -28,7 +29,8 @@
     "plugins": [
       "expo-router",
       "expo-font",
-      "expo-web-browser"
+      "expo-web-browser",
+      "expo-notifications"
     ],
     "experiments": {
       "typedRoutes": true,

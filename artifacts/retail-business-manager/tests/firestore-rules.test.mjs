@@ -212,6 +212,22 @@ async function runCase(name, operation, expected) {
 
 try {
   await clearFirestore();
+  await testEnvironment.withSecurityRulesDisabled(async (context) => {
+    await setDoc(doc(context.firestore(), 'pushDevices', 'device-test'), { uid: 'user-A', token: 'synthetic-private-token', enabled: true });
+  });
+  for (const [label, context] of [['owner', userA], ['other user', userB], ['anonymous', anonymous]]) {
+    const reference = doc(context.firestore(), 'pushDevices', 'device-test');
+    for (const [operation, run] of [
+      ['read', () => getDoc(reference)],
+      ['list', () => getDocs(collection(context.firestore(), 'pushDevices'))],
+      ['write', () => setDoc(reference, { uid: 'user-A', enabled: true })],
+      ['update', () => updateDoc(reference, { enabled: false })],
+      ['delete', () => deleteDoc(reference)],
+    ]) {
+      await runCase(`Push privacy — ${label} cannot ${operation} server-only device records`, run, 'DENY');
+    }
+  }
+  await clearFirestore();
   await runCase(
     'Readiness — new user can list its empty discovery index before bootstrap',
     () => getDocs(collection(userA.firestore(), 'users', 'user-A', 'memberships')),
