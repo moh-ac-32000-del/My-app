@@ -15,18 +15,19 @@ export function AndroidPushSettings() {
   const key = uid && activeSpaceId ? `${uid}/${activeSpaceId}/${profile.id}` : '';
   const current = useRef(key); current.current = key;
   const busy = useRef(false);
+  const revision = useRef(0);
   const [connected, setConnected] = useState(false);
   const [working, setWorking] = useState(false);
   const [message, setMessage] = useState<'pushTestAccepted' | 'pushConnectError' | 'pushPermissionDenied' | null>(null);
   const scope = uid && activeSpaceId ? { uid, spaceId: activeSpaceId, storeId: profile.id, language } : null;
   useEffect(() => {
-    let active = true; setConnected(false); setMessage(null);
-    if (scope) void androidPushConnected(scope).then((value) => { if (active) setConnected(value); }).catch(() => { if (active) setMessage('pushConnectError'); });
+    let active = true; const version = ++revision.current; setConnected(false); setMessage(null);
+    if (scope) void androidPushConnected(scope).then((value) => { if (active && revision.current === version) setConnected(value); }).catch(() => { if (active && revision.current === version) setMessage('pushConnectError'); });
     return () => { active = false; };
   }, [key]);
   const act = async (action: 'connect' | 'disconnect' | 'test') => {
     if (!scope || busy.current || current.current !== key) return;
-    busy.current = true; setWorking(true); setMessage(null);
+    busy.current = true; revision.current += 1; setWorking(true); setMessage(null);
     try {
       if (action === 'connect') await connectAndroidPush(scope);
       else if (action === 'disconnect') await disconnectAndroidPush();

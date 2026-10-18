@@ -42,8 +42,10 @@ export async function connectAndroidPush(scope: AndroidPushScope) {
   if (old?.uid === scope.uid && old.token !== token) await send('disable', old, old.token);
   await send('register', scope, token);
   pendingRegistration = { ...scope, token };
-  if (getFirebaseAuth().currentUser?.uid !== scope.uid) throw new Error('pushAccountChanged');
-  try { await AsyncStorage.setItem(KEY, JSON.stringify(pendingRegistration)); }
+  try {
+    if (getFirebaseAuth().currentUser?.uid !== scope.uid) throw new Error('pushAccountChanged');
+    await AsyncStorage.setItem(KEY, JSON.stringify(pendingRegistration));
+  }
   catch (error) {
     // A cloud registration without saved local metadata must not survive a failed connect silently.
     try { await disconnectAndroidPush(); } catch { /* Retain in-memory metadata for a safe sign-out retry. */ }

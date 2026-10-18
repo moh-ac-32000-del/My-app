@@ -70,4 +70,11 @@ describe('Android Push client lifecycle with mocked native APIs (not a device te
     await expect(client.testAndroidPush(scope)).rejects.toThrow('pushAccountChanged');
     expect(mocks.call).not.toHaveBeenCalled();
   });
+  it('invalidates a late registration if sign-out wins the race', async () => {
+    const client = await import('@/services/androidPush.android');
+    mocks.call.mockImplementationOnce(async () => { mocks.auth.currentUser = null; return { data: { enabled: true } }; });
+    await expect(client.connectAndroidPush(scope)).rejects.toThrow('pushAccountChanged');
+    expect(mocks.unregister).toHaveBeenCalledOnce();
+    expect(mocks.setItem).not.toHaveBeenCalled();
+  });
 });
