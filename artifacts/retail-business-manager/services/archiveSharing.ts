@@ -42,6 +42,13 @@ export function buildArchiveShareMessage(
     `🕒 ${t('archiveClosedAt')}: ${formatLocalizedDateTime(new Date(archive.closedAt), language)}`,
     `ℹ️ ${t('shareSelectedClosingOnly')}`,
     '',
+    `💰 ${t('cashBalanceAtClosing')}:`,
+    ...(archive.closingCashBalances === undefined
+      ? [`   ${t('closingBalanceUnavailable')}`]
+      : archive.closingCashBalances.length === 0
+        ? [`   ${t('closingNoCashMovements')}`]
+        : archive.closingCashBalances.map(({ amount, currency }) => `   • ${formatMoney(amount, currency, language)} (${currency})`)),
+    '',
     `🧾 ${t('archiveEvents')}:`,
   ];
 

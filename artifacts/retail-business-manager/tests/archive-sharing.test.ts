@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { translate } from '@/constants/i18n';
+import { formatMoney } from '@/constants/currencies';
 import { buildArchiveShareMessage } from '@/services/archiveSharing';
 import type { DailyArchive } from '@/types/business';
 
@@ -78,6 +79,33 @@ const archiveTwo: DailyArchive = {
 const t = (key: Parameters<typeof translate>[0]) => translate(key, 'en');
 
 describe('archive sharing', () => {
+  it.each(['ar', 'en', 'tr'] as const)('shares only the saved closing balance in %s, not daily net or current cash', (language) => {
+    const localized = (key: Parameters<typeof translate>[0]) => translate(key, language);
+    const selected: DailyArchive = {
+      ...archiveTwo,
+      closingCashBalances: [{ currency: 'TRY', amount: 750 }, { currency: 'USD', amount: -20 }, { currency: 'EUR', amount: 0 }],
+    };
+    const before = JSON.stringify(selected);
+    const message = buildArchiveShareMessage(selected, 'My shop', language, localized);
+    expect(message).toContain(localized('cashBalanceAtClosing'));
+    expect(message).toContain(`• ${formatMoney(750, 'TRY', language)} (TRY)`);
+    expect(message).toContain(`• ${formatMoney(-20, 'USD', language)} (USD)`);
+    expect(message).toContain(`• ${formatMoney(0, 'EUR', language)} (EUR)`);
+    expect(message).not.toContain(localized('closingBalanceUnavailable'));
+    expect(JSON.stringify(selected)).toBe(before);
+  });
+
+  it('explains missing legacy balances without inferring them from event amounts', () => {
+    const message = buildArchiveShareMessage(archiveOne, '', 'en', t);
+    expect(message).toContain(t('closingBalanceUnavailable'));
+    expect(message).not.toContain(`• ${formatMoney(1000, 'TRY', 'en')}`);
+  });
+
+  it('distinguishes a saved empty cash snapshot from an unavailable legacy balance', () => {
+    const message = buildArchiveShareMessage({ ...archiveOne, snapshot: [], closingCashBalances: [] }, '', 'en', t);
+    expect(message).toContain(t('closingNoCashMovements'));
+    expect(message).not.toContain(t('closingBalanceUnavailable'));
+  });
   it.each(['ar', 'en', 'tr'] as const)('labels selected-closing scope and operation icons in %s', (language) => {
     const localized = (key: Parameters<typeof translate>[0]) => translate(key, language);
     const message = buildArchiveShareMessage(archiveTwo, 'My shop', language, localized);

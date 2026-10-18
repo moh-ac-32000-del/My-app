@@ -56,4 +56,23 @@ describe('cloud daily archive client', () => {
     firebaseMocks.callable.mockResolvedValueOnce({ data: { archives: [], processedAt: 'invalid' } });
     await expect(loadCloudDailyArchives('space-a', 'store-a')).rejects.toThrow('invalidCloudDailyArchiveResponse');
   });
+
+  it('preserves zero and negative saved balances while accepting legacy archives', async () => {
+    const saved = { ...archive, closingCashBalances: [{ currency: 'TRY', amount: 0 }, { currency: 'USD', amount: -20 }] };
+    firebaseMocks.callable.mockResolvedValueOnce({ data: { archives: [saved, archive], processedAt: archive.closedAt } });
+    expect(await loadCloudDailyArchives('space-a', 'store-a')).toEqual([saved, archive]);
+  });
+
+  it.each([
+    null,
+    [{ currency: 'BAD', amount: 10 }],
+    [{ currency: 'TRY', amount: Infinity }],
+    [{ currency: 'TRY', amount: '10' }],
+    [{ currency: 'TRY', amount: 10 }, { currency: 'TRY', amount: 20 }],
+  ])('rejects malformed saved balances %j', async (closingCashBalances) => {
+    firebaseMocks.callable.mockResolvedValueOnce({ data: {
+      archives: [{ ...archive, closingCashBalances }], processedAt: archive.closedAt,
+    } });
+    await expect(loadCloudDailyArchives('space-a', 'store-a')).rejects.toThrow('invalidCloudDailyArchiveResponse');
+  });
 });

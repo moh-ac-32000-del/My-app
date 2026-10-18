@@ -1,6 +1,7 @@
 import { getFunctions, httpsCallable, type Functions } from 'firebase/functions';
 import { getFirebaseApp, isFirebaseConfigured } from '@/services/firebase';
 import type { DailyArchive } from '@/types/business';
+import { isCurrencyCode } from '@/constants/currencies';
 
 interface DailyArchiveCommandResponse {
   archives: Array<DailyArchive & { workspaceId: string }>;
@@ -81,8 +82,21 @@ function isValidArchive(value: unknown, spaceId: string, storeId: string): value
     && Number.isFinite(Date.parse(archive.closedAt))
     && typeof archive.closingNumber === 'number'
     && Number.isInteger(archive.closingNumber)
+    && validClosingBalances(archive.closingCashBalances)
     && Array.isArray(archive.snapshot)
     && archive.snapshot.every((event) => typeof event === 'object' && event !== null);
+}
+
+function validClosingBalances(value: unknown): boolean {
+  if (value === undefined) return true; // Legacy archives remain readable.
+  if (!Array.isArray(value)) return false;
+  const seen = new Set<string>();
+  return value.every((entry) => {
+    if (typeof entry !== 'object' || entry === null || !isCurrencyCode(entry.currency)
+      || typeof entry.amount !== 'number' || !Number.isFinite(entry.amount) || seen.has(entry.currency)) return false;
+    seen.add(entry.currency);
+    return true;
+  });
 }
 
 function getFunctionsInstance(): Functions {
