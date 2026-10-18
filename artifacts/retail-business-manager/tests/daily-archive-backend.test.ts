@@ -80,6 +80,7 @@ describe('daily archive trusted balance capture', () => {
     db.documents[path + 'other-store'] = cash('other-store', 999, now, { storeId: 'other-store' });
     db.documents['spaces/other-space/transactions/other'] = cash('other', 999, now);
     db.documents['spaces/space-a/payments/paid'] = {
+      storeId: 'store-a',
       direction: 'in', transactionId: 'settlement', customerId: 'customer-a', paidAt: now,
       amount: { amount: 20, currency: 'TRY' },
     };
