@@ -10,6 +10,8 @@ import {
   View,
 } from 'react-native';
 import { KeyboardAwareScrollViewCompat } from '@/components/KeyboardAwareScrollViewCompat';
+import { WebReminderDateTimeInput } from '@/components/WebReminderDateTimeInput';
+import { formatReminderDateTime, parseReminderDateTime } from '@/services/reminderDateTime';
 import { formatLocalizedDate, formatLocalizedTime } from '@/constants/i18n';
 import { useColors } from '@/hooks/useColors';
 import { useI18n } from '@/hooks/useI18n';
@@ -49,6 +51,7 @@ export function ReminderForm({
   );
   const [selectedDebtId, setSelectedDebtId] = useState<string>(initialDebtId ?? '');
   const [reminderDate, setReminderDate] = useState<Date>(getInitialReminderDate);
+  const [webReminderDateTime, setWebReminderDateTime] = useState(() => formatReminderDateTime(reminderDate));
   const [pickerMode, setPickerMode] = useState<PickerMode>(null);
   const [validation, setValidation] = useState<string | null>(null);
   const initialFormCustomerId = initialCustomerId ?? customers[0]?.id ?? '';
@@ -56,7 +59,9 @@ export function ReminderForm({
   useEffect(() => {
     setSelectedCustomerId(initialFormCustomerId);
     setSelectedDebtId(initialDebtId ?? '');
-    setReminderDate(getInitialReminderDate());
+    const initialDate = getInitialReminderDate();
+    setReminderDate(initialDate);
+    setWebReminderDateTime(formatReminderDateTime(initialDate));
     setPickerMode(null);
     setValidation(null);
   }, [initialFormCustomerId, initialDebtId]);
@@ -110,9 +115,15 @@ export function ReminderForm({
       return;
     }
 
+    const selectedDate = Platform.OS === 'web' ? parseReminderDateTime(webReminderDateTime) : reminderDate;
+    if (!selectedDate) {
+      setValidation(t('reminderRemindAtInvalid'));
+      return;
+    }
+
     setValidation(null);
     try {
-      await onSave(selectedDebtId, reminderDate.toISOString());
+      await onSave(selectedDebtId, selectedDate.toISOString());
       onClose();
     } catch (error) {
       setValidation(
@@ -226,6 +237,23 @@ export function ReminderForm({
         <Text style={[styles.label, { color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' }]}>
           {t('reminderRemindAt')}
         </Text>
+        {Platform.OS === 'web' ? (
+          <WebReminderDateTimeInput
+            value={webReminderDateTime}
+            onChange={(value) => {
+              setWebReminderDateTime(value);
+              setValidation(null);
+            }}
+            label={t('reminderRemindAt')}
+            disabled={isSaving}
+            style={{
+              width: '100%', minWidth: 0, boxSizing: 'border-box', minHeight: 51,
+              borderRadius: 15, border: `1px solid ${colors.border}`,
+              backgroundColor: colors.input, color: colors.foreground,
+              padding: 12, fontSize: 14,
+            }}
+          />
+        ) : (
         <View style={[styles.dateTimeRow, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
           <Pressable
             testID="reminder-date-button"
@@ -256,7 +284,8 @@ export function ReminderForm({
             <Text style={[styles.dateTimeText, { color: colors.foreground }]}>{formatLocalizedTime(reminderDate, language)}</Text>
           </Pressable>
         </View>
-        {pickerMode ? (
+        )}
+        {Platform.OS !== 'web' && pickerMode ? (
           <DateTimePicker
             testID={`reminder-${pickerMode}-picker`}
             value={reminderDate}
