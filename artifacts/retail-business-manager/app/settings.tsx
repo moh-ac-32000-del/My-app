@@ -56,7 +56,7 @@ export default function SettingsScreen() {
     signOut,
     isReady,
   } = useStore();
-  const { t, isRTL, language } = useI18n();
+  const { t, isRTL, language, setLanguage } = useI18n();
   const [name, setName] = useState<string>('');
   const [phone, setPhone] = useState<string>('');
   const [address, setAddress] = useState<string>('');
@@ -133,7 +133,7 @@ export default function SettingsScreen() {
 
   const selectLanguage = async (nextLanguage: Language) => {
     setIsLanguagePickerOpen(false);
-    await saveProfile({ language: nextLanguage });
+    await setLanguage(nextLanguage);
     await Haptics.selectionAsync();
   };
 
