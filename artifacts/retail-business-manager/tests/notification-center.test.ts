@@ -47,6 +47,15 @@ describe('notification center projection', () => {
     expect(project([])).toEqual([]);
   });
 
+  it('preserves old dismissed records without treating them as completed or changing their debt', () => {
+    const legacy: Reminder = { ...reminder, status: 'dismissed', note: 'Previous follow-up' };
+    const before = JSON.stringify({ legacy, debt });
+    expect(project([legacy])).toEqual([expect.objectContaining({
+      reminder: legacy, debt: expect.objectContaining({ amount: 70 }), note: 'Previous follow-up',
+    })]);
+    expect(JSON.stringify({ legacy, debt })).toBe(before);
+  });
+
   it.each(['ar', 'en', 'tr'] as const)('explains in-app versus phone alert support in %s', (language) => {
     expect(translate('notificationCenterNativePending', language)).toBeTruthy();
     expect(translate('notificationCenterLoadError', language)).not.toBe(translate('remindersEmpty', language));
