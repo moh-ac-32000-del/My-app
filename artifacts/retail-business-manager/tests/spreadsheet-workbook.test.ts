@@ -1,10 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import * as XLSX from 'xlsx';
-import { buildSpreadsheetWorkbook, exportFileName, spreadsheetBytes } from '@/services/spreadsheetWorkbook';
+import { buildDetailedSpreadsheetWorkbook as buildSpreadsheetWorkbook, exportFileName } from '@/services/spreadsheetWorkbook';
+import type { Language } from '@/constants/i18n';
+import type { SpreadsheetExportSnapshot } from '@/types/spreadsheetExport';
 import { exportLabels, exportReportLabels } from '@/constants/exportLabels';
 import { exportSnapshotFixture as fixture } from './fixtures/spreadsheetSnapshot';
 
-describe('local XLSX review export, not a restore backup', () => {
+// Keep regression coverage of the typed/localized intermediate, not the public download layout.
+const spreadsheetBytes = (snapshot: SpreadsheetExportSnapshot, language: Language) => new Uint8Array(XLSX.write(buildSpreadsheetWorkbook(snapshot, language), {type:'array',bookType:'xlsx',compression:true}));
+describe('validated typed intermediate used by the grouped report', () => {
   it.each(['ar', 'en', 'tr'] as const)('round-trips every sheet and numeric value in %s', (language) => {
     const before = JSON.stringify(fixture);
     const bytes = spreadsheetBytes(fixture, language);
