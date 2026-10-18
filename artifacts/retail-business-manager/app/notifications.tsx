@@ -55,6 +55,7 @@ export default function NotificationsScreen() {
   [reminders, debts, activeSpaceId, debtSpaceId, profile.id]);
   const align = { textAlign: isRTL ? 'right' as const : 'left' as const };
   const statusKeys = { pending: 'reminderStatusPending', completed: 'reminderStatusCompleted', dismissed: 'reminderStatusDismissed' } as const;
+  if (!isReady || !isAuthenticated) return <ActivityIndicator color={colors.primary} />;
   return (
     <AppShell>
       <PageHeader title={t('notifications')} subtitle={t('notificationCenterHint')} showBack />
