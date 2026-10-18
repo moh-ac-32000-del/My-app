@@ -58,6 +58,12 @@ export default function DashboardScreen() {
         title={t('dashboard')}
         subtitle={`${t('today')} • ${formatLocalizedDate(new Date(), language)}`}
         action={
+          <View style={{ flexDirection: isRTL ? 'row-reverse' : 'row', gap: 10 }}>
+          <Pressable testID="open-notification-center" accessibilityRole="button" accessibilityLabel={t('notifications')}
+            onPress={() => router.push('/notifications')}
+            style={({ pressed }) => [styles.profileButton, { backgroundColor: colors.accent, borderColor: colors.border }, pressed && styles.pressed]}>
+            <Ionicons name="notifications-outline" size={22} color={colors.primary} />
+          </Pressable>
           <Pressable
             testID="profile-button"
             onPress={() => router.push('/settings')}
@@ -65,6 +71,7 @@ export default function DashboardScreen() {
           >
             <Text style={[styles.profileInitial, { color: colors.primary }]}>{(profile.name || t('storeNameDefault')).slice(0, 1)}</Text>
           </Pressable>
+          </View>
         }
       />
       {initializationError ? (
