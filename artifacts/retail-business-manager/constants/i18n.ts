@@ -1,6 +1,18 @@
 export type Language = 'ar' | 'en' | 'tr';
 
 const ar = {
+  pushAndroidTitle: 'ربط إشعارات Android',
+  pushDeviceConnected: 'هذا الهاتف مرتبط بـFirebase لهذه المساحة.',
+  pushDeviceNotConnected: 'اربط هذا الهاتف بعد منح إذن الإشعارات. لا يظهر رمز الهاتف ولا يُشارك مع المستخدمين.',
+  pushSchedulePending: 'هذه مرحلة ربط الهاتف واختبار الاتصال فقط. تنبيهات مواعيد التذكيرات والمتابعة اليومية لم تُفعّل بعد.',
+  pushConnect: 'ربط هذا الهاتف',
+  pushReconnect: 'تحديث ربط الهاتف',
+  pushSendTest: 'إرسال إشعار اختبار',
+  pushDisconnect: 'إيقاف الربط',
+  pushTestAccepted: 'قبل Firebase طلب الإرسال. تأكد بنفسك من وصول التنبيه؛ قبول الطلب لا يثبت وصوله. الحد خمس محاولات يوميًا، وبين المحاولات دقيقة.',
+  pushConnectError: 'تعذر إكمال الطلب. تحقق من الإنترنت وربط Firebase، وانتظر دقيقة بين اختبارات الإرسال. يلزم APK جديد يدعم الإشعارات.',
+  pushPermissionDenied: 'لم تمنح إذن الإشعارات. يمكنك تفعيله من إعدادات الهاتف ثم المحاولة مجددًا.',
+  pushLogoutError: 'تعذر إكمال تسجيل الخروج بأمان. تحقق من الإنترنت وحاول مجددًا.',
   reminderDelete: 'حذف التذكير',
   reminderDeleteConfirm: 'نعم، حذف التذكير',
   reminderDeleteHint: 'سيُحذف التذكير من القائمة دون حذف الدين أو تغيير الرصيد. لن يُعاد إنشاء تذكير الاستحقاق المحذوف تلقائيًا. هذا لا يحذف حدثًا أضفته إلى تقويم الهاتف.',
@@ -308,6 +320,18 @@ const ar = {
 export type TranslationKey = keyof typeof ar;
 
 const en: Record<TranslationKey, string> = {
+  pushAndroidTitle: 'Connect Android notifications',
+  pushDeviceConnected: 'This phone is connected to Firebase for this workspace.',
+  pushDeviceNotConnected: 'Connect this phone after granting notification permission. Its token is never displayed or shared with users.',
+  pushSchedulePending: 'Device connection and connection testing only. Scheduled reminder and daily follow-up alerts are not enabled yet.',
+  pushConnect: 'Connect this phone',
+  pushReconnect: 'Refresh phone connection',
+  pushSendTest: 'Send test notification',
+  pushDisconnect: 'Disconnect',
+  pushTestAccepted: 'Firebase accepted the send request. Check receipt on your phone; acceptance does not prove delivery. Five tests per day, at least one minute apart.',
+  pushConnectError: 'Unable to complete the request. Check your connection and Firebase setup; wait a minute between tests. A new notification-capable APK is required.',
+  pushPermissionDenied: 'Notification permission was not granted. Enable it in phone settings and try again.',
+  pushLogoutError: 'Unable to complete sign-out safely. Check your connection and try again.',
   reminderDelete: 'Delete reminder',
   reminderDeleteConfirm: 'Yes, delete reminder',
   reminderDeleteHint: 'Remove this reminder without deleting the debt or changing the balance. A deleted due-date reminder will not be regenerated automatically. This does not remove an event you added to your phone calendar.',
@@ -613,6 +637,18 @@ const en: Record<TranslationKey, string> = {
 };
 
 const tr: Record<TranslationKey, string> = {
+  pushAndroidTitle: 'Android bildirimlerini bağla',
+  pushDeviceConnected: 'Bu telefon, bu çalışma alanı için Firebase’e bağlı.',
+  pushDeviceNotConnected: 'Bildirim izni verdikten sonra bu telefonu bağlayın. Cihaz belirteci gösterilmez veya kullanıcılarla paylaşılmaz.',
+  pushSchedulePending: 'Yalnızca cihaz bağlantısı ve bağlantı testi. Zamanlanmış hatırlatıcı ve günlük takip bildirimleri henüz etkin değil.',
+  pushConnect: 'Bu telefonu bağla',
+  pushReconnect: 'Telefon bağlantısını yenile',
+  pushSendTest: 'Test bildirimi gönder',
+  pushDisconnect: 'Bağlantıyı kes',
+  pushTestAccepted: 'Firebase gönderim isteğini kabul etti. Telefona ulaştığını kontrol edin; kabul teslimatı kanıtlamaz. Günde beş test, en az bir dakika arayla.',
+  pushConnectError: 'İstek tamamlanamadı. İnternet ve Firebase ayarlarını kontrol edin; testler arasında bir dakika bekleyin. Bildirim destekli yeni bir APK gerekir.',
+  pushPermissionDenied: 'Bildirim izni verilmedi. Telefon ayarlarından etkinleştirip yeniden deneyin.',
+  pushLogoutError: 'Güvenli çıkış tamamlanamadı. İnternet bağlantısını kontrol edip yeniden deneyin.',
   reminderDelete: 'Hatırlatıcıyı sil',
   reminderDeleteConfirm: 'Evet, hatırlatıcıyı sil',
   reminderDeleteHint: 'Borcu silmeden veya bakiyeyi değiştirmeden hatırlatıcıyı kaldırın. Silinen vade hatırlatıcısı otomatik olarak yeniden oluşturulmaz. Telefon takviminize eklediğiniz bir etkinlik silinmez.',

@@ -7,6 +7,7 @@ import {
   type User,
 } from 'firebase/auth';
 import { getFirebaseAuth, isFirebaseConfigured } from '@/services/firebase';
+import { disconnectAndroidPush } from '@/services/androidPush';
 
 export type FirebaseAuthErrorKey =
   | 'authEmailAlreadyInUse'
@@ -44,6 +45,7 @@ export async function signOutFromFirebase(): Promise<void> {
   if (!isFirebaseConfigured) {
     return;
   }
+  await disconnectAndroidPush();
   await signOut(getFirebaseAuth());
 }
 

@@ -8,6 +8,7 @@ import { AppShell, GlassCard, PageHeader, SectionTitle } from '@/components/AppS
 import { useStore } from '@/context/StoreContext';
 import { getFirebaseAuth, isFirebaseConfigured } from '@/services/firebase';
 import { FollowUpSettings } from '@/components/FollowUpSettings';
+import { AndroidPushSettings } from '@/components/AndroidPushSettings';
 import { useColors } from '@/hooks/useColors';
 import { languageOptions, type Language } from '@/constants/i18n';
 import { accentOptions, type AccentColor } from '@/constants/colors';
@@ -175,8 +176,8 @@ export default function SettingsScreen() {
   };
 
   const logout = async () => {
-    await signOut();
-    router.replace('/login');
+    try { await signOut(); router.replace('/login'); }
+    catch { Alert.alert(t('somethingWentWrong'), t('pushLogoutError')); }
   };
 
   return (
@@ -380,6 +381,7 @@ export default function SettingsScreen() {
         ) : null}
       </GlassCard>
 
+      <AndroidPushSettings />
       <FollowUpSettings scope={followUpUid && activeSpaceId ? { uid: followUpUid, spaceId: activeSpaceId, storeId: profile.id } : null} />
 
       <GlassCard style={[styles.cloudCard, { borderColor: colors.primary, flexDirection: isRTL ? 'row-reverse' : 'row' }]}>

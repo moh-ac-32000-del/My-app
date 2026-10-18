@@ -64,6 +64,7 @@
     "@react-native-community/datetimepicker": "^8.4.4",
     "expo-document-picker": "~14.0.8",
     "expo-file-system": "~19.0.24",
+    "expo-notifications": "~0.32.17",
     "expo-sharing": "~14.0.8",
     "firebase": "^12.18.0"
   }

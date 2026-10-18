@@ -18,6 +18,7 @@ node_modules
 *.keystore
 credentials.json
 google-services.json
+!artifacts/retail-business-manager/google-services.json
 *.apk
 *.aab
 
