@@ -15,6 +15,7 @@ import { formatLocalizedDate, type Language } from '@/constants/i18n';
 import { useColors } from '@/hooks/useColors';
 import { useI18n } from '@/hooks/useI18n';
 import type { Customer } from '@/types/business';
+import { WebDebtDateInput } from '@/components/WebDebtDateInput';
 
 function formatDateOnly(date: Date): string {
   const year = date.getFullYear();
@@ -265,7 +266,24 @@ export function DebtForm({
         </Text>
         <View style={[styles.debtInputWrap, { backgroundColor: colors.input, borderColor: colors.border, flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
           <Ionicons name="calendar-outline" size={18} color={colors.mutedForeground} />
-          <Pressable
+          {Platform.OS === 'web' ? (
+            <WebDebtDateInput
+              testID={`${variant}-web-due-date`}
+              label={t('debtDueDate')}
+              value={dueDate}
+              disabled={isSaving}
+              onChange={(value) => {
+                setDueDate(value);
+                setValidation(null);
+              }}
+              style={{
+                flex: 1, minWidth: 0, width: '100%', padding: '12px 0',
+                border: 0, background: 'transparent',
+                color: colors.foreground, font: 'inherit',
+                colorScheme: 'dark', textAlign: isRTL ? 'right' : 'left',
+              }}
+            />
+          ) : <Pressable
             testID={`${isCreditVariant ? 'credit' : 'debt'}-due-date-button`}
             accessibilityRole="button"
             accessibilityLabel={t('debtDueDate')}
@@ -275,7 +293,7 @@ export function DebtForm({
             <Text style={[styles.dueDateText, { color: dueDate ? colors.foreground : colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' }]}>
               {dueDate ? formatLocalizedDate(parseDateOnly(dueDate), language) : t('debtDueDatePlaceholder')}
             </Text>
-          </Pressable>
+          </Pressable>}
           {dueDate ? (
             <Pressable
               testID={`${isCreditVariant ? 'credit' : 'debt'}-clear-due-date`}
@@ -291,7 +309,7 @@ export function DebtForm({
             </Pressable>
           ) : null}
         </View>
-        {isDueDatePickerVisible ? (
+        {Platform.OS !== 'web' && isDueDatePickerVisible ? (
           <DateTimePicker
             testID={`${isCreditVariant ? 'credit' : 'debt'}-due-date-picker`}
             value={parseDateOnly(dueDate)}
