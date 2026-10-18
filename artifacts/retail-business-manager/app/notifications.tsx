@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { AppShell, EmptyState, GlassCard, PageHeader, SectionTitle } from '@/components/AppShell';
@@ -9,7 +9,10 @@ import { useColors } from '@/hooks/useColors';
 import { useI18n } from '@/hooks/useI18n';
 import { formatLocalizedDateTime } from '@/constants/i18n';
 import { formatMoney } from '@/constants/currencies';
-import { loadCloudReminders } from '@/services/cloudReminders';
+import { loadCloudReminders, updateCloudReminderStatus } from '@/services/cloudReminders';
+import { buildFollowUpSummary } from '@/services/followUpSummary';
+import { FollowUpOverview } from '@/components/FollowUpOverview';
+import { getFirebaseAuth, isFirebaseConfigured } from '@/services/firebase';
 import { loadNotificationTime } from '@/services/preferences';
 import { notificationCenterItems, NOTIFICATION_GROUPS } from '@/services/notificationCenter';
 import type { Reminder } from '@/types/business';
@@ -25,12 +28,19 @@ export default function NotificationsScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [refresh, setRefresh] = useState(0);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState(false);
+  const busy = useRef(false);
+  const currentScope = useRef('');
+  const actorUid = isFirebaseConfigured && isAuthenticated ? getFirebaseAuth().currentUser?.uid : null;
+  currentScope.current = actorUid ? `${actorUid}/${activeSpaceId}/${profile.id}` : '';
 
   useFocusEffect(useCallback(() => {
     let active = true;
     setReminders([]);
     setError(false);
     setLoading(true);
+    setActionError(false);
     if (isReady && !isAuthenticated) {
       router.replace('/login');
       return () => { active = false; };
@@ -54,6 +64,23 @@ export default function NotificationsScreen() {
     ? notificationCenterItems(reminders, debts, activeSpaceId, profile.id) : [],
   [reminders, debts, activeSpaceId, debtSpaceId, profile.id]);
   const align = { textAlign: isRTL ? 'right' as const : 'left' as const };
+  const summary = activeSpaceId && debtSpaceId === activeSpaceId && !loading && !error
+    ? buildFollowUpSummary(debts, reminders, activeSpaceId, profile.id, new Date()) : null;
+  const mark = async (reminder: Reminder, status: 'completed' | 'dismissed') => {
+    if (busy.current || loading || error || !isAuthenticated || !activeSpaceId || debtSpaceId !== activeSpaceId) return;
+    const scope = `${actorUid}/${activeSpaceId}/${profile.id}`;
+    if (!actorUid || currentScope.current !== scope) return;
+    busy.current = true;
+    setBusyId(reminder.id);
+    setActionError(false);
+    try {
+      const time = await loadNotificationTime();
+      if (currentScope.current !== scope) return;
+      const records = await updateCloudReminderStatus(activeSpaceId, profile.id, reminder.id, status, time);
+      if (currentScope.current === scope) setReminders(records);
+    } catch { if (currentScope.current === scope) setActionError(true); }
+    finally { busy.current = false; setBusyId(null); }
+  };
   const statusKeys = { pending: 'reminderStatusPending', completed: 'reminderStatusCompleted', dismissed: 'reminderStatusDismissed' } as const;
   if (!isReady || !isAuthenticated) return <ActivityIndicator color={colors.primary} />;
   return (
@@ -62,6 +89,8 @@ export default function NotificationsScreen() {
       <GlassCard style={styles.card}>
         <Text style={[styles.text, align, { color: colors.mutedForeground }]}>{t('notificationCenterNativePending')}</Text>
       </GlassCard>
+      {summary ? <FollowUpOverview summary={summary} /> : null}
+      {actionError ? <Text accessibilityLiveRegion="polite" style={[styles.text, align, { color: colors.destructive }]}>{t('followUpActionError')}</Text> : null}
       <Pressable testID="refresh-notifications" accessibilityRole="button" onPress={() => { if (debtError) retryDebts(); setRefresh((value) => value + 1); }} style={styles.action}>
         <Text style={[styles.title, align, { color: colors.primary }]}>{t('notificationCenterRefresh')}</Text>
       </Pressable>
@@ -82,6 +111,14 @@ export default function NotificationsScreen() {
                     <Text style={[styles.text, align, { color: colors.mutedForeground }]}>{formatLocalizedDateTime(new Date(reminder.remindAt), language)}</Text>
                     {debt ? <Text style={[styles.text, align, { color: colors.foreground }]}>{t('remainingDebt')}: {formatMoney(debt.amount, debt.currency, language)} ({debt.currency})</Text> : null}
                     {note ? <Text style={[styles.text, align, { color: colors.mutedForeground }]}>{note}</Text> : null}
+                    {status === 'pending' ? <View style={[styles.actions, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
+                      <Pressable accessibilityRole="button" disabled={busyId !== null} onPress={() => void mark(reminder, 'completed')} style={[styles.statusAction, { backgroundColor: colors.accent }]}>
+                        <Text style={[styles.title, { color: colors.primary }]}>{busyId === reminder.id ? t('followUpSaving') : t('followUpMarkDone')}</Text>
+                      </Pressable>
+                      <Pressable accessibilityRole="button" disabled={busyId !== null} onPress={() => void mark(reminder, 'dismissed')} style={styles.statusAction}>
+                        <Text style={[styles.title, { color: colors.mutedForeground }]}>{t('followUpDismiss')}</Text>
+                      </Pressable>
+                    </View> : null}
                     {debt && customer ? <Pressable accessibilityRole="button" onPress={() => router.push({ pathname: '/customer/[id]', params: { id: debt.customerId } })} style={styles.action}>
                       <Text style={[styles.title, align, { color: colors.primary }]}>{t('notificationCenterOpenCustomer')}</Text>
                     </Pressable> : null}
@@ -98,4 +135,6 @@ const styles = StyleSheet.create({
   title: { fontSize: 14, fontFamily: 'Inter_700Bold' },
   text: { fontSize: 13, lineHeight: 21, fontFamily: 'Inter_400Regular' },
   action: { minHeight: 44, paddingVertical: 12, marginBottom: 8 },
+  actions: { flexWrap: 'wrap', gap: 10 },
+  statusAction: { minHeight: 44, paddingVertical: 12, paddingHorizontal: 14, borderRadius: 13, justifyContent: 'center' },
 });
