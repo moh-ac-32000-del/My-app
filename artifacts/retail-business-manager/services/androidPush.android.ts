@@ -7,9 +7,11 @@ import type { AndroidPushScope } from './androidPush';
 
 const KEY = '@my-app/android-push/v1';
 type Saved = AndroidPushScope & { token: string };
+let pendingRegistration: Saved | null = null;
 export type { AndroidPushScope } from './androidPush';
 
 export async function savedAndroidPush(): Promise<Saved | null> {
+  if (pendingRegistration) return pendingRegistration;
   const raw = await AsyncStorage.getItem(KEY);
   if (!raw) return null;
   try {
@@ -39,8 +41,14 @@ export async function connectAndroidPush(scope: AndroidPushScope) {
   const old = await savedAndroidPush();
   if (old?.uid === scope.uid && old.token !== token) await send('disable', old, old.token);
   await send('register', scope, token);
+  pendingRegistration = { ...scope, token };
   if (getFirebaseAuth().currentUser?.uid !== scope.uid) throw new Error('pushAccountChanged');
-  await AsyncStorage.setItem(KEY, JSON.stringify({ ...scope, token }));
+  try { await AsyncStorage.setItem(KEY, JSON.stringify(pendingRegistration)); }
+  catch (error) {
+    // A cloud registration without saved local metadata must not survive a failed connect silently.
+    try { await disconnectAndroidPush(); } catch { /* Retain in-memory metadata for a safe sign-out retry. */ }
+    throw error;
+  }
 }
 
 export async function androidPushConnected(scope: AndroidPushScope) {
@@ -57,7 +65,9 @@ export async function testAndroidPush(scope: AndroidPushScope) {
 }
 
 export async function disconnectAndroidPush(): Promise<void> {
-  const saved = await savedAndroidPush();
+  let saved: Saved | null;
+  try { saved = await savedAndroidPush(); }
+  catch { await Notifications.unregisterForNotificationsAsync(); return; }
   if (!saved) return;
   let serverDisabled = false;
   if (getFirebaseAuth().currentUser?.uid === saved.uid) {
@@ -66,4 +76,5 @@ export async function disconnectAndroidPush(): Promise<void> {
   try { await Notifications.unregisterForNotificationsAsync(); }
   catch { if (!serverDisabled) throw new Error('pushDisconnectFailed'); }
   await AsyncStorage.removeItem(KEY);
+  pendingRegistration = null;
 }
