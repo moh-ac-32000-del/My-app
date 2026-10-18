@@ -48,7 +48,7 @@ describe('reminder-only deletion', () => {
     { [`${base}/storeProfile/profile`]: { storeId: 'other' } },
     { [`${base}/reminders/reminder-a`]: { ...reminder, storeId: 'other' } },
     { [`${base}/reminders/reminder-a`]: { ...reminder, workspaceId: 'other' } },
-  ])('rejects an unauthorized or mismatched scope without writes', async (extra) => {
+  ] as Record<string, Doc>[])('rejects an unauthorized or mismatched scope without writes', async (extra) => {
     const db = database(extra);
     await expect(call(db)).rejects.toBeDefined();
     expect(db.writes).toEqual([]);
