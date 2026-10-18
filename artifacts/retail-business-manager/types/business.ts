@@ -87,6 +87,8 @@ export interface DailyArchive {
   date: string;
   closedAt: string;
   closingNumber: number;
+  /** Immutable server snapshot; absent on archives created before this field. */
+  closingCashBalances?: MoneyValue[];
   snapshot: import('@/services/storage').DailyJournalEvent[];
 }
 
