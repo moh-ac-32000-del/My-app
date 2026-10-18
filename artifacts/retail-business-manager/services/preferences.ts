@@ -1,7 +1,19 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { languageOptions, type Language } from '@/constants/i18n';
 
 export const DEFAULT_NOTIFICATION_TIME = '09:00';
 const NOTIFICATION_TIME_KEY = '@retail-business-manager/notification-time';
+const UI_LANGUAGE_KEY = '@retail-business-manager/ui-language';
+
+export async function loadUiLanguage(): Promise<Language | null> {
+  const value = await AsyncStorage.getItem(UI_LANGUAGE_KEY);
+  return languageOptions.some((option) => option.code === value) ? value as Language : null;
+}
+
+export async function saveUiLanguage(value: Language): Promise<void> {
+  if (!languageOptions.some((option) => option.code === value)) throw new Error('languageInvalid');
+  await AsyncStorage.setItem(UI_LANGUAGE_KEY, value);
+}
 
 export function isValidNotificationTime(value: unknown): value is string {
   if (typeof value !== 'string' || !/^\d{2}:\d{2}$/.test(value)) return false;

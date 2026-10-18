@@ -6,7 +6,7 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
-import type { TranslationKey } from '@/constants/i18n';
+import { languageOptions, type Language, type TranslationKey } from '@/constants/i18n';
 import { useI18n } from '@/hooks/useI18n';
 import { GlassCard } from '@/components/AppShell';
 import { isFirebaseConfigured } from '@/services/firebase';
@@ -20,7 +20,7 @@ type AuthMode = 'login' | 'createAccount';
 
 export default function LoginScreen() {
   const colors = useColors();
-  const { t, isRTL, direction } = useI18n();
+  const { t, language, setLanguage, isRTL, direction } = useI18n();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [mode, setMode] = useState<AuthMode>('login');
@@ -69,10 +69,39 @@ export default function LoginScreen() {
     setStatus(null);
   };
 
+  const selectLanguage = async (nextLanguage: Language) => {
+    try {
+      await setLanguage(nextLanguage);
+    } catch {
+      setStatus({ key: 'somethingWentWrong', success: false });
+    }
+  };
+
   return (
     <View style={[styles.container, { backgroundColor: colors.background, direction, paddingTop: insets.top + 20, paddingBottom: Math.max(insets.bottom, 20) }]}>
       <LinearGradient colors={[colors.glow, 'transparent', 'transparent']} style={StyleSheet.absoluteFill} />
       <View style={[styles.orb, { backgroundColor: colors.accent }]} />
+      <View style={[styles.languageRow, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
+        {languageOptions.map((option) => (
+          <Pressable
+            key={option.code}
+            testID={`login-language-${option.code}`}
+            accessibilityRole="radio"
+            accessibilityState={{ checked: language === option.code }}
+            accessibilityLabel={t(option.labelKey)}
+            disabled={isSubmitting}
+            onPress={() => void selectLanguage(option.code)}
+            style={[styles.languageButton, {
+              borderColor: language === option.code ? colors.primary : colors.border,
+              backgroundColor: language === option.code ? colors.accent : colors.input,
+            }]}
+          >
+            <Text style={{ color: colors.foreground }}>
+              {option.code === 'ar' ? 'العربية' : option.code === 'en' ? 'English' : 'Türkçe'}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
       <View style={styles.brand}>
         <View style={[styles.brandMark, { backgroundColor: colors.accent, borderColor: colors.border }]}>
           <MaterialCommunityIcons name="storefront-outline" size={34} color={colors.primary} />
@@ -179,6 +208,8 @@ export default function LoginScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, paddingHorizontal: 20 },
+  languageRow: { justifyContent: 'center', flexWrap: 'wrap', gap: 8 },
+  languageButton: { minHeight: 36, paddingHorizontal: 14, borderRadius: 12, borderWidth: 1, justifyContent: 'center', alignItems: 'center' },
   orb: { position: 'absolute', width: 280, height: 280, borderRadius: 140, top: -160, left: -100, opacity: 0.22 },
   brand: { alignItems: 'center', marginTop: 22 },
   brandMark: { width: 76, height: 76, borderRadius: 26, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },

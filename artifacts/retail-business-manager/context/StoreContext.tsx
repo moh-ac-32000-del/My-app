@@ -14,6 +14,7 @@ import { createTrustedCashTransaction } from '@/services/trustedTransactionFires
 import { settleCustomerDebtInCloud } from '@/services/settlementFirestore';
 import { getOrCreateCloudStoreProfile, updateCloudStoreProfile } from '@/services/cloudStoreProfile';
 import type { Space } from '@/types/space';
+import { loadUiLanguage, saveUiLanguage } from '@/services/preferences';
 import {
   createCashTransaction,
   createDebt,
@@ -36,6 +37,7 @@ const defaultProfile: StoreProfile = {
 interface StoreContextValue {
   profile: StoreProfile;
   language: Language;
+  setLanguage: (language: Language) => Promise<void>;
   isRTL: boolean;
   direction: 'rtl' | 'ltr';
   t: (key: TranslationKey) => string;
@@ -144,6 +146,27 @@ export async function resolveActiveSpaceForUser(uid: string): Promise<string | n
 
 export function StoreProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<StoreProfile>(defaultProfile);
+  const [preferredLanguage, setPreferredLanguage] = useState<Language | null>(null);
+  const languagePreferenceVersion = useRef(0);
+  const languageWriteQueue = useRef<Promise<void>>(Promise.resolve());
+
+  useEffect(() => {
+    let active = true;
+    const version = languagePreferenceVersion.current;
+    void loadUiLanguage().then((stored) => {
+      if (active && languagePreferenceVersion.current === version) setPreferredLanguage(stored);
+    }).catch(() => undefined);
+    return () => { active = false; };
+  }, []);
+
+  const setLanguage = React.useCallback(async (nextLanguage: Language) => {
+    languagePreferenceVersion.current += 1;
+    setPreferredLanguage(normalizeLanguage(nextLanguage));
+    // Language is a personal presentation preference, never a workspace write.
+    const write = languageWriteQueue.current.catch(() => undefined).then(() => saveUiLanguage(nextLanguage));
+    languageWriteQueue.current = write;
+    await write;
+  }, []);
   const [firebaseUser, setFirebaseUser] = useState<User | null>(null);
   const [cloudSpace, setCloudSpace] = useState<Space | null>(null);
   const [activeSpaceId, setActiveSpaceIdState] = useState<string | null>(null);
@@ -484,12 +507,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     await signOutFromFirebase();
   };
 
-  const language = profile.language;
+  const language = preferredLanguage ?? profile.language;
   const rtl = isRTL(language);
   const value = useMemo(
     () => ({
       profile,
       language,
+      setLanguage,
       isRTL: rtl,
       direction: (rtl ? 'rtl' : 'ltr') as 'rtl' | 'ltr',
       t: (key: TranslationKey) => translate(key, language),
@@ -521,6 +545,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       isAuthenticated,
       isReady,
       language,
+      setLanguage,
       profile,
       retryActiveSpace,
       retryInitialization,
