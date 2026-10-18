@@ -4,6 +4,7 @@ import Constants from 'expo-constants';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { getFirebaseApp, getFirebaseAuth } from '@/services/firebase';
 import type { AndroidPushScope } from './androidPush';
+import { loadFollowUpPreferences, type FollowUpPreferences, type FollowUpScope } from './followUpPreferences';
 
 const KEY = '@my-app/android-push/v1';
 type Saved = AndroidPushScope & { token: string };
@@ -20,10 +21,12 @@ export async function savedAndroidPush(): Promise<Saved | null> {
   } catch { return null; }
 }
 
-async function send(action: 'register' | 'status' | 'disable' | 'test', scope: AndroidPushScope, token: string) {
+async function send(action: 'register' | 'status' | 'disable' | 'test' | 'preferences', scope: AndroidPushScope, token: string, preferences?: FollowUpPreferences) {
   if (getFirebaseAuth().currentUser?.uid !== scope.uid) throw new Error('pushAccountChanged');
   const call = httpsCallable<unknown, { enabled: boolean; accepted?: boolean }>(getFunctions(getFirebaseApp()), 'pushDeviceCommand');
-  const result = (await call({ action, actorUid: scope.uid, ...scope, token })).data;
+  const followUp = preferences ? { ...preferences, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone } : undefined;
+  if (preferences && !followUp?.timeZone) throw new Error('pushTimeZoneUnavailable');
+  const result = (await call({ action, actorUid: scope.uid, ...scope, token, ...(followUp ? { followUp } : {}) })).data;
   if (typeof result?.enabled !== 'boolean' || (action === 'test' && result.accepted !== true)) throw new Error('pushResponseInvalid');
   return result;
 }
@@ -40,7 +43,9 @@ export async function connectAndroidPush(scope: AndroidPushScope) {
   if (typeof token !== 'string') throw new Error('pushTokenInvalid');
   const old = await savedAndroidPush();
   if (old?.uid === scope.uid && old.token !== token) await send('disable', old, old.token);
-  await send('register', scope, token);
+  // Failure to read settings must not silently register a different/default schedule.
+  const preferences = await loadFollowUpPreferences(scope);
+  await send('register', scope, token, preferences);
   pendingRegistration = { ...scope, token };
   try {
     if (getFirebaseAuth().currentUser?.uid !== scope.uid) throw new Error('pushAccountChanged');
@@ -64,6 +69,13 @@ export async function testAndroidPush(scope: AndroidPushScope) {
   const saved = await savedAndroidPush();
   if (!saved || saved.uid !== scope.uid || saved.spaceId !== scope.spaceId || saved.storeId !== scope.storeId) throw new Error('pushNotConnected');
   await send('test', scope, saved.token);
+}
+
+export async function syncAndroidFollowUp(scope: FollowUpScope, preferences: FollowUpPreferences): Promise<void> {
+  const saved = await savedAndroidPush();
+  // Saving local settings never opts a device in or prompts for permission.
+  if (!saved || saved.uid !== scope.uid || saved.spaceId !== scope.spaceId || saved.storeId !== scope.storeId) return;
+  await send('preferences', saved, saved.token, preferences);
 }
 
 export async function disconnectAndroidPush(): Promise<void> {

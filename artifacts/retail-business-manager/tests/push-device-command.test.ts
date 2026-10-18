@@ -3,6 +3,7 @@ import { pushDeviceCommandHandler, pushDeviceId } from '@/functions/src/pushDevi
 
 const token = 'fcm-test-token-abcdefghijklmnopqrstuvwxyz0123456789';
 const path = `pushDevices/${pushDeviceId(token)}`;
+const followUp = { time: '17:00', overdueEnabled: true, pendingEnabled: true, timeZone: 'Asia/Riyadh' };
 type Doc = Record<string, any>;
 function fixture(extra: Record<string, Doc> = {}) {
   const docs: Record<string, Doc> = {
@@ -30,6 +31,47 @@ const request = (action: string, changes: Doc = {}) => ({ auth: { uid: 'u' }, da
 const call = (f: ReturnType<typeof fixture>, action: string, changes: Doc = {}) => pushDeviceCommandHandler(request(action, changes) as never, f.runtime);
 
 describe('authenticated Android Push registration and bounded test sending', () => {
+  it.each([
+    null, {}, { ...followUp, time: '24:00' }, { ...followUp, time: '9:00' }, { ...followUp, time: '17:60' },
+    { ...followUp, overdueEnabled: 'true' }, { ...followUp, pendingEnabled: 1 },
+    { ...followUp, timeZone: 'Invalid/Zone' }, { ...followUp, timeZone: ' Asia/Riyadh' },
+  ])('rejects malformed follow-up settings without writes: %j', async (value) => {
+    const f = fixture();
+    await expect(call(f, 'register', { followUp: value })).rejects.toMatchObject({ code: 'invalid-argument' });
+    expect(f.writes).toEqual([]); expect(f.send).not.toHaveBeenCalled();
+  });
+  it('requires settings for the preferences action and refuses unconnected/disabled devices', async () => {
+    const f = fixture();
+    await expect(call(f, 'preferences')).rejects.toMatchObject({ code: 'invalid-argument' });
+    await expect(call(f, 'preferences', { followUp })).rejects.toMatchObject({ code: 'failed-precondition' });
+    await call(f, 'register', { followUp }); await call(f, 'disable');
+    await expect(call(f, 'preferences', { followUp })).rejects.toMatchObject({ code: 'failed-precondition' });
+    expect(f.docs[path]).not.toHaveProperty('followUp');
+  });
+  it('saves settings only for the active device scope, allowlisting fields and preserving test limits', async () => {
+    const f = fixture(); await call(f, 'register', { followUp }); await call(f, 'test');
+    const changed = { ...followUp, time: '18:30', overdueEnabled: false, timeZone: 'Europe/Istanbul' };
+    await call(f, 'preferences', { followUp: { ...changed, uid: 'attacker', enabled: false, nextSendAt: 0 } });
+    expect(f.docs[path]).toMatchObject({ uid: 'u', enabled: true, followUp: changed, testCount: 1 });
+    expect(f.docs[path].followUp).toEqual(changed);
+    expect(f.send).toHaveBeenCalledOnce(); // Only the explicit connection test.
+    expect(f.writes.every((key) => key.startsWith('pushDevices/'))).toBe(true);
+  });
+  it('preserves settings for legacy reconnects but never leaks them to a new owner/scope', async () => {
+    const f = fixture(); await call(f, 'register', { followUp });
+    await call(f, 'register'); expect(f.docs[path].followUp).toEqual(followUp);
+    f.docs[path].uid = 'other';
+    await expect(call(f, 'preferences', { followUp })).rejects.toMatchObject({ code: 'failed-precondition' });
+    await call(f, 'register'); expect(f.docs[path]).not.toHaveProperty('followUp');
+    await call(f, 'register', { followUp }); f.docs[path].storeId = 'other';
+    await expect(call(f, 'preferences', { followUp })).rejects.toMatchObject({ code: 'failed-precondition' });
+    await call(f, 'register'); expect(f.docs[path]).not.toHaveProperty('followUp');
+  });
+  it('rejects preference updates after revoked membership', async () => {
+    const f = fixture(); await call(f, 'register', { followUp }); f.docs['spaces/s/members/u'].status = 'inactive';
+    await expect(call(f, 'preferences', { followUp: { ...followUp, time: '18:00' } })).rejects.toMatchObject({ code: 'permission-denied' });
+    expect(f.docs[path].followUp).toEqual(followUp);
+  });
   it('requires authentication and rejects stale account requests before Firestore', async () => {
     const f = fixture();
     await expect(pushDeviceCommandHandler({ data: request('register').data } as never, f.runtime)).rejects.toMatchObject({ code: 'unauthenticated' });
