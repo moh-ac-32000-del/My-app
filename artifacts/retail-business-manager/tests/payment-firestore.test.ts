@@ -68,7 +68,7 @@ describe('Payment Firestore service', () => {
     firestoreMocks.nextSnapshot = null;
     firestoreMocks.listenerError = null;
     firestoreMocks.getDocs.mockResolvedValue({ docs: [] });
-    firestoreMocks.onSnapshot.mockImplementation((_reference, next, error) => {
+    firestoreMocks.onSnapshot.mockImplementation((_reference, _options, next, error) => {
       firestoreMocks.nextSnapshot = next;
       firestoreMocks.listenerError = error;
       return firestoreMocks.unsubscribe;

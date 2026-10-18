@@ -8,6 +8,7 @@ import {
 } from 'firebase/auth';
 import { getFirebaseAuth, isFirebaseConfigured } from '@/services/firebase';
 import { disconnectAndroidPush } from '@/services/androidPush';
+import { clearLocalExportCache } from './localExportCache';
 
 export type FirebaseAuthErrorKey =
   | 'authEmailAlreadyInUse'
@@ -30,7 +31,7 @@ export function subscribeToFirebaseAuth(
     return () => undefined;
   }
 
-  return onAuthStateChanged(getFirebaseAuth(), onUser, onError);
+  return onAuthStateChanged(getFirebaseAuth(), (user) => { clearLocalExportCache(); onUser(user); }, onError);
 }
 
 export async function createFirebaseAccount(email: string, password: string): Promise<User> {

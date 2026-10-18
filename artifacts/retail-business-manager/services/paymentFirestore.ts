@@ -1,3 +1,4 @@
+import { observeForLocalExport } from './localExportObservation';
 import {
   collection,
   getDocs,
@@ -36,9 +37,12 @@ export function subscribeToPayments(
     workspaceBusinessCollectionPath(spaceId, 'payments'),
   );
 
+  const exportObservation = observeForLocalExport(spaceId, 'payments');
   return onSnapshot(
     paymentsReference,
+    { includeMetadataChanges: true },
     (snapshot: PaymentCollectionSnapshot) => {
+      exportObservation.receive(snapshot);
       const payments = snapshot.docs
         .map((snapshotDocument) => normalizePaymentDocument(snapshotDocument.id, snapshotDocument.data(), spaceId))
         .filter((payment): payment is Payment => payment !== null)
@@ -46,6 +50,7 @@ export function subscribeToPayments(
       onPayments(payments);
     },
     (error) => {
+      exportObservation.invalidate();
       onError(error instanceof Error ? error : new Error('paymentListenerFailed'));
     },
   );

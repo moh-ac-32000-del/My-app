@@ -1,3 +1,4 @@
+import { observeForLocalExport } from './localExportObservation';
 import { getFunctions, httpsCallable, type Functions } from 'firebase/functions';
 import { getFirebaseApp, isFirebaseConfigured } from '@/services/firebase';
 import type { DailyArchive } from '@/types/business';
@@ -12,7 +13,9 @@ interface DailyArchiveCommandResponse {
 let functions: Functions | null = null;
 
 export async function loadCloudDailyArchives(spaceId: string, storeId: string): Promise<DailyArchive[]> {
+  const exportObservation = observeForLocalExport(spaceId, 'dailyArchives');
   const data = await send({ action: 'list', spaceId, storeId });
+  exportObservation.archives(data.archives, data.processedAt, storeId);
   return data.archives;
 }
 
