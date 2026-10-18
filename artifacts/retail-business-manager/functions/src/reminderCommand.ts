@@ -179,7 +179,8 @@ async function listAndReconcile(
     const remindAt = `${debt.dueDate}T${notificationTime}:00`;
     const previous = byId.get(id);
     if (!previous) {
-      batch.set(reference, {
+      // Never overwrite a concurrently created/deleted reminder with a stale list snapshot.
+      batch.create(reference, {
         id, storeId: input.storeId, workspaceId: input.spaceId, debtId: debt.id,
         remindAt, status: 'pending', note: SYSTEM_DUE_DATE_NOTE, createdAt: now, updatedAt: now,
       });

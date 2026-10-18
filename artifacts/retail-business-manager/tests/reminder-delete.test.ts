@@ -30,7 +30,7 @@ function database(extra: Record<string, Doc> = {}) {
     docs, writes,
     collection,
     runTransaction: async (fn: any) => fn({ get: async (ref: any) => snapshot(ref.path), update: (ref: any, value: Doc) => write(ref.path, value, true) }),
-    batch: () => ({ set: (ref: any, value: Doc) => write(ref.path, value, false), update: (ref: any, value: Doc) => write(ref.path, value, true), delete: (ref: any) => { writes.push(ref.path); delete docs[ref.path]; }, commit: async () => {} }),
+    batch: () => ({ create: (ref: any, value: Doc) => { if (docs[ref.path]) throw new Error('already-exists'); write(ref.path, value, false); }, update: (ref: any, value: Doc) => write(ref.path, value, true), delete: (ref: any) => { writes.push(ref.path); delete docs[ref.path]; }, commit: async () => {} }),
   };
 }
 const request = (changes: Doc = {}) => ({ auth: { uid: 'user-a' }, data: { action: 'delete', spaceId: 'space-a', storeId: 'store-a', reminderId: 'reminder-a', ...changes } });
