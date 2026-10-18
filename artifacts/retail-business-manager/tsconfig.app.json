@@ -27,6 +27,8 @@
     "functions/**/*",
     "tests/bootstrap-primary-space-function.test.ts",
     "tests/daily-archive-command.test.ts",
+    "tests/daily-archive-backend.test.ts",
+    "tests/closing-cash-balances.test.ts",
     "tests/reminder-command.test.ts",
     "tests/trusted-financial-store-scope.test.ts",
     "tests/settlement-trusted-backend.test.ts",
