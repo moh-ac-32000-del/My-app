@@ -4,8 +4,11 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { AppShell, EmptyState, GlassCard, PageHeader, SectionTitle } from '@/components/AppShell';
 import { CustomerFormModal, type CustomerDraft } from '@/components/CustomerFormModal';
+import { CustomerDebtSummary } from '@/components/CustomerDebtSummary';
 import { filterCustomers } from '@/components/customer-utils';
 import { useCustomers } from '@/context/CustomerContext';
+import { useDebts } from '@/context/DebtContext';
+import { selectCustomerDebtSummary } from '@/services/customerDebtSummary';
 import { useColors } from '@/hooks/useColors';
 import { useI18n } from '@/hooks/useI18n';
 import { useStore } from '@/context/StoreContext';
@@ -41,13 +44,18 @@ function CustomerCard({ customer, onPress }: { customer: Customer; onPress: () =
 export default function CustomersScreen() {
   const colors = useColors();
   const router = useRouter();
-  const { profile } = useStore();
+  const { profile, activeSpaceId, isReady, isAuthenticated } = useStore();
   const { customers, isLoading, error, retryCustomers, createCustomer } = useCustomers();
+  const { debts, canonicalSpaceId: debtSpaceId, isLoading: debtsLoading, error: debtError, retryDebts } = useDebts();
   const { t, isRTL } = useI18n();
   const [search, setSearch] = useState<string>('');
   const [isFormVisible, setIsFormVisible] = useState<boolean>(false);
 
   const visibleCustomers = useMemo(() => filterCustomers(customers, search), [customers, search]);
+  const debtSummary = useMemo(() => selectCustomerDebtSummary({
+    debts, storeId: profile.id, activeSpaceId, debtSpaceId,
+    isLoading: debtsLoading || !isReady || !isAuthenticated, error: debtError,
+  }), [debts, profile.id, activeSpaceId, debtSpaceId, debtsLoading, isReady, isAuthenticated, debtError]);
 
   const addCustomer = async (draft: CustomerDraft) => {
     if (!draft.name.trim()) {
@@ -91,6 +99,8 @@ export default function CustomersScreen() {
           </Pressable>
         )}
       />
+
+      <CustomerDebtSummary state={debtSummary} onRetry={retryDebts} />
 
       <GlassCard style={styles.searchCard}>
         <View style={[styles.searchWrap, { backgroundColor: colors.input, borderColor: colors.border, flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
