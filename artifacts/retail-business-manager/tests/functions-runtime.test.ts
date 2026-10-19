@@ -1,21 +1,18 @@
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-
-const readJson = (path: string) => JSON.parse(readFileSync(resolve(process.cwd(), path), 'utf8'));
+import functionsPackage from '../functions/package.json';
+import firebase from '../firebase.json';
+import workflow from '../../../.github/workflows/retail-business-manager-ci.yml?raw';
 
 describe('supported Functions runtime configuration', () => {
   it('deploys the reviewed Node.js 22 runtime without a conflicting Firebase override', () => {
-    expect(readJson('functions/package.json').engines.node).toBe('22');
-    const firebase = readJson('firebase.json');
+    expect(functionsPackage.engines.node).toBe('22');
     expect(firebase.functions.source).toBe('functions');
-    expect([undefined, 'nodejs22']).toContain(firebase.functions.runtime);
+    expect([undefined, 'nodejs22']).toContain((firebase.functions as { runtime?: string }).runtime);
   });
 
   it('runs both application and actual emulator integration CI on the deployed major version', () => {
-    const workflow = readFileSync(resolve(process.cwd(), '../../.github/workflows/retail-business-manager-ci.yml'), 'utf8');
     const versions = [...workflow.matchAll(/^\s+node-version:\s*['"]?(\d+)['"]?\s*$/gm)].map(match => match[1]);
     expect(versions).toHaveLength(2);
-    expect(versions.every(version => version === readJson('functions/package.json').engines.node)).toBe(true);
+    expect(versions.every(version => version === functionsPackage.engines.node)).toBe(true);
   });
 });
