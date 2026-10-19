@@ -68,7 +68,6 @@ function spaceDocument(spaceId, ownerUserId) {
   return {
     spaceId,
     ownerUserId,
-    status: 'active',
     createdAt: '2026-08-30T10:00:00.000Z',
     updatedAt: '2026-08-30T10:00:00.000Z',
   };
@@ -177,7 +176,10 @@ async function seedUser(uid, data = {}) {
 async function seedMultiSpace(spaceId, ownerUserId, members = []) {
   await testEnvironment.withSecurityRulesDisabled(async (context) => {
     const firestore = context.firestore();
-    await setDoc(multiSpaceReference(context, spaceId), spaceDocument(spaceId, ownerUserId));
+    await setDoc(multiSpaceReference(context, spaceId), {
+      ...spaceDocument(spaceId, ownerUserId),
+      status: 'active',
+    });
     for (const member of members) {
       await setDoc(
         memberReference(context, spaceId, member.uid),
