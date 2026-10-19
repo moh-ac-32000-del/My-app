@@ -1,6 +1,14 @@
 {
   "indexes": [
     {
+      "collectionGroup": "merchantOperations",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "merchantId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "spaceInvitations",
       "queryScope": "COLLECTION",
       "fields": [

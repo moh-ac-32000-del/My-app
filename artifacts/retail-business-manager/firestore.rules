@@ -91,6 +91,24 @@ service cloud.firestore {
       allow create, update, delete: if false;
     }
 
+    // Merchant/credit state is owned by trusted commands, never client writes.
+    match /spaces/{spaceId}/merchants/{merchantId} {
+      allow read: if isActiveMember(spaceId);
+      allow create, update, delete: if false;
+    }
+    match /spaces/{spaceId}/merchantBalances/{balanceId} {
+      allow read: if isActiveMember(spaceId);
+      allow create, update, delete: if false;
+    }
+    match /spaces/{spaceId}/merchantOperations/{operationId} {
+      allow read: if isActiveMember(spaceId);
+      allow create, update, delete: if false;
+    }
+    match /spaces/{spaceId}/customerCredits/{creditId} {
+      allow read: if isActiveMember(spaceId);
+      allow create, update, delete: if false;
+    }
+
     match /spaces/{spaceId}/dailyArchives/{archiveId} {
       allow read: if isActiveMember(spaceId);
       // Archive snapshots and closing counters are written only by trusted Functions.
