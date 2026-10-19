@@ -31,6 +31,7 @@ export function CustomerProvider({ children }: { children: ReactNode }) {
     retryActiveSpace,
     canWriteBusiness,
     assertBusinessAccess,
+    sessionKey,
   } = useStore();
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [canonicalSpaceId, setCanonicalSpaceId] = useState<string | null>(null);
@@ -121,28 +122,28 @@ export function CustomerProvider({ children }: { children: ReactNode }) {
   }, [retryActiveSpace]);
 
   const createCustomer = useCallback(async (customer: Customer) => {
-    assertBusinessAccess(canonicalSpaceId);
+    assertBusinessAccess(canonicalSpaceId, sessionKey);
     if (!canWriteBusiness || !canonicalSpaceId || canonicalSpaceId !== activeSpaceId) {
       throw new Error('customerWorkspaceUnavailable');
     }
     await createCustomerDocument(canonicalSpaceId, customer);
-  }, [canonicalSpaceId, activeSpaceId, canWriteBusiness, assertBusinessAccess]);
+  }, [canonicalSpaceId, activeSpaceId, canWriteBusiness, assertBusinessAccess, sessionKey]);
 
   const updateCustomer = useCallback(async (customer: Customer) => {
-    assertBusinessAccess(canonicalSpaceId);
+    assertBusinessAccess(canonicalSpaceId, sessionKey);
     if (!canWriteBusiness || !canonicalSpaceId || canonicalSpaceId !== activeSpaceId) {
       throw new Error('customerWorkspaceUnavailable');
     }
     await updateCustomerDocument(canonicalSpaceId, customer);
-  }, [canonicalSpaceId, activeSpaceId, canWriteBusiness, assertBusinessAccess]);
+  }, [canonicalSpaceId, activeSpaceId, canWriteBusiness, assertBusinessAccess, sessionKey]);
 
   const softDeleteCustomer = useCallback(async (customer: Customer) => {
-    assertBusinessAccess(canonicalSpaceId);
+    assertBusinessAccess(canonicalSpaceId, sessionKey);
     if (!canWriteBusiness || !canonicalSpaceId || canonicalSpaceId !== activeSpaceId) {
       throw new Error('customerWorkspaceUnavailable');
     }
     await softDeleteCustomerDocument(canonicalSpaceId, customer);
-  }, [canonicalSpaceId, activeSpaceId, canWriteBusiness, assertBusinessAccess]);
+  }, [canonicalSpaceId, activeSpaceId, canWriteBusiness, assertBusinessAccess, sessionKey]);
 
   const value = useMemo(
     () => ({

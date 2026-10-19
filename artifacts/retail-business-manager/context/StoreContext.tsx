@@ -7,7 +7,7 @@ import { normalizeAccent, type AccentColor } from '@/constants/colors';
 import { isFirebaseConfigured } from '@/services/firebase';
 import { signOutFromFirebase, subscribeToFirebaseAuth } from '@/services/firebaseAuth';
 import { discoverUserSpaces, validateUserSpaceMembership, loadWorkspaceSession, observeWorkspaceSession } from '@/services/firestore';
-import { workspaceCandidates } from '@/data/workspaceSelection';
+import { workspaceCandidates, workspaceSessionKey } from '@/data/workspaceSelection';
 import { clearLocalExportCache } from '@/services/localExportCache';
 import { createDebtDocument } from '@/services/debtFirestore';
 import { subscribeToTransactions } from '@/services/transactionFirestore';
@@ -56,7 +56,7 @@ interface StoreContextValue {
   canManageSpace: boolean;
   sessionKey: string;
   switchWorkspace: (spaceId: string) => Promise<void>;
-  assertBusinessAccess: (spaceId: string | null) => void;
+  assertBusinessAccess: (spaceId: string | null, expectedSessionKey: string) => void;
   transactions: Transaction[];
   transactionsLoading: boolean;
   transactionsError: string | null;
@@ -270,7 +270,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     initializationInFlightRef.current = null;
     startPostAuthCloudInitialization(user, transition, spaceId);
   }, [startPostAuthCloudInitialization]);
-  const assertBusinessAccess = React.useCallback((spaceId: string | null) => {
+  const assertBusinessAccess = React.useCallback((spaceId: string | null, expectedSessionKey: string) => {
+    const currentKey = workspaceSessionKey(firebaseUserRef.current?.uid, activeScopeRef.current, workspaceRoleRef.current, authTransitionRef.current);
+    if (expectedSessionKey !== currentKey) throw new Error('workspaceChanged');
     if (!firebaseUserRef.current || !spaceId || spaceId !== activeScopeRef.current || !profileRef.current.id
       || !['owner','editor'].includes(workspaceRoleRef.current ?? '')) throw new Error('workspaceReadOnly');
   }, []);
@@ -383,6 +385,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const isReady = isFirebaseReady;
   const isAuthenticated = isFirebaseConfigured && isFirebaseSessionAuthenticated(firebaseUser);
+  const renderSessionKey = workspaceSessionKey(firebaseUser?.uid, activeSpaceId, workspaceRole, authTransitionRef.current);
 
   useEffect(() => {
     let isActive = true;
@@ -480,6 +483,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [activeSpaceId, activeSpaceError, initializationError, isAuthenticated, isReady, profile.id]);
 
   const saveProfile = async (updates: Partial<StoreProfile>) => {
+    assertBusinessAccess(activeSpaceId, renderSessionKey);
     if (workspaceRoleRef.current !== 'owner' || activeScopeRef.current !== activeSpaceId) throw new Error('workspaceReadOnly');
     const expectedScope = activeSpaceId;
     const expectedTransition = authTransitionRef.current;
@@ -536,9 +540,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   };
 
   const addTransaction = async (draft: CashTransactionDraft): Promise<Transaction> => {
+    assertBusinessAccess(activeSpaceId, renderSessionKey);
     const expectedScope = activeSpaceId;
     const transition = authTransitionRef.current;
     await transactionLoadPromiseRef.current;
+    assertBusinessAccess(activeSpaceId, renderSessionKey);
     if (!expectedScope || expectedScope !== activeScopeRef.current || transition !== authTransitionRef.current
       || !['owner', 'editor'].includes(workspaceRoleRef.current ?? '')) throw new Error('workspaceReadOnly');
     if (!isFirebaseConfigured) {
@@ -556,6 +562,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     customerId: string,
     draft: { amount: number; currency: CurrencyCode; dueDate?: string },
   ): Promise<Debt> => {
+    assertBusinessAccess(activeSpaceId, renderSessionKey);
     if (!activeSpaceId || activeScopeRef.current !== activeSpaceId || !['owner', 'editor'].includes(workspaceRoleRef.current ?? '')) throw new Error('workspaceReadOnly');
     if (!isFirebaseConfigured) {
       throw new Error('firebaseNotConfigured');
@@ -569,8 +576,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   };
 
   const settleCustomerDebt = async (customerId: string, draft: SettlementDraft): Promise<SettlementResult> => {
+    assertBusinessAccess(activeSpaceId, renderSessionKey);
     const transition = authTransitionRef.current;
     await transactionLoadPromiseRef.current;
+    assertBusinessAccess(activeSpaceId, renderSessionKey);
     if (!activeSpaceId || activeScopeRef.current !== activeSpaceId || transition !== authTransitionRef.current
       || !['owner', 'editor'].includes(workspaceRoleRef.current ?? '')) throw new Error('workspaceReadOnly');
     if (!isFirebaseConfigured) {
@@ -615,7 +624,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       workspaceRole,
       canWriteBusiness: isReady && !!profile.id && !initializationError && !activeSpaceError && (workspaceRole === 'owner' || workspaceRole === 'editor'),
       canManageSpace: isReady && !!profile.id && !initializationError && !activeSpaceError && workspaceRole === 'owner',
-      sessionKey: `${firebaseUser?.uid ?? ''}/${activeSpaceId ?? ''}/${workspaceRole ?? ''}/${authTransitionRef.current}`,
+      sessionKey: renderSessionKey,
       switchWorkspace,
       assertBusinessAccess,
       transactions,
@@ -634,6 +643,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       activeSpaceLoading,
       cloudSpace,
       workspaceRole,
+      renderSessionKey,
       switchWorkspace,
       assertBusinessAccess,
       initializationError,

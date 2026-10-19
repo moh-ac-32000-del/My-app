@@ -28,6 +28,7 @@ export function PaymentProvider({ children }: { children: ReactNode }) {
     retryActiveSpace,
     canWriteBusiness,
     assertBusinessAccess,
+    sessionKey,
   } = useStore();
   const [payments, setPayments] = useState<Payment[]>([]);
   const [canonicalSpaceId, setCanonicalSpaceId] = useState<string | null>(null);
@@ -123,7 +124,7 @@ export function PaymentProvider({ children }: { children: ReactNode }) {
   }, [retryActiveSpace]);
 
   const createPayment = useCallback(async (payment: Payment) => {
-    assertBusinessAccess(canonicalSpaceId);
+    assertBusinessAccess(canonicalSpaceId, sessionKey);
     if (isFirebaseConfigured) {
       if (!canWriteBusiness || !canonicalSpaceId || canonicalSpaceId !== activeSpaceId) {
         throw new Error('paymentWorkspaceUnavailable');
@@ -133,7 +134,7 @@ export function PaymentProvider({ children }: { children: ReactNode }) {
     }
 
     throw new Error('firebaseNotConfigured');
-  }, [canonicalSpaceId, profile.id, activeSpaceId, canWriteBusiness, assertBusinessAccess]);
+  }, [canonicalSpaceId, profile.id, activeSpaceId, canWriteBusiness, assertBusinessAccess, sessionKey]);
 
   const value = useMemo(
     () => ({
