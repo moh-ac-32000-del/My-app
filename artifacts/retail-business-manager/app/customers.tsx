@@ -44,7 +44,7 @@ function CustomerCard({ customer, onPress }: { customer: Customer; onPress: () =
 export default function CustomersScreen() {
   const colors = useColors();
   const router = useRouter();
-  const { profile, activeSpaceId, isReady, isAuthenticated } = useStore();
+  const { profile, activeSpaceId, isReady, isAuthenticated, canWriteBusiness } = useStore();
   const { customers, isLoading, error, retryCustomers, createCustomer } = useCustomers();
   const { debts, canonicalSpaceId: debtSpaceId, isLoading: debtsLoading, error: debtError, retryDebts } = useDebts();
   const { t, isRTL } = useI18n();
@@ -93,11 +93,11 @@ export default function CustomersScreen() {
       <PageHeader
         title={t('customers')}
         subtitle={t('customersModuleHint')}
-        action={(
+        action={canWriteBusiness ? (
           <Pressable testID="add-customer-header" accessibilityLabel={t('addCustomer')} onPress={() => setIsFormVisible(true)} style={({ pressed }) => [styles.headerAction, { backgroundColor: colors.primary }, pressed && styles.pressed]}>
             <Ionicons name="add" size={21} color={colors.primaryForeground} />
           </Pressable>
-        )}
+        ) : null}
       />
 
       <CustomerDebtSummary state={debtSummary} onRetry={retryDebts} />
@@ -152,10 +152,10 @@ export default function CustomersScreen() {
         />
       )}
 
-      <Pressable testID="add-customer-button" onPress={() => setIsFormVisible(true)} style={({ pressed }) => [styles.addButton, { backgroundColor: colors.primary, flexDirection: isRTL ? 'row-reverse' : 'row' }, pressed && styles.pressed]}>
+      {canWriteBusiness ? <Pressable testID="add-customer-button" onPress={() => setIsFormVisible(true)} style={({ pressed }) => [styles.addButton, { backgroundColor: colors.primary, flexDirection: isRTL ? 'row-reverse' : 'row' }, pressed && styles.pressed]}>
         <Ionicons name="person-add-outline" size={19} color={colors.primaryForeground} />
         <Text style={[styles.addButtonText, { color: colors.primaryForeground }]}>{t('addCustomer')}</Text>
-      </Pressable>
+      </Pressable> : null}
 
       <CustomerFormModal visible={isFormVisible} onClose={() => setIsFormVisible(false)} onSave={(draft) => void addCustomer(draft)} />
     </AppShell>

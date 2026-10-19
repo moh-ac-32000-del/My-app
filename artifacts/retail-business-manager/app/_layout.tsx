@@ -25,12 +25,10 @@ import { AndroidPushObserver } from '@/components/AndroidPushObserver';
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
 
-const queryClient = new QueryClient();
-
 function RootLayoutNav() {
   const pathname = usePathname();
-  const { isAuthenticated, isReady } = useStore();
-  const showQuickActions = isReady && isAuthenticated && pathname === '/';
+  const { isAuthenticated, isReady, canWriteBusiness } = useStore();
+  const showQuickActions = isReady && isAuthenticated && canWriteBusiness && pathname === '/';
   return (
     <View style={{ flex: 1 }}>
       <AndroidPushObserver />
@@ -60,7 +58,19 @@ export default function RootLayout() {
     <SafeAreaProvider>
       <StoreProvider>
         <ErrorBoundary>
-          <DebtProvider>
+          <ScopedBusinessProviders />
+        </ErrorBoundary>
+      </StoreProvider>
+    </SafeAreaProvider>
+  );
+}
+
+/** Remount screen drafts and business caches on account/space/role transitions. */
+function ScopedBusinessProviders() {
+  const { sessionKey } = useStore();
+  const queryClient = React.useMemo(() => new QueryClient(), [sessionKey]);
+  return (
+          <DebtProvider key={sessionKey}>
             <PaymentProvider>
               <CustomerProvider>
                 <QueryClientProvider client={queryClient}>
@@ -73,8 +83,5 @@ export default function RootLayout() {
               </CustomerProvider>
             </PaymentProvider>
           </DebtProvider>
-        </ErrorBoundary>
-      </StoreProvider>
-    </SafeAreaProvider>
   );
 }

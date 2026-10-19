@@ -107,6 +107,8 @@ describe('post-auth cloud initialization', () => {
 describe('cloud workspace discovery', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.validateUserSpaceMembership.mockReset();
+    mocks.bootstrapPrimarySpace.mockReset();
   });
 
   it('resolves and validates the single active membership', async () => {
@@ -126,17 +128,18 @@ describe('cloud workspace discovery', () => {
     expect(mocks.bootstrapPrimarySpace).not.toHaveBeenCalled();
   });
 
-  it('bootstraps a private workspace when none exists', async () => {
+  it('lets a new account choose creation or invitation instead of silently bootstrapping', async () => {
     mocks.discoverUserSpaces.mockResolvedValueOnce({
       memberships: [], primarySpaceId: null, lastActiveSpaceId: null,
     });
     mocks.bootstrapPrimarySpace.mockResolvedValueOnce({ primarySpaceId: 'space-new' });
     mocks.validateUserSpaceMembership.mockResolvedValueOnce(true);
 
-    await expect(resolveActiveSpaceForUser(firebaseUser.uid)).resolves.toBe('space-new');
+    await expect(resolveActiveSpaceForUser(firebaseUser.uid)).resolves.toBeNull();
+    expect(mocks.bootstrapPrimarySpace).not.toHaveBeenCalled();
   });
 
-  it('rejects ambiguous multiple active workspaces', async () => {
+  it('selects the primary candidate among multiple memberships after validation', async () => {
     mocks.discoverUserSpaces.mockResolvedValueOnce({
       memberships: [
         { spaceId: 'space-A', role: 'owner', status: 'active' },
@@ -146,8 +149,20 @@ describe('cloud workspace discovery', () => {
       lastActiveSpaceId: null,
     });
 
-    await expect(resolveActiveSpaceForUser(firebaseUser.uid)).rejects.toThrow('multipleWorkspacesUnsupported');
-    expect(mocks.validateUserSpaceMembership).not.toHaveBeenCalled();
+    mocks.validateUserSpaceMembership.mockResolvedValueOnce(true);
+    await expect(resolveActiveSpaceForUser(firebaseUser.uid)).resolves.toBe('space-A');
+    expect(mocks.validateUserSpaceMembership).toHaveBeenCalledWith(firebaseUser.uid, 'space-A');
+  });
+  it('skips a removed last-active hint and validates another membership', async () => {
+    mocks.discoverUserSpaces.mockResolvedValueOnce({ memberships: [{spaceId:'space-B', status:'active',role:'viewer'}], primarySpaceId:null,lastActiveSpaceId:null });
+    mocks.validateUserSpaceMembership.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+    await expect(resolveActiveSpaceForUser(firebaseUser.uid,'removed')).resolves.toBe('space-B');
+    expect(mocks.bootstrapPrimarySpace).not.toHaveBeenCalled();
+  });
+  it('does not bootstrap over revoked existing memberships', async () => {
+    mocks.discoverUserSpaces.mockResolvedValueOnce({memberships:[{spaceId:'removed',status:'suspended'}],primarySpaceId:null,lastActiveSpaceId:null});
+    await expect(resolveActiveSpaceForUser(firebaseUser.uid)).rejects.toThrow('activeWorkspaceMembershipMissing');
+    expect(mocks.bootstrapPrimarySpace).not.toHaveBeenCalled();
   });
 });
 

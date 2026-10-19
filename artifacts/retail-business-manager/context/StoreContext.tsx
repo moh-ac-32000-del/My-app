@@ -6,15 +6,16 @@ import { DEFAULT_CURRENCY, normalizeCurrency, normalizeQuickCurrencies, type Cur
 import { normalizeAccent, type AccentColor } from '@/constants/colors';
 import { isFirebaseConfigured } from '@/services/firebase';
 import { signOutFromFirebase, subscribeToFirebaseAuth } from '@/services/firebaseAuth';
-import { discoverUserSpaces, validateUserSpaceMembership } from '@/services/firestore';
-import { bootstrapPrimarySpace } from '@/services/trustedBootstrap';
+import { discoverUserSpaces, validateUserSpaceMembership, loadWorkspaceSession, observeWorkspaceSession } from '@/services/firestore';
+import { workspaceCandidates } from '@/data/workspaceSelection';
+import { clearLocalExportCache } from '@/services/localExportCache';
 import { createDebtDocument } from '@/services/debtFirestore';
 import { subscribeToTransactions } from '@/services/transactionFirestore';
 import { createTrustedCashTransaction } from '@/services/trustedTransactionFirestore';
 import { settleCustomerDebtInCloud } from '@/services/settlementFirestore';
 import { getOrCreateCloudStoreProfile, updateCloudStoreProfile } from '@/services/cloudStoreProfile';
-import type { Space } from '@/types/space';
-import { loadUiLanguage, saveUiLanguage } from '@/services/preferences';
+import type { Space, MembershipRole } from '@/types/space';
+import { loadUiLanguage, saveUiLanguage, loadLastWorkspace, saveLastWorkspace } from '@/services/preferences';
 import {
   createCashTransaction,
   createDebt,
@@ -50,6 +51,12 @@ interface StoreContextValue {
   initializationError: string | null;
   retryInitialization: () => void;
   cloudSpace: Space | null;
+  workspaceRole: MembershipRole | null;
+  canWriteBusiness: boolean;
+  canManageSpace: boolean;
+  sessionKey: string;
+  switchWorkspace: (spaceId: string) => Promise<void>;
+  assertBusinessAccess: (spaceId: string | null) => void;
   transactions: Transaction[];
   transactionsLoading: boolean;
   transactionsError: string | null;
@@ -119,29 +126,17 @@ export function clearFirebaseAuthSession(callbacks: {
   callbacks.onFirebaseReady();
 }
 
-export async function resolveActiveSpaceForUser(uid: string): Promise<string | null> {
+export async function resolveActiveSpaceForUser(uid: string, preferred?: string | null): Promise<string | null> {
   const discovery = await discoverUserSpaces(uid);
-  const activeMemberships = discovery.memberships.filter(
-    (membership) => membership.status === 'active' && membership.spaceId.trim(),
-  );
-  if (activeMemberships.length > 1) {
-    throw new Error('multipleWorkspacesUnsupported');
-  }
-
-  let resolvedSpaceId = discovery.primarySpaceId?.trim() || null;
-  if (!resolvedSpaceId) {
-    const bootstrapResult = await bootstrapPrimarySpace();
-    resolvedSpaceId = bootstrapResult.primarySpaceId.trim();
-  }
-  if (!resolvedSpaceId) {
+  const candidates = workspaceCandidates(discovery, preferred);
+  if (!candidates.length && !discovery.memberships.length) {
+    // New accounts choose explicitly between creating a workspace and accepting an invitation.
     return null;
   }
-
-  const isValidMembership = await validateUserSpaceMembership(uid, resolvedSpaceId);
-  if (!isValidMembership) {
-    throw new Error('activeWorkspaceMembershipMissing');
+  for (const id of candidates) {
+    if (await validateUserSpaceMembership(uid, id)) return id;
   }
-  return resolvedSpaceId;
+  throw new Error('activeWorkspaceMembershipMissing');
 }
 
 export function StoreProvider({ children }: { children: ReactNode }) {
@@ -169,6 +164,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, []);
   const [firebaseUser, setFirebaseUser] = useState<User | null>(null);
   const [cloudSpace, setCloudSpace] = useState<Space | null>(null);
+  const [workspaceRole, setWorkspaceRole] = useState<MembershipRole | null>(null);
+  const workspaceRoleRef = useRef<MembershipRole | null>(null);
+  const activeScopeRef = useRef<string | null>(null);
   const [activeSpaceId, setActiveSpaceIdState] = useState<string | null>(null);
   const [activeSpaceLoading, setActiveSpaceLoading] = useState<boolean>(isFirebaseConfigured);
   const [activeSpaceError, setActiveSpaceError] = useState<string | null>(null);
@@ -185,7 +183,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const firebaseUserRef = useRef<User | null>(null);
   const initializationInFlightRef = useRef<number | null>(null);
 
-  const startPostAuthCloudInitialization = React.useCallback((user: User, transition: number) => {
+  const startPostAuthCloudInitialization = React.useCallback((user: User, transition: number, preferred?: string) => {
     if (initializationInFlightRef.current === transition) {
       return;
     }
@@ -195,19 +193,36 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setActiveSpaceLoading(true);
     setActiveSpaceError(null);
     setActiveSpaceIdState(null);
+    activeScopeRef.current = null;
+    clearLocalExportCache();
+    workspaceRoleRef.current = null;
+    setWorkspaceRole(null);
+    setCloudSpace(null);
+    profileRef.current = defaultProfile;
+    setProfile(defaultProfile);
+    transactionsRef.current = [];
+    setTransactions([]);
 
     void (async () => {
       let resolvedSpaceId: string | null = null;
       try {
-        resolvedSpaceId = await resolveActiveSpaceForUser(user.uid);
+        const hint = preferred ?? await loadLastWorkspace(user.uid).catch(() => null);
+        resolvedSpaceId = preferred ?? await resolveActiveSpaceForUser(user.uid, hint);
+        if (!resolvedSpaceId) throw new Error('cloudSpaceUnavailable');
+        const session = await loadWorkspaceSession(user.uid, resolvedSpaceId);
         if (authTransitionRef.current !== transition || firebaseUserRef.current !== user) {
           return;
         }
         transactionsRef.current = [];
         transactionLoadPromiseRef.current = Promise.resolve();
         setTransactions([]);
+        activeScopeRef.current = resolvedSpaceId;
+        workspaceRoleRef.current = session.role;
+        setWorkspaceRole(session.role);
+        setCloudSpace(session.space);
         setActiveSpaceIdState(resolvedSpaceId);
         setActiveSpaceLoading(resolvedSpaceId === null);
+        void saveLastWorkspace(user.uid, resolvedSpaceId).catch(() => undefined);
       } catch (error) {
         if (authTransitionRef.current !== transition || firebaseUserRef.current !== user) {
           return;
@@ -221,6 +236,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         () => authTransitionRef.current === transition && firebaseUserRef.current === user,
         {
           onProfile: (normalizedProfile) => {
+            if (activeScopeRef.current !== resolvedSpaceId || !workspaceRoleRef.current) return;
             profileRef.current = normalizedProfile;
             setProfile(normalizedProfile);
           },
@@ -244,6 +260,53 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [startPostAuthCloudInitialization]);
   const retryActiveSpace = retryInitialization;
 
+  const switchWorkspace = React.useCallback(async (spaceId: string) => {
+    const user = firebaseUserRef.current;
+    if (!user) throw new Error('firebaseUserIdRequired');
+    // Clear the old session before any asynchronous validation; stale forms are remounted.
+    const transition = ++authTransitionRef.current;
+    initializationInFlightRef.current = null;
+    startPostAuthCloudInitialization(user, transition, spaceId);
+  }, [startPostAuthCloudInitialization]);
+  const assertBusinessAccess = React.useCallback((spaceId: string | null) => {
+    if (!firebaseUserRef.current || !spaceId || spaceId !== activeScopeRef.current || !profileRef.current.id
+      || !['owner','editor'].includes(workspaceRoleRef.current ?? '')) throw new Error('workspaceReadOnly');
+  }, []);
+
+  useEffect(() => {
+    if (!firebaseUser || !activeSpaceId) return;
+    const uid = firebaseUser.uid;
+    const transition = authTransitionRef.current;
+    return observeWorkspaceSession(uid, activeSpaceId, (session) => {
+      if (authTransitionRef.current !== transition) return;
+      if (workspaceRoleRef.current !== session?.role) clearLocalExportCache();
+      workspaceRoleRef.current = session?.role ?? null;
+      setWorkspaceRole(session?.role ?? null);
+      setCloudSpace(session?.space ?? null);
+      if (!session) {
+        activeScopeRef.current = null;
+        setActiveSpaceError('activeWorkspaceMembershipMissing');
+        profileRef.current = defaultProfile;
+        setProfile(defaultProfile);
+        transactionsRef.current = [];
+        setTransactions([]);
+      } else {
+        activeScopeRef.current = activeSpaceId;
+        setActiveSpaceError(null);
+        // An unverified/revoked session never resumes stale profile or screen state.
+        if (!profileRef.current.id) {
+          void getOrCreateCloudStoreProfile(activeSpaceId, defaultProfile).then((nextProfile) => {
+            if (authTransitionRef.current !== transition || activeScopeRef.current !== activeSpaceId || !workspaceRoleRef.current) return;
+            profileRef.current = nextProfile;
+            setProfile(nextProfile);
+          }).catch(() => {
+            if (authTransitionRef.current === transition) setInitializationError('cloudSpaceUnavailable');
+          });
+        }
+      }
+    });
+  }, [firebaseUser, activeSpaceId]);
+
   useEffect(() => {
     if (!isFirebaseConfigured) {
       return;
@@ -261,6 +324,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         firebaseUserRef.current = user;
         setFirebaseUser(user);
         setCloudSpace(null);
+        clearLocalExportCache();
+        workspaceRoleRef.current = null;
+        activeScopeRef.current = null;
+        setWorkspaceRole(null);
         setInitializationError(null);
         setIsFirebaseReady(false);
         setActiveSpaceIdState(null);
@@ -283,6 +350,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         startPostAuthCloudInitialization(user, transition);
       },
       () => {
+        clearLocalExportCache();
+        workspaceRoleRef.current = null;
+        activeScopeRef.current = null;
+        setWorkspaceRole(null);
         authTransitionRef.current += 1;
         firebaseUserRef.current = null;
         initializationInFlightRef.current = null;
@@ -314,7 +385,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     let isActive = true;
     let unsubscribe: (() => void) | undefined;
 
-    if (!isReady || (isFirebaseConfigured && !activeSpaceId)) {
+    if (!isReady || activeSpaceError || (isFirebaseConfigured && !activeSpaceId)) {
       setTransactionsLoading(isFirebaseConfigured && isAuthenticated);
       return () => {
         isActive = false;
@@ -403,9 +474,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return () => {
       isActive = false;
     };
-  }, [activeSpaceId, initializationError, isAuthenticated, isReady, profile.id]);
+  }, [activeSpaceId, activeSpaceError, initializationError, isAuthenticated, isReady, profile.id]);
 
   const saveProfile = async (updates: Partial<StoreProfile>) => {
+    if (workspaceRoleRef.current !== 'owner' || activeScopeRef.current !== activeSpaceId) throw new Error('workspaceReadOnly');
+    const expectedScope = activeSpaceId;
+    const expectedTransition = authTransitionRef.current;
     const currentProfile = profileRef.current;
     const nextProfile: StoreProfile = {
       ...currentProfile,
@@ -424,6 +498,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const queuedWrite = profileWriteQueueRef.current
       .catch(() => undefined)
       .then(async () => {
+        if (workspaceRoleRef.current !== 'owner' || expectedScope !== activeScopeRef.current || expectedTransition !== authTransitionRef.current) throw new Error('workspaceChanged');
         if (isFirebaseConfigured) {
           if (!activeSpaceId) {
             throw new Error('cloudSpaceUnavailable');
@@ -458,7 +533,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   };
 
   const addTransaction = async (draft: CashTransactionDraft): Promise<Transaction> => {
+    const expectedScope = activeSpaceId;
+    const transition = authTransitionRef.current;
     await transactionLoadPromiseRef.current;
+    if (!expectedScope || expectedScope !== activeScopeRef.current || transition !== authTransitionRef.current
+      || !['owner', 'editor'].includes(workspaceRoleRef.current ?? '')) throw new Error('workspaceReadOnly');
     if (!isFirebaseConfigured) {
       throw new Error('firebaseNotConfigured');
     }
@@ -474,6 +553,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     customerId: string,
     draft: { amount: number; currency: CurrencyCode; dueDate?: string },
   ): Promise<Debt> => {
+    if (!activeSpaceId || activeScopeRef.current !== activeSpaceId || !['owner', 'editor'].includes(workspaceRoleRef.current ?? '')) throw new Error('workspaceReadOnly');
     if (!isFirebaseConfigured) {
       throw new Error('firebaseNotConfigured');
     }
@@ -486,7 +566,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   };
 
   const settleCustomerDebt = async (customerId: string, draft: SettlementDraft): Promise<SettlementResult> => {
+    const transition = authTransitionRef.current;
     await transactionLoadPromiseRef.current;
+    if (!activeSpaceId || activeScopeRef.current !== activeSpaceId || transition !== authTransitionRef.current
+      || !['owner', 'editor'].includes(workspaceRoleRef.current ?? '')) throw new Error('workspaceReadOnly');
     if (!isFirebaseConfigured) {
       throw new Error('firebaseNotConfigured');
     }
@@ -526,6 +609,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       initializationError,
       retryInitialization,
       cloudSpace,
+      workspaceRole,
+      canWriteBusiness: !activeSpaceError && (workspaceRole === 'owner' || workspaceRole === 'editor'),
+      canManageSpace: !activeSpaceError && workspaceRole === 'owner',
+      sessionKey: `${firebaseUser?.uid ?? ''}/${activeSpaceId ?? ''}/${workspaceRole ?? ''}/${authTransitionRef.current}`,
+      switchWorkspace,
+      assertBusinessAccess,
       transactions,
        transactionsLoading,
        transactionsError,
@@ -541,6 +630,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       activeSpaceId,
       activeSpaceLoading,
       cloudSpace,
+      workspaceRole,
+      switchWorkspace,
+      assertBusinessAccess,
       initializationError,
       isAuthenticated,
       isReady,

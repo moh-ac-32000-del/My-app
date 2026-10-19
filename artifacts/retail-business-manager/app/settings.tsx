@@ -18,7 +18,7 @@ import { useI18n } from '@/hooks/useI18n';
 import { DEFAULT_NOTIFICATION_TIME, loadNotificationTime, saveNotificationTime } from '@/services/preferences';
 import { loadCloudReminders } from '@/services/cloudReminders';
 
-function SettingInput({ label, value, onChangeText, icon, multiline = false, placeholder }: { label: string; value: string; onChangeText: (value: string) => void; icon: React.ComponentProps<typeof Ionicons>['name']; multiline?: boolean; placeholder?: string }) {
+function SettingInput({ label, value, onChangeText, icon, multiline = false, placeholder, disabled = false }: { label: string; value: string; onChangeText: (value: string) => void; icon: React.ComponentProps<typeof Ionicons>['name']; multiline?: boolean; placeholder?: string; disabled?: boolean }) {
   const colors = useColors();
   const { isRTL } = useI18n();
   return (
@@ -26,7 +26,7 @@ function SettingInput({ label, value, onChangeText, icon, multiline = false, pla
       <Text style={[styles.label, { color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' }]}>{label}</Text>
       <View style={[styles.inputWrap, { backgroundColor: colors.input, borderColor: colors.border, flexDirection: isRTL ? 'row-reverse' : 'row' }, multiline && styles.multilineWrap]}>
         <Ionicons name={icon} size={18} color={colors.mutedForeground} />
-        <TextInput value={value} onChangeText={onChangeText} multiline={multiline} placeholder={placeholder} placeholderTextColor={colors.mutedForeground} style={[styles.input, { color: colors.foreground, textAlign: isRTL ? 'right' : 'left' }, multiline && styles.multilineInput]} />
+        <TextInput editable={!disabled} value={value} onChangeText={onChangeText} multiline={multiline} placeholder={placeholder} placeholderTextColor={colors.mutedForeground} style={[styles.input, { color: colors.foreground, textAlign: isRTL ? 'right' : 'left' }, multiline && styles.multilineInput]} />
       </View>
     </View>
   );
@@ -55,6 +55,7 @@ export default function SettingsScreen() {
     profile,
     activeSpaceId,
     saveProfile,
+    canManageSpace,
     toggleQuickCurrency,
     signOut,
     isReady,
@@ -103,6 +104,7 @@ export default function SettingsScreen() {
   }, [isReady, profile.id]);
 
   const save = async () => {
+    if (!canManageSpace) return;
     if (!isReady || !draftInitializedRef.current) {
       return;
     }
@@ -124,6 +126,7 @@ export default function SettingsScreen() {
   };
 
   const selectCurrency = async (nextCurrency: CurrencyCode) => {
+    if (!canManageSpace) return;
     setCurrency(nextCurrency);
     setIsCurrencyPickerOpen(false);
     await saveProfile({ currency: nextCurrency });
@@ -131,6 +134,7 @@ export default function SettingsScreen() {
   };
 
   const selectAccent = async (nextAccent: AccentColor) => {
+    if (!canManageSpace) return;
     setAccent(nextAccent);
     await saveProfile({ accent: nextAccent });
     await Haptics.selectionAsync();
@@ -163,11 +167,13 @@ export default function SettingsScreen() {
   };
 
   const selectQuickCurrency = async (code: CurrencyCode) => {
+    if (!canManageSpace) return;
     await toggleQuickCurrency(code);
     await Haptics.selectionAsync();
   };
 
   const selectVisibleCurrency = async (code: CurrencyCode) => {
+    if (!canManageSpace) return;
     const currentCurrencies = profile.visibleCurrencies;
     const nextCurrencies = currentCurrencies.includes(code)
       ? currentCurrencies.filter((item) => item !== code)
@@ -198,12 +204,13 @@ export default function SettingsScreen() {
             <Ionicons name="add" size={18} color={colors.primary} />
           </Pressable>
         </View>
-        <SettingInput label={t('storeName')} value={name} onChangeText={setName} icon="business-outline" placeholder={t('storeNameDefault')} />
-        <SettingInput label={t('storePhone')} value={phone} onChangeText={setPhone} icon="call-outline" multiline={false} />
-        <SettingInput label={t('storeAddress')} value={address} onChangeText={setAddress} icon="location-outline" multiline />
+        <SettingInput disabled={!canManageSpace} label={t('storeName')} value={name} onChangeText={setName} icon="business-outline" placeholder={t('storeNameDefault')} />
+        <SettingInput disabled={!canManageSpace} label={t('storePhone')} value={phone} onChangeText={setPhone} icon="call-outline" multiline={false} />
+        <SettingInput disabled={!canManageSpace} label={t('storeAddress')} value={address} onChangeText={setAddress} icon="location-outline" multiline />
         <Text style={[styles.label, { color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' }]}>{t('currency')}</Text>
         <Pressable
           testID="currency-picker"
+          disabled={!canManageSpace}
           onPress={() => setIsCurrencyPickerOpen((current) => !current)}
           style={({ pressed }) => [styles.currencyPicker, { backgroundColor: colors.input, borderColor: colors.border, flexDirection: isRTL ? 'row-reverse' : 'row' }, pressed && styles.pressed]}
         >
@@ -250,6 +257,7 @@ export default function SettingsScreen() {
               <Pressable
                 key={option.code}
                 testID={`quick-currency-${option.code}`}
+                disabled={!canManageSpace}
                 accessibilityRole="checkbox"
                 accessibilityState={{ checked: selected }}
                 onPress={() => void selectQuickCurrency(option.code)}
@@ -284,6 +292,7 @@ export default function SettingsScreen() {
               <Pressable
                 key={option.code}
                 testID={`visible-currency-${option.code}`}
+                disabled={!canManageSpace}
                 accessibilityRole="checkbox"
                 accessibilityState={{ checked: selected }}
                 onPress={() => void selectVisibleCurrency(option.code)}
@@ -310,7 +319,7 @@ export default function SettingsScreen() {
       <GlassCard style={styles.card}>
         <View style={[styles.colorRow, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
           {accentOptions.map((item) => (
-            <Pressable key={item.key} testID={`accent-${item.key}`} onPress={() => void selectAccent(item.key)} style={[styles.colorOption, { backgroundColor: item.color }, accent === item.key && { borderColor: colors.foreground, borderWidth: 3 }]}>
+            <Pressable key={item.key} testID={`accent-${item.key}`} disabled={!canManageSpace} onPress={() => void selectAccent(item.key)} style={[styles.colorOption, { backgroundColor: item.color }, accent === item.key && { borderColor: colors.foreground, borderWidth: 3 }]}>
               {accent === item.key ? <Ionicons name="checkmark" size={18} color={colors.primaryForeground} /> : null}
             </Pressable>
           ))}
@@ -404,7 +413,7 @@ export default function SettingsScreen() {
         </View>
       </GlassCard>
 
-      <Pressable testID="save-settings" onPress={() => void save()} style={({ pressed }) => [styles.saveButton, { backgroundColor: colors.primary, flexDirection: isRTL ? 'row-reverse' : 'row' }, pressed && styles.pressed]}>
+      <Pressable testID="save-settings" disabled={!canManageSpace} onPress={() => void save()} style={({ pressed }) => [styles.saveButton, { backgroundColor: colors.primary, flexDirection: isRTL ? 'row-reverse' : 'row' }, pressed && styles.pressed]}>
         <Ionicons name="checkmark-circle-outline" size={19} color={colors.primaryForeground} />
         <Text style={[styles.saveText, { color: colors.primaryForeground }]}>{t('saveChanges')}</Text>
       </Pressable>

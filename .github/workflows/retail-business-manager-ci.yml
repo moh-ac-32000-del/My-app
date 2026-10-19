@@ -92,3 +92,9 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Test Firestore rules on emulator
         run: pnpm --filter @workspace/retail-business-manager run test:rules
+      - name: Install trusted backend integration dependencies
+        run: pnpm --dir artifacts/retail-business-manager/functions install --frozen-lockfile --ignore-workspace
+      - name: Build trusted backend for emulator integration
+        run: pnpm --dir artifacts/retail-business-manager/functions run build
+      - name: Test workspace transactions on demo emulator
+        run: pnpm --filter @workspace/retail-business-manager exec pnpm dlx firebase-tools@15.34.0 emulators:exec --only firestore --project demo-firestore-rules --config firebase.rules-test.json "node tests/workspace-backend.emulator.mjs"

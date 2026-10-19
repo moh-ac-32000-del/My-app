@@ -43,6 +43,15 @@ export async function bootstrapPrimarySpaceHandler(
       const existingPrimarySpaceId = getPrimarySpaceId(userData);
 
       if (!existingPrimarySpaceId) {
+        // The user document also serializes explicit workspace creation/conversion.
+        // Never let the legacy bootstrap endpoint bypass the private-space quota.
+        const owned = await transaction.get(runtime.firestore.collection(SPACES_COLLECTION).where('ownerUserId', '==', uid));
+        const configuredLimit = userData.workspaceLimits?.private ?? 1;
+        if (!Number.isInteger(configuredLimit) || configuredLimit < 0 || configuredLimit > 100
+          || owned.docs.some((item) => !['private', 'shared'].includes(item.data().mode))
+          || owned.docs.filter((item) => item.data().mode === 'private').length >= configuredLimit) {
+          throw new HttpsError('resource-exhausted', 'Private workspace quota requires review');
+        }
         const spaceReference = runtime.firestore.collection(SPACES_COLLECTION).doc();
         const membershipReference = spaceReference.collection(MEMBERS_COLLECTION).doc(uid);
         const membershipIndexReference = userReference
@@ -428,6 +437,8 @@ function requireString(value: unknown, message: string): string {
 }
 
 function timestampToIso(value: unknown): string {
+  // New trusted workspace commands use server-generated ISO metadata; retain legacy Timestamp support.
+  if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T.*Z$/.test(value) && Number.isFinite(Date.parse(value))) return new Date(value).toISOString();
   if (value && typeof value === 'object' && 'toDate' in value && typeof value.toDate === 'function') {
     return value.toDate().toISOString();
   }

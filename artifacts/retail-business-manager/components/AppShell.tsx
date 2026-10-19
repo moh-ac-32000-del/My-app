@@ -43,12 +43,21 @@ export function AppShell({ children, scroll = true }: { children: ReactNode; scr
   const insets = useSafeAreaInsets();
   const pathname = usePathname();
   const router = useRouter();
-  const { profile } = useStore();
+  const { profile, workspaceRole, activeSpaceError, isAuthenticated, retryActiveSpace } = useStore();
   const bottomInset = Platform.OS === 'web' ? 34 : insets.bottom;
 
   const content = (
     <View style={[styles.content, { direction, paddingTop: Platform.OS === 'web' ? 67 : insets.top + 8 }]}>
-      {children}
+      {isAuthenticated && (activeSpaceError || !workspaceRole) && pathname !== '/workspaces' && pathname !== '/settings' ? (
+        <View style={{ gap: 18 }}>
+          <Text style={{ color: colors.foreground }}>{t('workspaceUnavailable')}</Text>
+          <Pressable accessibilityRole="button" onPress={retryActiveSpace} style={{ padding: 16 }}><Text style={{ color: colors.primary }}>{t('tryAgain')}</Text></Pressable>
+          <Pressable accessibilityRole="button" onPress={() => router.replace('/workspaces' as never)} style={{ padding: 16 }}><Text style={{ color: colors.primary }}>{t('workspaces')}</Text></Pressable>
+        </View>
+      ) : <>
+        {workspaceRole === 'viewer' ? <Text testID="workspace-read-only" style={{ color: colors.primary, marginBottom: 16, textAlign: isRTL ? 'right' : 'left' }}>{t('workspaceReadOnly')}</Text> : null}
+        {children}
+      </>}
       <View style={{ height: 112 + bottomInset }} />
     </View>
   );
