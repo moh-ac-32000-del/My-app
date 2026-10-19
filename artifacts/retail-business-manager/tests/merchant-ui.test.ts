@@ -8,6 +8,7 @@ const state = vi.hoisted(() => ({
   loading: false,
   error: null as string | null,
   reversed: false,
+  merchantId: 'm',
 }));
 vi.mock('react-native', () => ({
   View: ({ children, testID }: any) => React.createElement('div', { 'data-testid': testID }, children),
@@ -23,7 +24,7 @@ vi.mock('react-native', () => ({
     }),
   ActivityIndicator: () => React.createElement('div', { 'data-testid': 'loading' }),
 }));
-vi.mock('expo-router', () => ({ useRouter: () => ({ push: vi.fn() }), useLocalSearchParams: () => ({ id: 'm' }) }));
+vi.mock('expo-router', () => ({ useRouter: () => ({ push: vi.fn() }), useLocalSearchParams: () => ({ id: state.merchantId }) }));
 vi.mock('@/hooks/useColors', () => ({ useColors: () => ({ foreground: '#fff', primary: '#123' }) }));
 vi.mock('@/hooks/useI18n', () => ({
   useI18n: () => ({
@@ -91,8 +92,16 @@ beforeEach(() => {
   state.loading = false;
   state.error = null;
   state.reversed = false;
+  state.merchantId = 'm';
 });
 describe('merchant screens (server-rendered, not device acceptance)', () => {
+  it('keys the detail subtree by merchant so old drafts cannot survive account navigation', () => {
+    const first = MerchantScreen();
+    state.merchantId = 'another';
+    const second = MerchantScreen();
+    expect(first.key).toBe('m');
+    expect(second.key).toBe('another');
+  });
   it.each(['ar', 'tr', 'en'] as const)(
     'shows separated credit/payable/net totals and localized actions in %s',
     (language) => {

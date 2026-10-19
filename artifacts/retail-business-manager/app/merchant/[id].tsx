@@ -14,6 +14,11 @@ import type { MerchantDraftCommand, MerchantOperation } from '@/types/merchant';
 export default function MerchantScreen() {
   const params = useLocalSearchParams<{ id: string }>();
   const id = typeof params.id === 'string' ? params.id : '';
+  // Remount drafts when the router reuses this route for another merchant.
+  return <MerchantDetail key={id} id={id} />;
+}
+
+function MerchantDetail({ id }: { id: string }) {
   const { canWriteBusiness } = useStore();
   const { merchants, balances, operations, operationsLimited, isLoading, error, retry, command } =
     useMerchantAccounts(id);

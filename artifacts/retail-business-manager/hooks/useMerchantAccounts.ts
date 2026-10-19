@@ -63,6 +63,7 @@ export function useMerchantAccounts(merchantId?: string) {
   ]);
   const command = useCallback(
     async (input: MerchantDraftCommand) => {
+      if (merchantId && input.merchantId !== merchantId) throw new Error('merchantScopeChanged');
       if (!canWriteBusiness || !activeSpaceId) throw new Error('workspaceReadOnly');
       const expected = key;
       assertBusinessAccess(activeSpaceId, sessionKey);
@@ -72,7 +73,7 @@ export function useMerchantAccounts(merchantId?: string) {
       assertBusinessAccess(activeSpaceId, sessionKey);
       return result;
     },
-    [activeSpaceId, canWriteBusiness, sessionKey, profile.id, key, assertBusinessAccess],
+    [activeSpaceId, canWriteBusiness, sessionKey, profile.id, key, assertBusinessAccess, merchantId],
   );
   const usable =
     isAuthenticated && isReady && !activeSpaceLoading && activeSpaceId && workspaceRole && !activeSpaceError;
