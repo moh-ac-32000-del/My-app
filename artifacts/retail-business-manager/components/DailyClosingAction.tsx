@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useColors } from '@/hooks/useColors';
 import { useI18n } from '@/hooks/useI18n';
 import { runDailyClosing } from '@/services/dailyClosing';
+import { useStore } from '@/context/StoreContext';
 
 type ClosingStatus = 'created' | 'error' | null;
 
@@ -21,13 +22,14 @@ export function DailyClosingAction({
   onClosed?: () => void;
 }) {
   const colors = useColors();
+  const { canWriteBusiness } = useStore();
   const { t, isRTL } = useI18n();
   const [isConfirmationVisible, setIsConfirmationVisible] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
   const [status, setStatus] = useState<ClosingStatus>(null);
 
   const confirmClosing = async () => {
-    if (isClosing) {
+    if (!canWriteBusiness || isClosing) {
       return;
     }
     setIsConfirmationVisible(false);
@@ -49,6 +51,7 @@ export function DailyClosingAction({
     ? t('archiveCreated')
     : t('archiveSaveError');
 
+  if (!canWriteBusiness) return null;
   return (
     <>
       <Pressable

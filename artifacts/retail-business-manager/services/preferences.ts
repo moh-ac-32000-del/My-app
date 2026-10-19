@@ -5,6 +5,14 @@ export const DEFAULT_NOTIFICATION_TIME = '09:00';
 const NOTIFICATION_TIME_KEY = '@retail-business-manager/notification-time';
 const UI_LANGUAGE_KEY = '@retail-business-manager/ui-language';
 
+// A per-account UI hint only. Never cache memberships, quotas or financial data here.
+export async function loadLastWorkspace(uid: string): Promise<string | null> {
+  return AsyncStorage.getItem(`@retail-business-manager/last-workspace/${encodeURIComponent(uid)}`);
+}
+export async function saveLastWorkspace(uid: string, spaceId: string): Promise<void> {
+  await AsyncStorage.setItem(`@retail-business-manager/last-workspace/${encodeURIComponent(uid)}`, spaceId);
+}
+
 export async function loadUiLanguage(): Promise<Language | null> {
   const value = await AsyncStorage.getItem(UI_LANGUAGE_KEY);
   return languageOptions.some((option) => option.code === value) ? value as Language : null;

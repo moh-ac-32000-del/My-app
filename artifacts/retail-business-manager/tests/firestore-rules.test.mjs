@@ -216,6 +216,12 @@ async function runCase(name, operation, expected) {
 
 try {
   await clearFirestore();
+  for(const context of [userA,userB,anonymous]) {
+    await runCase('Workspace privacy — invitation tokens cannot be read directly',()=>getDoc(doc(context.firestore(),'spaceInvitations','synthetic-hash')),'DENY');
+    await runCase('Workspace privacy — invitations cannot be listed directly',()=>getDocs(collection(context.firestore(),'spaceInvitations')),'DENY');
+    await runCase('Workspace privacy — invitations cannot be created directly',()=>setDoc(doc(context.firestore(),'spaceInvitations','synthetic-hash'),{spaceId:'space-A',role:'owner',status:'pending'}),'DENY');
+    await runCase('Workspace privacy — quota and plan fields cannot be forged',()=>setDoc(doc(context.firestore(),'users','user-A'),{workspaceLimits:{private:100,shared:100}}),'DENY');
+  }
   await testEnvironment.withSecurityRulesDisabled(async (context) => {
     await setDoc(doc(context.firestore(), 'pushDevices', 'device-test'), { uid: 'user-A', token: 'synthetic-private-token', enabled: true });
   });

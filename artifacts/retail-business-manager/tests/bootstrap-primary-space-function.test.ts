@@ -42,6 +42,9 @@ class FakeCollectionReference {
     const documentId = id ?? this.firestore.nextGeneratedId();
     return new FakeDocumentReference(this.firestore, `${this.path}/${documentId}`, documentId);
   }
+  where(field: string, _op: string, value: unknown) {
+    return { queryPath: this.path, field, value };
+  }
 }
 
 class FakeTransaction {
@@ -50,7 +53,11 @@ class FakeTransaction {
 
   constructor(private readonly firestore: FakeFirestore) {}
 
-  async get(reference: FakeDocumentReference): Promise<FakeDocumentSnapshot> {
+  async get(reference: FakeDocumentReference | { queryPath: string; field: string; value: unknown }): Promise<any> {
+    if ('queryPath' in reference) return { docs: this.firestore.paths()
+      .filter((path) => path.startsWith(reference.queryPath + '/') && path.split('/').length === 2)
+      .filter((path) => this.firestore.read(path)?.[reference.field] === reference.value)
+      .map((path) => this.firestore.snapshot(path)) };
     return this.firestore.snapshot(reference.path);
   }
 
@@ -171,6 +178,23 @@ function request(uid: string | null, data: unknown = {}) {
 }
 
 describe('bootstrapPrimarySpace Cloud Function handler', () => {
+  it('reads ISO metadata created by new trusted workspace commands without breaking older clients', async () => {
+    const {firestore,runtime}=createRuntime();
+    const first=await bootstrapPrimarySpaceHandler(request('u'),runtime);
+    for(const path of firestore.paths()){
+      const value=firestore.read(path)!;
+      for(const field of ['createdAt','updatedAt','joinedAt','processedAt'])if(field in value)value[field]='2026-10-19T12:00:00.000Z';
+      firestore.write(path,value);
+    }
+    const second=await bootstrapPrimarySpaceHandler(request('u'),runtime);
+    expect(second.primarySpaceId).toBe(first.primarySpaceId);expect(second.outcome).toBe('existing');
+  });
+  it('cannot bypass the private quota when a user has an owned space but no primary hint', async () => {
+    const {firestore,runtime} = createRuntime();
+    firestore.write('spaces/already-owned',{spaceId:'already-owned',ownerUserId:'u',mode:'private',status:'archived'});
+    await expect(bootstrapPrimarySpaceHandler(request('u'),runtime)).rejects.toMatchObject({code:'resource-exhausted'});
+    expect(firestore.paths()).toEqual(['spaces/already-owned']);
+  });
   it('creates the Space, owner Membership, discovery index, and receipt atomically', async () => {
     const { firestore, runtime } = createRuntime();
 

@@ -43,7 +43,7 @@ export default function CustomerDetailsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { profile, isReady, activeSpaceId, addCustomerDebt, settleCustomerDebt } = useStore();
+  const { profile, isReady, activeSpaceId, addCustomerDebt, settleCustomerDebt, canWriteBusiness } = useStore();
   const {
     debts: workspaceDebts,
     isLoading: areDebtsLoading,
@@ -378,7 +378,7 @@ export default function CustomerDetailsScreen() {
         <Text style={[styles.shareText, { color: colors.primaryForeground }]}>{t('shareCustomerStatement')}</Text>
       </Pressable>
 
-      {debtCurrencies.length > 0 ? (
+      {canWriteBusiness && debtCurrencies.length > 0 ? (
         <Pressable
           testID="add-settlement-button"
           accessibilityRole="button"
@@ -394,7 +394,7 @@ export default function CustomerDetailsScreen() {
         </Pressable>
       ) : null}
 
-      <Pressable
+      {canWriteBusiness ? <Pressable
         testID="add-debt-button"
         accessibilityRole="button"
         onPress={() => {
@@ -404,7 +404,7 @@ export default function CustomerDetailsScreen() {
       >
         <Ionicons name="add-circle-outline" size={19} color={colors.primary} />
         <Text style={[styles.addDebtText, { color: colors.foreground }]}>{t('addDebt')}</Text>
-      </Pressable>
+      </Pressable> : null}
 
       <SectionTitle title={t('debtTotals')} />
       {debtCurrencies.length > 0 ? (
@@ -450,7 +450,8 @@ export default function CustomerDetailsScreen() {
               <Pressable
                 testID={`create-reminder-${debt.id}`}
                 accessibilityRole="button"
-                onPress={() => openReminderForm(debt)}
+                disabled={!canWriteBusiness}
+                onPress={() => { if (canWriteBusiness) openReminderForm(debt); }}
                 style={({ pressed }) => [
                   styles.reminderButton,
                   { borderColor: colors.border, backgroundColor: colors.input, flexDirection: isRTL ? 'row-reverse' : 'row' },
@@ -530,7 +531,7 @@ export default function CustomerDetailsScreen() {
         />
       )}
 
-      <View style={[styles.actions, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
+      {canWriteBusiness ? <View style={[styles.actions, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
         <Pressable testID="edit-customer-button" onPress={() => setIsEditVisible(true)} style={({ pressed }) => [styles.editButton, { backgroundColor: colors.primary }, pressed && styles.pressed]}>
           <Ionicons name="create-outline" size={18} color={colors.primaryForeground} />
           <Text style={[styles.editText, { color: colors.primaryForeground }]}>{t('editCustomer')}</Text>
@@ -539,9 +540,9 @@ export default function CustomerDetailsScreen() {
           <Ionicons name="trash-outline" size={18} color={colors.destructive} />
           <Text style={[styles.deleteText, { color: colors.destructive }]}>{t('deleteCustomer')}</Text>
         </Pressable>
-      </View>
+      </View> : null}
 
-      <CustomerFormModal visible={isEditVisible} initialCustomer={customer} onClose={() => setIsEditVisible(false)} onSave={(draft) => void updateCustomer(draft)} />
+      <CustomerFormModal visible={canWriteBusiness && isEditVisible} initialCustomer={customer} onClose={() => setIsEditVisible(false)} onSave={(draft) => void updateCustomer(draft)} />
 
       <Modal
         visible={isDebtVisible}

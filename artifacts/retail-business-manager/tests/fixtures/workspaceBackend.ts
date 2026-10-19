@@ -56,6 +56,7 @@ export function workspaceBackend(role: unknown = 'owner') {
   const reads: string[] = [];
   const writes: string[] = [];
   let conflict: (() => void) | null = null;
+  let queue = Promise.resolve();
   const snapshot = (reference: any): any => {
     reads.push(reference.path);
     if (reference.filters)
@@ -68,6 +69,8 @@ export function workspaceBackend(role: unknown = 'owner') {
               reference.filters.every(([field, op, value]: Filter) =>
                 op === '=='
                   ? data[field] === value
+                  : op === '>'
+                    ? data[field] > value
                   : op === '>='
                     ? data[field] >= value
                     : data[field] < value,
@@ -91,6 +94,7 @@ export function workspaceBackend(role: unknown = 'owner') {
   };
   const ref = (path: string, filters?: Filter[]): any => ({
     path,
+    id: path.split('/').at(-1),
     filters,
     collection: (name: string) => ref(path + '/' + name, []),
     doc: (id: string) => ref(path + '/' + id),
@@ -101,6 +105,11 @@ export function workspaceBackend(role: unknown = 'owner') {
   const db = {
     collection: (name: string) => ref(name, []),
     runTransaction: async (fn: any) => {
+      const prior = queue;
+      let release!: () => void;
+      queue = new Promise<void>((resolve) => { release = resolve; });
+      await prior;
+      try {
       for (;;) {
         const pending: Array<() => void> = [];
         const stage = (reference: any, value: Data | undefined, kind: string) =>
@@ -136,6 +145,7 @@ export function workspaceBackend(role: unknown = 'owner') {
         pending.forEach((write) => write());
         return result;
       }
+      } finally { release(); }
     },
   };
   return {

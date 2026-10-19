@@ -10,6 +10,7 @@ import { languageOptions, type Language, type TranslationKey } from '@/constants
 import { useI18n } from '@/hooks/useI18n';
 import { GlassCard } from '@/components/AppShell';
 import { isFirebaseConfigured } from '@/services/firebase';
+import { pendingInvitation } from '@/data/invitationIntent';
 import {
   createFirebaseAccount,
   getFirebaseAuthErrorKey,
@@ -55,7 +56,7 @@ export default function LoginScreen() {
       }
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       await new Promise((resolve) => setTimeout(resolve, 450));
-      router.replace('/');
+      router.replace(pendingInvitation() ? '/workspaces' as never : '/');
     } catch (error) {
       setStatus({ key: getFirebaseAuthErrorKey(error), success: false });
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);

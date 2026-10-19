@@ -6,6 +6,8 @@ export interface StoredExportDocument { id: string; data: Record<string, unknown
 interface Entry { documents: StoredExportDocument[]; capturedAt: string | null; tooLarge: boolean; coveredStoreId?: string }
 const cache = new Map<string, Entry>();
 const listeners = new Set<() => void>();
+let epoch = 0;
+export function localExportEpoch() { return epoch; }
 const key = (uid: string, spaceId: string, collection: LocalExportCollection) => JSON.stringify([uid, spaceId, collection]);
 
 export function rememberLocalExportCollection(uid: string, spaceId: string, collection: LocalExportCollection, documents: StoredExportDocument[], serverConfirmed: boolean, now = new Date().toISOString(), coveredStoreId?: string) {
@@ -39,4 +41,4 @@ export function readLocalExportData(scope: LocalExportScope) {
 }
 
 export function subscribeLocalExportCache(listener: () => void) { listeners.add(listener); return () => { listeners.delete(listener); }; }
-export function clearLocalExportCache() { cache.clear(); listeners.forEach((listener) => listener()); }
+export function clearLocalExportCache() { epoch += 1; cache.clear(); listeners.forEach((listener) => listener()); }
