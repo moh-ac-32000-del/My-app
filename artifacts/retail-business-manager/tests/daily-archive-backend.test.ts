@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { dailyArchiveCommandHandler } from '../functions/src/dailyArchiveCommand';
+import { merchantCommandHandler } from '../functions/src/merchantCommand';
+import { workspaceBackend } from './fixtures/workspaceBackend';
 
 type Data = Record<string, any>;
 type Filter = [string, string, any];
@@ -122,5 +124,85 @@ describe('daily archive trusted balance capture', () => {
     expect(result.archives).toEqual([legacy]);
     expect(result.archives[0].closingCashBalances).toBeUndefined();
     expect(db.writes).toEqual([]);
+  });
+});
+
+describe('merchant archive integration', () => {
+  function setup() {
+    const backend = workspaceBackend();
+    backend.docs['spaces/s/merchants/m'] = { id: 'm', workspaceId: 's', storeId: 'store', name: 'Merchant', isActive: true };
+    const command = (action: string, operationId: string, fields: Data) => merchantCommandHandler({
+      auth: { uid: 'u' }, data: { action, operationId, spaceId: 's', storeId: 'store', merchantId: 'm', currency: 'TRY', ...fields },
+    } as never, backend.runtime);
+    const archive = () => dailyArchiveCommandHandler({ auth: { uid: 'u' }, data: {
+      action: 'close', spaceId: 's', storeId: 'store', date: '2026-10-19',
+      startAt: '2026-10-19T00:00:00.000Z', endAt: '2026-10-20T00:00:00.000Z',
+    } } as never, backend.runtime);
+    return { ...backend, command, archive };
+  }
+  it('captures a partially paid purchase once, preserving materials and actual drawer effect', async () => {
+    const backend = setup();
+    await backend.command('purchase', 'buy', { paidExact: '1000.00', source: 'cash', note: 'Goods description',
+      lines: [{ name: 'Screens', quantity: '5', unitPrice: '900' }] });
+    const first = (await backend.archive()).created!;
+    const merchant = first.snapshot.filter((event) => event.type === 'merchant');
+    expect(merchant).toHaveLength(1);
+    expect(merchant[0]).toMatchObject({ id: 'merchant:buy', amountExact: '4500.00', cashDeltaExact: '-1000.00',
+      balanceAfterExact: '3500.00', merchantName: 'Merchant', note: 'Goods description', createdByUserId: 'u',
+      lines: [{ name: 'Screens', quantity: '5', unitPrice: '900', totalExact: '4500.00' }] });
+    expect(first.snapshot.some((event) => event.id.startsWith('transaction:merchant-'))).toBe(false);
+    expect(first.closingCashBalances).toEqual([{ currency: 'TRY', amount: -1000 }]);
+    const original = JSON.stringify(first);
+    const second = (await backend.archive()).created!;
+    expect(second.snapshot).toEqual([]);
+    expect(second.closingCashBalances).toEqual(first.closingCashBalances);
+    expect(JSON.stringify(first)).toBe(original);
+  });
+  it('keeps a direct payment and its correction noncash and suppresses their linked payment/debt', async () => {
+    const backend = setup();
+    await backend.command('directPayment', 'direct', { amountExact: '130.00', customerId: 'c', note: 'Actual direct payment' });
+    const first = (await backend.archive()).created!;
+    expect(first.snapshot.map((event) => event.id).sort()).toEqual(['debt:d', 'merchant:direct']);
+    expect(first.closingCashBalances).toEqual([]);
+    const before = JSON.stringify(first);
+    await backend.command('reverse', 'correction', { targetOperationId: 'direct', reason: 'Mistaken entry' });
+    const second = (await backend.archive()).created!;
+    expect(second.snapshot).toHaveLength(1);
+    expect(second.snapshot[0]).toMatchObject({ id: 'merchant:correction', merchantAction: 'reverse', amountExact: '130.00',
+      cashDeltaExact: '0.00', customerName: 'Test customer', reversesOperationId: 'direct', note: 'Mistaken entry' });
+    expect(second.closingCashBalances).toEqual([]);
+    expect(JSON.stringify(first)).toBe(before);
+  });
+  it('includes opening/external payments without adding cash or skipping a negative opening', async () => {
+    const backend = setup();
+    await backend.command('opening', 'opening', { amountExact: '-300.00' });
+    await backend.command('payment', 'external', { amountExact: '200.00', source: 'external', note: 'Bank transfer' });
+    const result = (await backend.archive()).created!;
+    expect(result.snapshot.filter((event) => event.type === 'merchant').map((event) => [event.id, event.amountExact]))
+      .toEqual([['merchant:opening', '-300.00'], ['merchant:external', '200.00']]);
+    expect(result.closingCashBalances).toEqual([]);
+  });
+  it.each(['missing', 'wrong-currency', 'wrong-operation', 'wrong-time', 'wrong-amount', 'wrong-store'])
+    ('rejects %s cash links without committing an archive/counter or losing the purchase', async (fault) => {
+      const backend = setup();
+      await backend.command('payment', 'paid', { amountExact: '80.00', source: 'cash' });
+      const entry = Object.entries(backend.docs).find(([path]) => path.startsWith('spaces/s/transactions/'))!;
+      if (fault === 'missing') delete backend.docs[entry[0]];
+      else Object.assign(entry[1], fault === 'wrong-currency' ? { currency: 'USD' }
+        : fault === 'wrong-operation' ? { merchantOperationId: 'other' }
+          : fault === 'wrong-time' ? { createdAt: '2026-10-19T13:00:00.000Z' }
+            : fault === 'wrong-store' ? { storeId: 'other' } : { amount: 81 });
+      const before = backend.writes.length;
+      await expect(backend.archive()).rejects.toMatchObject({ code: 'failed-precondition' });
+      expect(backend.writes).toHaveLength(before);
+      expect(backend.docs['spaces/s/merchantOperations/paid']).toBeDefined();
+    });
+  it('does not silently hide an orphan merchant-linked payment', async () => {
+    const backend = setup();
+    await backend.command('directPayment', 'direct', { amountExact: '30.00', customerId: 'c' });
+    delete backend.docs['spaces/s/merchantOperations/direct'];
+    const before = backend.writes.length;
+    await expect(backend.archive()).rejects.toMatchObject({ code: 'failed-precondition' });
+    expect(backend.writes).toHaveLength(before);
   });
 });

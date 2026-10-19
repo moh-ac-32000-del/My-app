@@ -128,20 +128,8 @@ export interface SettlementResult {
   payment: Payment;
 }
 
-export type DailyJournalEventType = 'cash_in' | 'cash_out' | 'debt' | 'settlement';
-
-export interface DailyJournalEvent {
-  id: string;
-  storeId: string;
-  type: DailyJournalEventType;
-  amount: number;
-  currency: CurrencyCode;
-  customerId?: string;
-  customerName?: string;
-  note?: string;
-  occurredAt: string;
-  sourceId: string;
-}
+export type { DailyJournalEvent, DailyJournalEventType } from '../types/journal';
+import type { DailyJournalEvent } from '../types/journal';
 
 export function buildDailyJournalEvents(
   storeId: string,
@@ -191,6 +179,7 @@ export function buildDailyJournalEvents(
       currency: debt.currency,
       customerId: debt.customerId,
       customerName: customerNames.get(debt.customerId),
+      ...(debt.note ? { note: debt.note } : {}),
       occurredAt: debt.createdAt,
       sourceId: debt.id,
     });

@@ -2,6 +2,7 @@ import { formatMoney } from '@/constants/currencies';
 import { formatLocalizedDate, formatLocalizedDateTime, type Language, type TranslationKey } from '@/constants/i18n';
 import type { DailyArchive } from '@/types/business';
 import type { DailyJournalEvent } from '@/services/storage';
+import { journalEventTitle, journalEventMoney, journalEventDetails } from './journalPresentation';
 
 type Translate = (key: TranslationKey) => string;
 
@@ -11,6 +12,7 @@ function parseArchiveDate(value: string): Date {
 }
 
 function eventLabel(event: DailyJournalEvent, t: Translate): string {
+  if (event.type === 'merchant') return journalEventTitle(event, t);
   if (event.type === 'cash_in') {
     return t('cashIn');
   }
@@ -24,7 +26,7 @@ function eventLabel(event: DailyJournalEvent, t: Translate): string {
 }
 
 function eventIcon(event: DailyJournalEvent): string {
-  return { cash_in: '📥', cash_out: '📤', debt: '📝', settlement: '✅' }[event.type];
+  return { cash_in: '📥', cash_out: '📤', debt: '📝', settlement: '✅', merchant: '🏪' }[event.type];
 }
 
 export function buildArchiveShareMessage(
@@ -55,9 +57,10 @@ export function buildArchiveShareMessage(
   archive.snapshot.forEach((event, index) => {
     lines.push(
       `${index + 1}. ${eventIcon(event)} ${eventLabel(event, t)}`,
-      `   💵 ${formatMoney(event.amount, event.currency, language)} (${event.currency})`,
+      `   💵 ${journalEventMoney(event, language)} (${event.currency})`,
       `   🕒 ${formatLocalizedDateTime(new Date(event.occurredAt), language)}`,
-      ...(event.note ? [`   🗒️ ${t('optionalNote')}: ${event.note}`] : []),
+      ...(event.type === 'merchant' ? journalEventDetails(event, language, t).map((line) => `   • ${line}`)
+        : event.note ? [`   🗒️ ${t('optionalNote')}: ${event.note}`] : []),
       '',
     );
   });

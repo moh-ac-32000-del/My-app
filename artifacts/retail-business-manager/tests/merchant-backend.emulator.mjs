@@ -4,6 +4,7 @@ import { createRequire } from 'node:module';
 import { merchantCommandHandler } from '../functions/lib/functions/src/merchantCommand.js';
 import { settleCustomerDebtHandler } from '../functions/lib/functions/src/settleCustomerDebt.js';
 import { trustedDebtCommandHandler } from '../functions/lib/functions/src/trustedDebtCommand.js';
+import { dailyArchiveCommandHandler } from '../functions/lib/functions/src/dailyArchiveCommand.js';
 import { initializeTestEnvironment } from '@firebase/rules-unit-testing';
 import {
   collection as clientCollection,
@@ -188,6 +189,44 @@ try {
     'Merchant emulator — competing reversals preserve original history and create exactly one noncash correction: PASS',
   );
 
+  const journal = await fixture('journal-archive');
+  const archiveDay = new Date();
+  const archiveStart = new Date(Date.UTC(archiveDay.getUTCFullYear(), archiveDay.getUTCMonth(), archiveDay.getUTCDate()));
+  const archiveEnd = new Date(archiveStart.getTime() + 24 * 60 * 60 * 1000);
+  await journal.space.collection('debts').doc('old-debt').update({ createdAt: new Date(archiveStart.getTime() - 1000).toISOString() });
+  await journal.merchant('purchase', 'purchase', { lines: [{ name: 'Goods', quantity: '1', unitPrice: '100.00' }],
+    source: 'cash', paidExact: '25.00', note: 'Materials description' });
+  await journal.merchant('payment', 'external', { source: 'external', amountExact: '30.00' });
+  await journal.merchant('directPayment', 'direct', { customerId: journal.base.customerId, amountExact: '130.00' });
+  const closeJournal = () => dailyArchiveCommandHandler(request({ action: 'close', spaceId: journal.space.id,
+    storeId: journal.base.storeId, date: archiveStart.toISOString().slice(0, 10),
+    startAt: archiveStart.toISOString(), endAt: archiveEnd.toISOString() }), runtime);
+  const firstArchive = (await closeJournal()).created;
+  assert.equal(firstArchive.snapshot.length, 3);
+  assert(firstArchive.snapshot.every((event) => event.type === 'merchant'));
+  assert.deepEqual(firstArchive.closingCashBalances, [{ currency: 'TRY', amount: -25 }]);
+  assert.equal(firstArchive.snapshot.find((event) => event.id === 'merchant:purchase').lines[0].name, 'Goods');
+  const firstSnapshot = structuredClone(firstArchive);
+  await journal.merchant('reverse', 'purchase-correction', { targetOperationId: 'purchase', reason: 'Wrong invoice' });
+  const secondArchive = (await closeJournal()).created;
+  assert.equal(secondArchive.snapshot.length, 1);
+  assert.equal(secondArchive.snapshot[0].id, 'merchant:purchase-correction');
+  assert.equal(secondArchive.snapshot[0].amountExact, '100.00');
+  assert.deepEqual(secondArchive.closingCashBalances, [{ currency: 'TRY', amount: 0 }]);
+  assert.deepEqual((await closeJournal()).created.snapshot, []);
+  assert.deepEqual((await journal.space.collection('dailyArchives').doc(firstArchive.id).get()).data(), firstSnapshot);
+  console.log('Merchant archive emulator — purchases/direct/external payments and corrections remain distinct, cash counted once, prior snapshots immutable: PASS');
+  const orphan = await fixture('archive-orphan');
+  await orphan.merchant('payment', 'payment', { source: 'cash', amountExact: '10.00' });
+  const orphanCash = (await orphan.space.collection('transactions').get()).docs[0];
+  await orphanCash.ref.update({ merchantOperationId: 'missing' });
+  await assert.rejects(dailyArchiveCommandHandler(request({ action: 'close', spaceId: orphan.space.id,
+    storeId: orphan.base.storeId, date: archiveStart.toISOString().slice(0, 10),
+    startAt: archiveStart.toISOString(), endAt: archiveEnd.toISOString() }), runtime), { code: 'failed-precondition' });
+  assert.equal((await orphan.space.collection('dailyArchives').get()).size, 0);
+  assert.equal((await orphan.space.collection('dailyClosingCounters').get()).size, 0);
+  console.log('Merchant archive emulator — inconsistent linked cash aborts archive and counter atomically: PASS');
+
   const precision = await fixture('precision-edit');
   await precision.space.collection('debts').doc('old-debt').update({ amount: 1, amountExact: '1.0000000000000000001' });
   await trustedDebtCommandHandler(
@@ -269,6 +308,11 @@ try {
   const oldIds = [...firstPage.docs, ...secondPage.docs, ...thirdPage.docs].map((document) => document.id);
   assert.equal(new Set(oldIds).size, 205);
   assert.equal((await getDocsFromServer(pageQuery())).docs[0].id, 'new-head');
+  const journalRows = await getDocsFromServer(clientQuery(historyCollection,
+    clientWhere('storeId', '==', history.base.storeId), clientWhere('createdAt', '>=', '2026-10-19T00:00:00.000Z'),
+    clientWhere('createdAt', '<', '2026-10-20T00:00:00.000Z')));
+  assert.deepEqual(journalRows.docs.map((document) => document.id), ['new-head']);
+  console.log('Merchant journal emulator — authenticated store/date range excludes older statement rows: PASS');
   console.log(
     'Merchant history emulator — authenticated SDK date/ID cursors cover 205 tied-time records without gaps as a new head arrives: PASS',
   );

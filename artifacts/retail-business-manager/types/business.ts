@@ -66,6 +66,10 @@ export interface Transaction extends StoreScopedEntity {
   amount: number;
   currency: CurrencyCode;
   note?: string;
+  workspaceId?: string;
+  merchantId?: string;
+  merchantOperationId?: string;
+  amountExact?: string;
 }
 
 export type PaymentDirection = 'in' | 'out';

@@ -1,5 +1,5 @@
-import { isCurrencyCode } from '@/constants/currencies';
-import { canonicalCredit } from '@/data/customerCreditAccounting';
+import { isCurrencyCode } from '../constants/currencies';
+import { canonicalCredit } from './customerCreditAccounting';
 import type { Merchant, MerchantBalance, MerchantOperation, CustomerCredit } from '@/types/merchant';
 
 function invalid(): never {
@@ -113,7 +113,7 @@ export function merchantOperationFromDocument(
     createdAt: date(record.createdAt),
     createdByUserId: text(record.createdByUserId),
   };
-  for (const key of ['amountExact', 'totalExact', 'paidExact'] as const) {
+  for (const key of ['amountExact', 'totalExact', 'paidExact', 'customerChargeExact'] as const) {
     if (record[key] !== undefined) result[key] = exact(record[key]);
   }
   for (const key of [
@@ -123,8 +123,15 @@ export function merchantOperationFromDocument(
     'reversedByOperationId',
     'reversesOperationId',
     'reason',
+    'transactionId',
+    'paymentId',
+    'debtId',
   ] as const) {
     if (record[key] !== undefined) result[key] = text(record[key], key !== 'customerName');
+  }
+  if (record.reversedAction !== undefined) {
+    if (!['opening', 'purchase', 'payment', 'directPayment'].includes(String(record.reversedAction))) invalid();
+    result.reversedAction = record.reversedAction as MerchantOperation['reversedAction'];
   }
   if (record.lines !== undefined) {
     if (!Array.isArray(record.lines) || record.lines.length > 100) invalid();

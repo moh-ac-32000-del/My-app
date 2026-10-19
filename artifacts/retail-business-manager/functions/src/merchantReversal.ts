@@ -61,6 +61,7 @@ export async function reverseMerchantOperation({
   }
   let next: string;
   let cashDeltaExact: string;
+  let amountExact: string;
   try {
     // Validate every original balance before arithmetic; missing values must never mean zero.
     for (const value of [original.balanceBeforeExact, original.balanceAfterExact, original.cashDeltaExact]) {
@@ -71,6 +72,9 @@ export async function reverseMerchantOperation({
       subtractCustomerExact(original.balanceAfterExact, original.balanceBeforeExact),
     );
     cashDeltaExact = subtractCustomerExact('0.00', original.cashDeltaExact);
+    amountExact = original.action === 'purchase' ? original.totalExact
+      : original.action === 'opening' ? original.balanceAfterExact : original.amountExact;
+    summarizeMerchantBalances(input.spaceId, [{ ...balance, balance: amountExact }]);
     summarizeMerchantBalances(input.spaceId, [{ ...balance, balance: next }]);
   } catch {
     throw new HttpsError('data-loss', 'Original monetary values are invalid');
@@ -195,6 +199,8 @@ export async function reverseMerchantOperation({
     merchantName: original.merchantName,
     currency: input.currency,
     action: 'reverse',
+    reversedAction: original.action,
+    amountExact,
     reversesOperationId: input.targetOperationId,
     reason: input.reason,
     note: input.reason,

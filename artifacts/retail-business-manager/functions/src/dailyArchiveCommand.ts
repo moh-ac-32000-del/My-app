@@ -2,11 +2,13 @@ import type { Firestore } from 'firebase-admin/firestore';
 import { HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
 import { closingCashBalances } from './closingCashBalances.js';
 import { assertWorkspaceAccess } from './workspaceAccess.js';
+import { merchantOperationFromDocument } from '../../data/merchantDocuments.js';
+import { mergeMerchantJournal } from '../../data/merchantJournal.js';
 
 type JournalEvent = {
   id: string;
   storeId: string;
-  type: 'cash_in' | 'cash_out' | 'debt' | 'settlement';
+  type: 'cash_in' | 'cash_out' | 'debt' | 'settlement' | 'merchant';
   amount: number;
   currency: string;
   customerId?: string;
@@ -89,7 +91,7 @@ export async function dailyArchiveCommandHandler(
     // A role change/removal races with this transaction, not with an earlier permission check.
     const [space, member, profile] = await Promise.all([tx.get(spaceRef), tx.get(memberRef), tx.get(profileRef)]);
     authorize(space.data(), member.data(), profile.data(), 'write');
-    const [transactionSnap, debtSnap, paymentSnap, existingArchives, counterSnap, cashSnapshot] = await Promise.all([
+    const [transactionSnap, debtSnap, paymentSnap, existingArchives, counterSnap, cashSnapshot, merchantSnap] = await Promise.all([
       tx.get(spaceRef.collection('transactions').where('storeId', '==', input.storeId).where('createdAt', '>=', startAt).where('createdAt', '<', endAt)),
       tx.get(spaceRef.collection('debts').where('storeId', '==', input.storeId).where('createdAt', '>=', startAt).where('createdAt', '<', endAt)),
       tx.get(spaceRef.collection('payments').where('storeId', '==', input.storeId).where('paidAt', '>=', startAt).where('paidAt', '<', endAt)),
@@ -98,6 +100,7 @@ export async function dailyArchiveCommandHandler(
       // All dates, canonical store only. All journal and balance reads share the
       // archive transaction; a retry refreshes both rather than mixing snapshots.
       tx.get(spaceRef.collection('transactions').where('storeId', '==', input.storeId)),
+      tx.get(spaceRef.collection('merchantOperations').where('storeId', '==', input.storeId).where('createdAt', '>=', startAt).where('createdAt', '<', endAt)),
     ]);
 
     const payments: CloudPaymentRecord[] = paymentSnap.docs.map((doc) => ({
@@ -148,6 +151,7 @@ export async function dailyArchiveCommandHandler(
         amount: typeof value.originalAmount === 'number' ? value.originalAmount : value.amount,
         currency: value.currency, customerId: value.customerId,
         customerName: customers.get(value.customerId),
+        ...(typeof value.note === 'string' && value.note ? { note: value.note } : {}),
         occurredAt: value.createdAt, sourceId: doc.id,
       } as JournalEvent);
     }
@@ -162,7 +166,18 @@ export async function dailyArchiveCommandHandler(
         occurredAt: payment.paidAt, sourceId: payment.id,
       } as JournalEvent);
     }
-    events.sort((a, b) => Date.parse(b.occurredAt) - Date.parse(a.occurredAt));
+    let mergedEvents: JournalEvent[];
+    try {
+      mergedEvents = mergeMerchantJournal(input.spaceId, input.storeId,
+        merchantSnap.docs.map((doc) => merchantOperationFromDocument(doc.id, doc.data(), input.spaceId, input.storeId)),
+        events as import('../../types/journal.js').DailyJournalEvent[], {
+          transactions: transactionSnap.docs.map((doc) => ({ ...doc.data(), id: doc.id })),
+          payments: paymentSnap.docs.map((doc) => ({ ...doc.data(), id: doc.id })),
+          debts: debtSnap.docs.map((doc) => ({ ...doc.data(), id: doc.id })),
+        }).filter((event) => !alreadyArchivedIds.has(event.id));
+    } catch {
+      throw new HttpsError('failed-precondition', 'Merchant journal records are inconsistent');
+    }
     const balances = closingCashBalances(cashSnapshot.docs.map((doc) => doc.data()));
     const now = runtime.now();
     const closingNumber = (typeof counterSnap.data()?.lastClosingNumber === 'number'
@@ -170,7 +185,7 @@ export async function dailyArchiveCommandHandler(
     const id = `${date}_${String(closingNumber).padStart(6, '0')}`;
     const archive: ArchiveRecord = {
       id, storeId: input.storeId, workspaceId: input.spaceId, date,
-      closedAt: now, closedByUserId: uid, closingNumber, snapshot: events, closingCashBalances: balances,
+      closedAt: now, closedByUserId: uid, closingNumber, snapshot: mergedEvents, closingCashBalances: balances,
     };
     tx.set(counterRef, { storeId: input.storeId, date, lastClosingNumber: closingNumber, updatedAt: now });
     tx.create(archivesRef.doc(id), archive);

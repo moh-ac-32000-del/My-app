@@ -4,6 +4,14 @@
       "collectionGroup": "merchantOperations",
       "queryScope": "COLLECTION",
       "fields": [
+        { "fieldPath": "storeId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "merchantOperations",
+      "queryScope": "COLLECTION",
+      "fields": [
         { "fieldPath": "merchantId", "order": "ASCENDING" },
         { "fieldPath": "createdAt", "order": "DESCENDING" }
       ]

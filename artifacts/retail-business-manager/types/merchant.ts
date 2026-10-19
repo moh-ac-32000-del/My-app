@@ -45,6 +45,11 @@ export interface MerchantOperation {
   reversedByOperationId?: string;
   reversesOperationId?: string;
   reason?: string;
+  transactionId?: string;
+  paymentId?: string;
+  debtId?: string;
+  customerChargeExact?: string;
+  reversedAction?: 'opening' | 'purchase' | 'payment' | 'directPayment';
   lines?: Array<{ name: string; quantity: string; unitPrice: string; totalExact: string }>;
 }
 export interface CustomerCredit {

@@ -29,6 +29,11 @@ const immutable: Array<keyof MerchantOperation> = [
   'source',
   'reversesOperationId',
   'reason',
+  'transactionId',
+  'paymentId',
+  'debtId',
+  'customerChargeExact',
+  'reversedAction',
 ];
 
 /** Keep page boundaries stable as new head entries arrive. Never net, mutate or recalculate operations. */

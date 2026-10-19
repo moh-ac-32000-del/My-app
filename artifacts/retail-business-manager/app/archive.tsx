@@ -12,6 +12,7 @@ import { type DailyJournalEvent } from '@/services/storage';
 import { loadCloudDailyArchives } from '@/services/cloudDailyArchives';
 import { buildArchiveShareMessage } from '@/services/archiveSharing';
 import type { DailyArchive } from '@/types/business';
+import { journalEventTitle, journalEventMoney, journalEventDetails } from '@/services/journalPresentation';
 
 function parseArchiveDate(value: string): Date {
   const [year, month, day] = value.split('-').map(Number);
@@ -64,6 +65,7 @@ export default function ArchiveScreen() {
   );
 
   const getEventTitle = (event: DailyJournalEvent): string => {
+    if (event.type === 'merchant') return journalEventTitle(event, t);
     if (event.type === 'cash_in') return t('cashIn');
     if (event.type === 'cash_out') return t('cashOut');
     const customerName = event.customerName ?? t('unknownCustomer');
@@ -73,6 +75,7 @@ export default function ArchiveScreen() {
   };
 
   const getEventIcon = (event: DailyJournalEvent): React.ComponentProps<typeof Ionicons>['name'] => {
+    if (event.type === 'merchant') return 'storefront-outline';
     if (event.type === 'cash_in') return 'arrow-down-circle-outline';
     if (event.type === 'cash_out') return 'arrow-up-circle-outline';
     return event.type === 'debt' ? 'time-outline' : 'checkmark-done-circle-outline';
@@ -181,13 +184,13 @@ export default function ArchiveScreen() {
                           </View>
                           <View style={[styles.eventCopy, { alignItems: isRTL ? 'flex-end' : 'flex-start' }]}>
                             <Text style={[styles.eventTitle, { color: colors.foreground, textAlign: isRTL ? 'right' : 'left' }]}>
-                              {getEventTitle(event)} — {formatMoney(event.amount, event.currency, language)}
+                              {getEventTitle(event)} — {journalEventMoney(event, language)}
                             </Text>
-                            {event.note ? (
-                              <Text style={[styles.eventNote, { color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' }]}>
-                                {event.note}
+                            {journalEventDetails(event, language, t).map((detail, index) => (
+                              <Text key={`${event.id}:${index}`} style={[styles.eventNote, { color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' }]}>
+                                {detail}
                               </Text>
-                            ) : null}
+                            ))}
                             <Text style={[styles.eventTime, { color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' }]}>
                               {formatLocalizedDateTime(new Date(event.occurredAt), language)}
                             </Text>

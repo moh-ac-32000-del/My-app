@@ -12,6 +12,7 @@ import {
 } from '@/data/firestoreWorkspace';
 import { validateCashTransactionDraft } from '@/services/storage';
 import type { Transaction } from '@/types/business';
+import { legacyAmountExact } from '@/data/customerCreditAccounting';
 
 type TransactionSnapshot = {
   id: string;
@@ -116,6 +117,18 @@ export function normalizeTransactionDocument(
     createdAt: value.createdAt as string,
     updatedAt: value.updatedAt as string,
   };
+
+  if (value.merchantOperationId !== undefined) {
+    if (value.workspaceId !== spaceId || typeof value.merchantId !== 'string' || !value.merchantId
+      || value.merchantId.includes('/') || typeof value.merchantOperationId !== 'string'
+      || !value.merchantOperationId || value.merchantOperationId.includes('/')) return null;
+    try {
+      transaction.amountExact = legacyAmountExact(value.amount, value.amountExact);
+    } catch { return null; }
+    transaction.workspaceId = spaceId;
+    transaction.merchantId = value.merchantId;
+    transaction.merchantOperationId = value.merchantOperationId;
+  }
 
   return isValidTransaction(transaction) ? transaction : null;
 }
