@@ -1,0 +1,26 @@
+# My-app approved release task order
+
+Repository: `moh-ac-32000-del/My-app` only. Approved sequence updated 2026-10-19 after the user supplied merchant accounting rules and requested starting at task one. This is a bounded release plan, not authorization for optional improvements.
+
+1. **Supported backend runtime** — migrate Functions from Node.js 20 to Node.js 22 without dependency, arithmetic, rules or financial-data changes. Run matching Node 22 CI including real demo-emulator transactions, merge only after success, verify main, deploy reviewed Functions and verify deployed runtime/isolated behavior. No APK build or paid backup activation.
+2. **Workspace practical acceptance** — preserve the deployed Owner/Editor/Viewer system, quotas, single-use seven-day invitations, separate settings and session isolation. Live SDK authorization tests passed; authenticated UI/device acceptance remains distinct. Fix only demonstrated issues. No destructive workspace deletion/ownership-transfer implementation without a separately reviewed retention procedure.
+3. **Merchant accounting and signed customer balances** — implement the specification in `merchant-accounting-approved.md` in a separate reviewed branch. Begin with numerical regression tests and a compatibility inventory of current reduced debt balances/payment records. Then signed customer credits, merchant accounts, line-item purchases and linked payments, and atomic customer-to-merchant direct payments. Keep currencies/spaces isolated and all business truth in Firebase. Do not double-subtract historical payments, silently rewrite history or assume the current settlement endpoint already supports overpayments.
+4. **Daily journal and customer action cleanup** — show existing cash and noncash records, notes, item descriptions, party/date/amount/currency, without duplicate records or cash effects. Retain only the upper customer-add button. Include merchant operation projections once their reviewed schema exists.
+5. **Archive calendar** — select a day and load only its archives where feasible; show every closing for that day separately. Do not alter old archive contents or balances.
+6. **Server automatic closing/archiving** — configurable execution time, default midnight, using the store timezone and an accounting boundary at midnight. Process each due day/open period separately, retry without duplication, preserve prior manual closings and handle late/concurrent operations. No new cash movement. Replace manual closing with the scheduled-time notice only after automatic closing is verified. Do not invent missing store-timezone or late-entry policy decisions.
+7. **Reminder/notification completion** — retain existing reminder deletion and follow-up preferences (default 17:00). Complete and verify bounded-cost server dispatch, actual Android delivery while closed, scope/permission changes, and supported web behavior. Token registration/test delivery is not proof of completed scheduled Push.
+8. **Cloud financial-data protection** — shortly before final tests, approve retention/cost and configure the agreed backup/PITR protection; prove restoration to a separate target. Do not enable paid retention early. Local Excel/Sheets exports remain supplementary copies, not database restore. Existing build-image cleanup is unrelated to financial data retention.
+9. **One combined Android APK and final acceptance** — only after approved feature changes, build one APK to conserve Expo quota. Test real-device auth, workspaces, parties, debts/credits/payments, direct settlements, journal/archives, offline failures/retries, notifications, languages and export. Repair demonstrated bugs, then prepare AAB/store requirements. Keep the old hosted APK available until intentionally superseded.
+
+## Stop condition
+
+Successful CI/build is necessary but not real-device acceptance. Complete the agreed essentials, document known limitations, then freeze basic development; no automatic optional polishing. Merchant accounting is part of this release scope, not an optional omitted feature. Further export presentation polish, inventory management, paid subscription billing and other unrequested additions remain deferred.
+
+## Task-one rationale and scope
+
+The 2026-10-19 deployment warned that Node.js 20 is decommissioned on 2026-10-30. Node.js 22 is supported on the same `google-22` stack, minimizing the runtime change without changing package versions or business logic. Official references:
+
+- https://docs.cloud.google.com/functions/docs/runtime-support
+- https://firebase.google.com/docs/functions/manage-functions#set_nodejs_version
+
+Changing the runtime is not a billing-plan upgrade. Existing usage pricing and resources still apply; do not promise zero usage charges. Deployment must explicitly target the existing reviewed Functions, with no deletions, rules changes, data migration, scheduler or backup activation in task one.
