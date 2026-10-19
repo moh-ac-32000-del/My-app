@@ -10,6 +10,7 @@ const state = vi.hoisted(() => ({
   syncStop: vi.fn(),
   call: vi.fn(),
   constraints: [] as unknown[],
+  read: vi.fn(),
 }));
 vi.mock('@/services/firebase', () => ({ isFirebaseConfigured: true, getFirebaseApp: () => ({}) }));
 vi.mock('firebase/functions', () => ({ getFunctions: () => ({}), httpsCallable: () => state.call }));
@@ -23,6 +24,9 @@ vi.mock('firebase/firestore', () => ({
   where: (...values: unknown[]) => ({ where: values }),
   orderBy: (...values: unknown[]) => ({ orderBy: values }),
   limit: (value: number) => ({ limit: value }),
+  documentId: () => '__name__',
+  startAfter: (...values: unknown[]) => ({ startAfter: values }),
+  getDocsFromServer: state.read,
   onSnapshot: (ref: { path: string }, _options: unknown, next: any, error: any) => {
     const stop = vi.fn();
     state.listeners.push({ path: ref.path, next, error, stop });
@@ -33,7 +37,7 @@ vi.mock('firebase/firestore', () => ({
     return state.syncStop;
   },
 }));
-import { sendMerchantCommand, subscribeMerchantAccounts } from '@/services/merchantFirestore';
+import { loadMerchantHistoryPage, sendMerchantCommand, subscribeMerchantAccounts } from '@/services/merchantFirestore';
 const snapshot = (values: unknown[] = [], fromCache = false, hasPendingWrites = false) => ({
   docs: values.map((value: any) => ({ id: value.id, data: () => value })),
   metadata: { fromCache, hasPendingWrites },
@@ -65,6 +69,7 @@ beforeEach(() => {
   state.call.mockReset();
   state.syncStop.mockReset();
   state.constraints = [];
+  state.read.mockReset();
 });
 
 describe('scoped merchant observations', () => {
@@ -98,6 +103,7 @@ describe('scoped merchant observations', () => {
     expect(state.constraints).toEqual([
       { where: ['merchantId', '==', 'm'] },
       { orderBy: ['createdAt', 'desc'] },
+      { orderBy: ['__name__', 'desc'] },
       { limit: 101 },
     ]);
   });
@@ -141,6 +147,67 @@ describe('scoped merchant observations', () => {
     state.sync();
     expect(publish).not.toHaveBeenCalled();
     expect(fail).toHaveBeenCalledOnce();
+  });
+});
+
+describe('older merchant statement reads', () => {
+  const cursor = { id: 'boundary', createdAt: '2026-10-19T12:00:00.000Z' };
+  const operation = {
+    id: 'older',
+    workspaceId: 's',
+    storeId: 'store',
+    merchantId: 'm',
+    merchantName: 'Merchant',
+    action: 'payment',
+    currency: 'TRY',
+    balanceBeforeExact: '0.00',
+    balanceAfterExact: '-10.00',
+    cashDeltaExact: '-10.00',
+    amountExact: '10.00',
+    note: '',
+    createdAt: '2026-10-18T12:00:00.000Z',
+    createdByUserId: 'u',
+  };
+  it('requests one server-confirmed bounded page after the exact date/ID cursor', async () => {
+    state.read.mockResolvedValue(snapshot([operation]));
+    await expect(loadMerchantHistoryPage('s', 'store', 'm', cursor)).resolves.toMatchObject({
+      operations: [operation],
+      hasMore: false,
+    });
+    expect(state.constraints).toEqual([
+      { where: ['merchantId', '==', 'm'] },
+      { orderBy: ['createdAt', 'desc'] },
+      { orderBy: ['__name__', 'desc'] },
+      { startAfter: [cursor.createdAt, cursor.id] },
+      { limit: 101 },
+    ]);
+    expect(state.listeners).toHaveLength(0);
+  });
+  it('reports more pages without exposing the extra lookahead record twice', async () => {
+    state.read.mockResolvedValue(
+      snapshot(Array.from({ length: 101 }, (_, index) => ({ ...operation, id: `old-${index}` }))),
+    );
+    const page = await loadMerchantHistoryPage('s', 'store', 'm', cursor);
+    expect(page.operations).toHaveLength(100);
+    expect(page.hasMore).toBe(true);
+  });
+  it('rejects local-pending or cache-only history instead of returning accepted financial data', async () => {
+    state.read.mockResolvedValue(snapshot([operation], true));
+    await expect(loadMerchantHistoryPage('s', 'store', 'm', cursor)).rejects.toThrow(
+      'merchantHistoryNotServerConfirmed',
+    );
+    state.read.mockResolvedValue(snapshot([operation], false, true));
+    await expect(loadMerchantHistoryPage('s', 'store', 'm', cursor)).rejects.toThrow();
+  });
+  it('rejects a historical record for another merchant', async () => {
+    state.read.mockResolvedValue(snapshot([{ ...operation, merchantId: 'other' }]));
+    await expect(loadMerchantHistoryPage('s', 'store', 'm', cursor)).rejects.toThrow('merchantHistoryScopeMismatch');
+  });
+  it('does not request a page with an invalid cursor', async () => {
+    await expect(loadMerchantHistoryPage('s', 'store', 'm', { ...cursor, id: 'other/path' })).rejects.toThrow(
+      'invalidMerchantHistoryCursor',
+    );
+    expect(state.read).not.toHaveBeenCalled();
   });
 });
 

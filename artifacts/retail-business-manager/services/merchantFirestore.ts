@@ -7,6 +7,9 @@ import {
   where,
   orderBy,
   limit,
+  documentId,
+  startAfter,
+  getDocsFromServer,
 } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { getFirebaseApp, isFirebaseConfigured } from '@/services/firebase';
@@ -17,7 +20,7 @@ import {
   merchantOperationFromDocument,
 } from '@/data/merchantDocuments';
 import { synchronizedSnapshots } from '@/data/synchronizedSnapshots';
-import type { MerchantDraftCommand, MerchantSnapshot } from '@/types/merchant';
+import type { MerchantDraftCommand, MerchantSnapshot, MerchantOperation } from '@/types/merchant';
 
 /** Scoped Firestore observations, never an alternate local ledger or a cross-space collection scan. */
 export function subscribeMerchantAccounts(
@@ -98,6 +101,7 @@ export function subscribeMerchantAccounts(
             collection(db, `${root}/merchantOperations`),
             where('merchantId', '==', merchantId),
             orderBy('createdAt', 'desc'),
+            orderBy(documentId(), 'desc'),
             limit(101),
           ),
           { includeMetadataChanges: true },
@@ -136,6 +140,44 @@ export function subscribeMerchantAccounts(
     coordinator.stop();
     subscriptions.forEach((unsubscribe) => unsubscribe());
   };
+}
+
+/** Explicit user-requested historical page. No polling, local authority or all-history scan. */
+export async function loadMerchantHistoryPage(
+  spaceId: string,
+  storeId: string,
+  merchantId: string,
+  cursor: Pick<MerchantOperation, 'id' | 'createdAt'>,
+) {
+  if (!isFirebaseConfigured) throw new Error('firebaseNotConfigured');
+  const root = workspaceDocumentPath(spaceId);
+  if (
+    !storeId.trim() ||
+    !merchantId.trim() ||
+    merchantId.includes('/') ||
+    !cursor.id ||
+    cursor.id.includes('/') ||
+    !Number.isFinite(Date.parse(cursor.createdAt))
+  )
+    throw new Error('invalidMerchantHistoryCursor');
+  const snapshot = await getDocsFromServer(
+    query(
+      collection(getFirestore(getFirebaseApp()), `${root}/merchantOperations`),
+      where('merchantId', '==', merchantId),
+      orderBy('createdAt', 'desc'),
+      orderBy(documentId(), 'desc'),
+      startAfter(cursor.createdAt, cursor.id),
+      limit(101),
+    ),
+  );
+  if (snapshot.metadata.fromCache || snapshot.metadata.hasPendingWrites)
+    throw new Error('merchantHistoryNotServerConfirmed');
+  const operations = snapshot.docs
+    .slice(0, 100)
+    .map((doc) => merchantOperationFromDocument(doc.id, doc.data(), spaceId, storeId));
+  if (operations.some((operation) => operation.merchantId !== merchantId))
+    throw new Error('merchantHistoryScopeMismatch');
+  return { operations, hasMore: snapshot.docs.length > 100 };
 }
 
 export async function sendMerchantCommand(spaceId: string, storeId: string, command: MerchantDraftCommand) {

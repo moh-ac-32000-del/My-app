@@ -20,8 +20,18 @@ export default function MerchantScreen() {
 
 function MerchantDetail({ id }: { id: string }) {
   const { canWriteBusiness } = useStore();
-  const { merchants, balances, operations, operationsLimited, isLoading, error, retry, command } =
-    useMerchantAccounts(id);
+  const {
+    merchants,
+    balances,
+    operations,
+    operationsLimited,
+    historyLoading,
+    loadMore,
+    isLoading,
+    error,
+    retry,
+    command,
+  } = useMerchantAccounts(id);
   const { t, language, isRTL } = useI18n();
   const colors = useColors();
   const [form, setForm] = useState<{ action: MerchantDraftCommand['action']; target?: MerchantOperation } | null>(null);
@@ -106,12 +116,16 @@ function MerchantDetail({ id }: { id: string }) {
                 {t('amount')}: {formatExactMoney(operation.amountExact, operation.currency, language)}
               </Text>
             ) : null}
-          {operation.paidExact ? (
-            <Text style={text}>{t('merchantPaid')}: {formatExactMoney(operation.paidExact, operation.currency, language)}</Text>
-          ) : null}
-          {operation.source === 'cash' || operation.source === 'external' ? (
-            <Text style={{ ...text, color: colors.mutedForeground }}>{t(operation.source === 'cash' ? 'merchantCash' : 'merchantExternal')}</Text>
-          ) : null}
+            {operation.paidExact ? (
+              <Text style={text}>
+                {t('merchantPaid')}: {formatExactMoney(operation.paidExact, operation.currency, language)}
+              </Text>
+            ) : null}
+            {operation.source === 'cash' || operation.source === 'external' ? (
+              <Text style={{ ...text, color: colors.mutedForeground }}>
+                {t(operation.source === 'cash' ? 'merchantCash' : 'merchantExternal')}
+              </Text>
+            ) : null}
             <Text style={text}>
               {t('merchantBalance')}: {formatExactMoney(operation.balanceAfterExact, operation.currency, language)}
             </Text>
@@ -132,6 +146,14 @@ function MerchantDetail({ id }: { id: string }) {
             ) : null}
           </GlassCard>
         ))}
+      {operationsLimited ? (
+        <MerchantButton
+          title={t('merchantHistoryMore')}
+          testID="merchant-history-more"
+          disabled={historyLoading}
+          onPress={() => void loadMore()}
+        />
+      ) : null}
     </View>
   );
   return (

@@ -9,6 +9,7 @@ const state = vi.hoisted(() => ({
   error: null as string | null,
   reversed: false,
   merchantId: 'm',
+  limited: false,
 }));
 vi.mock('react-native', () => ({
   View: ({ children, testID }: any) => React.createElement('div', { 'data-testid': testID }, children),
@@ -24,7 +25,10 @@ vi.mock('react-native', () => ({
     }),
   ActivityIndicator: () => React.createElement('div', { 'data-testid': 'loading' }),
 }));
-vi.mock('expo-router', () => ({ useRouter: () => ({ push: vi.fn() }), useLocalSearchParams: () => ({ id: state.merchantId }) }));
+vi.mock('expo-router', () => ({
+  useRouter: () => ({ push: vi.fn() }),
+  useLocalSearchParams: () => ({ id: state.merchantId }),
+}));
 vi.mock('@/hooks/useColors', () => ({ useColors: () => ({ foreground: '#fff', primary: '#123' }) }));
 vi.mock('@/hooks/useI18n', () => ({
   useI18n: () => ({
@@ -75,7 +79,9 @@ vi.mock('@/hooks/useMerchantAccounts', () => ({
         ...(state.reversed ? { reversedByOperationId: 'correction' } : {}),
       },
     ],
-    operationsLimited: false,
+    operationsLimited: state.limited,
+    historyLoading: false,
+    loadMore: vi.fn(),
     isLoading: state.loading,
     error: state.error,
     retry: vi.fn(),
@@ -93,8 +99,16 @@ beforeEach(() => {
   state.error = null;
   state.reversed = false;
   state.merchantId = 'm';
+  state.limited = false;
 });
 describe('merchant screens (server-rendered, not device acceptance)', () => {
+  it('allows a viewer to request older history without exposing financial actions', () => {
+    state.role = 'viewer';
+    state.limited = true;
+    const markup = renderToStaticMarkup(React.createElement(MerchantScreen));
+    expect(markup).toContain('merchant-history-more');
+    expect(markup).not.toContain('merchant-action-payment');
+  });
   it('keys the detail subtree by merchant so old drafts cannot survive account navigation', () => {
     const first = MerchantScreen();
     state.merchantId = 'another';

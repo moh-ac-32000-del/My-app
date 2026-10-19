@@ -2,7 +2,7 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 const state = vi.hoisted(() => ({ role: 'owner', send: vi.fn(), assert: vi.fn() }));
-vi.mock('@/services/merchantFirestore', () => ({ sendMerchantCommand: state.send, subscribeMerchantAccounts: vi.fn() }));
+vi.mock('@/services/merchantFirestore', () => ({ sendMerchantCommand: state.send, subscribeMerchantAccounts: vi.fn(), loadMerchantHistoryPage: vi.fn() }));
 vi.mock('@/context/StoreContext', () => ({ useStore: () => ({
   profile: { id: 'store' }, activeSpaceId: 's', sessionKey: 'session', isAuthenticated: true, isReady: true,
   activeSpaceLoading: false, activeSpaceError: null, workspaceRole: state.role,
