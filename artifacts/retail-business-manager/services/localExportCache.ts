@@ -1,5 +1,9 @@
 /** Session-only copies of snapshots already delivered to normal screens. No I/O or SDK imports. */
-export const LOCAL_EXPORT_COLLECTIONS = ['customers', 'debts', 'payments', 'transactions', 'dailyArchives'] as const;
+import { merchantExportCoverage } from '../data/merchantExportCoverage';
+import { merchantOperationFromDocument } from '../data/merchantDocuments';
+import { mergeMerchantHistory } from '../data/merchantHistory';
+export const LOCAL_EXPORT_COLLECTIONS = ['customers', 'debts', 'payments', 'transactions', 'dailyArchives',
+  'customerCredits', 'merchants', 'merchantBalances', 'merchantOperations'] as const;
 export type LocalExportCollection = typeof LOCAL_EXPORT_COLLECTIONS[number];
 export interface LocalExportScope { uid: string; spaceId: string; storeId: string }
 export interface StoredExportDocument { id: string; data: Record<string, unknown> }
@@ -19,11 +23,52 @@ export function rememberLocalExportCollection(uid: string, spaceId: string, coll
 }
 
 export function localExportStatus(scope: LocalExportScope) {
-  return LOCAL_EXPORT_COLLECTIONS.map((collection) => {
+  const status = LOCAL_EXPORT_COLLECTIONS.map((collection) => {
     const candidate = cache.get(key(scope.uid, scope.spaceId, collection));
     const entry = !candidate?.coveredStoreId || candidate.coveredStoreId === scope.storeId ? candidate : undefined;
     return { collection, capturedAt: entry?.capturedAt ?? null, tooLarge: entry?.tooLarge ?? false };
   });
+  const operationStatus = status.find((entry) => entry.collection === 'merchantOperations')!;
+  if (status.filter((entry) => ['merchants', 'merchantBalances'].includes(entry.collection)).every((entry) => entry.capturedAt)) {
+    try {
+      merchantExportCoverage(scope.spaceId, scope.storeId, {
+        merchants: cache.get(key(scope.uid, scope.spaceId, 'merchants'))!.documents,
+        merchantBalances: cache.get(key(scope.uid, scope.spaceId, 'merchantBalances'))!.documents,
+        merchantOperations: cache.get(key(scope.uid, scope.spaceId, 'merchantOperations'))?.documents ?? [],
+      });
+      // A confirmed empty merchant/balance pair also proves there is no statement to load.
+      if (!operationStatus.capturedAt && !(cache.get(key(scope.uid, scope.spaceId, 'merchantOperations'))?.documents.length)) {
+        const stamp = status.find((entry) => entry.collection === 'merchantBalances')!.capturedAt!;
+        operationStatus.capturedAt = stamp;
+      }
+    } catch (error) {
+      operationStatus.capturedAt = null;
+      operationStatus.tooLarge ||= error instanceof Error && error.message === 'exportTooLarge';
+    }
+  } else operationStatus.capturedAt = null;
+  return status;
+}
+
+/** Union of already received authenticated statement pages, never a new listener/read. */
+export function rememberLocalMerchantOperations(uid: string, spaceId: string, storeId: string,
+  documents: StoredExportDocument[], serverConfirmed: boolean, now = new Date().toISOString()) {
+  const previous = cache.get(key(uid, spaceId, 'merchantOperations'));
+  if (!serverConfirmed) {
+    cache.set(key(uid, spaceId, 'merchantOperations'), { documents: previous?.documents ?? [], capturedAt: null, tooLarge: previous?.tooLarge ?? false, coveredStoreId: storeId });
+    listeners.forEach((listener) => listener()); return;
+  }
+  try {
+    const rows = new Map<string, ReturnType<typeof merchantOperationFromDocument>[]>();
+    for (const doc of [...(previous?.documents ?? []), ...documents]) {
+      const row = merchantOperationFromDocument(doc.id, doc.data, spaceId, storeId);
+      const group = rows.get(row.merchantId) ?? [];
+      group.push(row); rows.set(row.merchantId, group);
+    }
+    const merged = [...rows.values()].flatMap((group) => mergeMerchantHistory([], group));
+    rememberLocalExportCollection(uid, spaceId, 'merchantOperations', merged.map((row) => ({ id: row.id, data: row as unknown as Record<string, unknown> })), true, now, storeId);
+  } catch {
+    rememberLocalExportCollection(uid, spaceId, 'merchantOperations', [], false, now, storeId);
+  }
 }
 
 export function readLocalExportData(scope: LocalExportScope) {
@@ -33,7 +78,7 @@ export function readLocalExportData(scope: LocalExportScope) {
   const records = {} as Record<LocalExportCollection, StoredExportDocument[]>;
   const capturedAt = {} as Record<LocalExportCollection, string>;
   for (const { collection, capturedAt: stamp } of status) {
-    records[collection] = JSON.parse(JSON.stringify(cache.get(key(scope.uid, scope.spaceId, collection))!.documents
+    records[collection] = JSON.parse(JSON.stringify((cache.get(key(scope.uid, scope.spaceId, collection))?.documents ?? [])
       .filter((doc) => doc.data.storeId === scope.storeId)));
     capturedAt[collection] = stamp!;
   }

@@ -95,7 +95,7 @@ describe('coherent customer debt/credit subscriptions', () => {
     state.listeners[1].error(new Error('permission-denied'));
     await Promise.resolve();
     expect(fail).toHaveBeenCalledOnce();
-    expect(state.invalidate).toHaveBeenCalledOnce();
+    expect(state.invalidate).toHaveBeenCalledTimes(2); // Debts and credits both lose export coverage.
     expect(state.listeners.every((listener) => listener.stop.mock.calls.length === 1)).toBe(true);
     expect(state.syncStop).toHaveBeenCalledOnce();
   });

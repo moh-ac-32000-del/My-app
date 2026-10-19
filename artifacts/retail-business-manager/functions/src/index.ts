@@ -12,10 +12,15 @@ import { createStoreProfileRuntime, storeProfileCommandHandler } from './storePr
 import { createReminderRuntime, reminderCommandHandler } from './reminderCommand.js';
 import { createDailyArchiveRuntime, dailyArchiveCommandHandler } from './dailyArchiveCommand.js';
 import { workspaceCommandHandler } from './workspaceCommand.js';
+import { merchantCommandHandler } from './merchantCommand.js';
 
 initializeApp();
 
 const firestore = getFirestore();
+// Source registration only. Deploy this reviewed feature with its rules/indexes and matching clients.
+export const merchantCommand = onCall({ invoker: 'public', minInstances: 0, maxInstances: 2, timeoutSeconds: 60 }, (request) => (
+  merchantCommandHandler(request, { firestore, now: () => new Date().toISOString() })
+));
 export const workspaceCommand = onCall({ invoker: 'public', minInstances: 0, maxInstances: 2, timeoutSeconds: 60 }, (request) => (
   workspaceCommandHandler(request, {firestore, now: () => new Date().toISOString()})
 ));

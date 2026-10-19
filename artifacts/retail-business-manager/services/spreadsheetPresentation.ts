@@ -2,6 +2,7 @@ import { translate, type Language } from '@/constants/i18n';
 import { getCurrency, isCurrencyCode } from '@/constants/currencies';
 import { exportReportLabels } from '@/constants/exportLabels';
 import { EXPORT_COLUMNS, type ExportTableName, type ExportValue, type SpreadsheetExportSnapshot } from '@/types/spreadsheetExport';
+import { merchantExportLabels } from '@/constants/merchantExportLabels';
 
 // Preserve raw references for tracing, but do not make users read Firebase IDs.
 export const REPORT_COLUMNS = {
@@ -18,7 +19,7 @@ type RecordRow = Record<string, ExportValue>;
 
 /** Presentation-only local joins. No SDK, I/O, totals, conversions or financial writes. */
 export function spreadsheetPresentation(snapshot: SpreadsheetExportSnapshot, language: Language) {
-  const labels = exportReportLabels[language];
+  const labels = { ...exportReportLabels[language], ...merchantExportLabels[language] };
   const raw = {} as Record<ExportTableName, RecordRow[]>;
   for (const name of Object.keys(EXPORT_COLUMNS) as ExportTableName[]) {
     const columns = EXPORT_COLUMNS[name];
@@ -78,7 +79,7 @@ export function spreadsheetPresentation(snapshot: SpreadsheetExportSnapshot, lan
         view.direction = localized(record.direction, ['in', 'out']);
         view.method = localized(record.method, ['cash', 'card', 'bank-transfer', 'other']);
       }
-      if ('type' in record) view.type = localized(record.type, ['cash_in', 'cash_out', 'debt', 'settlement']);
+      if ('type' in record) view.type = localized(record.type, ['cash_in', 'cash_out', 'debt', 'settlement', 'merchant']);
       if ('archiveId' in record) {
         const archive = archives.get(record.archiveId);
         if (!archive) throw new Error('exportResponseInvalid');

@@ -9,6 +9,8 @@ import type {
   StoredExportDocument,
 } from "./localExportCache";
 type RecordData = Record<string, unknown>;
+import { LOCAL_EXPORT_COLLECTIONS } from './localExportCache';
+import { projectExportAccounts } from './exportAccountProjection';
 
 /** Project previously received data only. No Firebase SDK, callable, listener or network access. */
 export function projectLocalExportSnapshot(
@@ -20,6 +22,8 @@ export function projectLocalExportSnapshot(
 ): SpreadsheetExportSnapshot {
   if (![input.uid, input.spaceId, input.storeId].every(validId))
     throw new Error("exportScopeInvalid");
+  if (LOCAL_EXPORT_COLLECTIONS.some((name) => !Array.isArray(records[name]) || !capturedAt[name])) throw new Error('exportLocalIncomplete');
+  if (LOCAL_EXPORT_COLLECTIONS.some((name) => records[name].length > 1000)) throw new Error('exportTooLarge');
   const collections = [
     "customers",
     "debts",
@@ -129,11 +133,11 @@ export function projectLocalExportSnapshot(
             id,
             text(event.id),
             text(event.sourceId),
-            oneOf(event.type, ["cash_in", "cash_out", "debt", "settlement"]),
+            oneOf(event.type, ["cash_in", "cash_out", "debt", "settlement", "merchant"]),
             optionalText(event.customerId),
             optionalText(event.customerName),
             currency(event.currency),
-            amount(event.amount),
+            event.type === 'merchant' ? text(event.amountExact) : amount(event.amount),
             date(event.occurredAt),
             optionalText(event.note),
           ]);
@@ -160,6 +164,7 @@ export function projectLocalExportSnapshot(
     exportedAt: date(exportedAt),
     capturedAt,
     tables,
+    accountData: projectExportAccounts(input, records),
   };
   if (JSON.stringify(snapshot).length > 1_000_000) {
     throw new Error("exportTooLarge");

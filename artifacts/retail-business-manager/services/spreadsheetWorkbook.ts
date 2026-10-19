@@ -4,18 +4,21 @@ import { exportLabels, exportReportLabels } from '@/constants/exportLabels';
 import { EXPORT_COLUMNS, type ExportTableName, type ExportValue, type SpreadsheetExportSnapshot } from '@/types/spreadsheetExport';
 import { spreadsheetPresentation, TECHNICAL_COLUMNS } from './spreadsheetPresentation';
 import { groupSpreadsheetReports } from './spreadsheetGroupedReport';
+import { exactSpreadsheetReports } from './exactSpreadsheetReport';
+import { merchantExportLabels } from '@/constants/merchantExportLabels';
 
 export const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 const DATE_COLUMNS = new Set(['createdAt', 'updatedAt', 'paidAt', 'settledAt', 'dueDate', 'closedAt', 'date', 'occurredAt']);
 
 export function buildSpreadsheetWorkbook(snapshot: SpreadsheetExportSnapshot, language: Language): XLSX.WorkBook {
-  return groupSpreadsheetReports(snapshot, language, buildDetailedSpreadsheetWorkbook(snapshot, language));
+  const source = buildDetailedSpreadsheetWorkbook(snapshot, language);
+  return snapshot.version === 2 ? exactSpreadsheetReports(snapshot, language) : groupSpreadsheetReports(snapshot, language, source);
 }
 
 /** Validated, typed intermediate tables; the downloaded workbook contains two grouped reports. */
 export function buildDetailedSpreadsheetWorkbook(snapshot: SpreadsheetExportSnapshot, language: Language): XLSX.WorkBook {
-  if (snapshot.version !== 1 || !snapshot.tables || !Number.isFinite(Date.parse(snapshot.exportedAt))) throw new Error('exportResponseInvalid');
-  const labels = { ...exportLabels[language], ...exportReportLabels[language] };
+  if (![1, 2].includes(snapshot.version) || (snapshot.version === 2 && !snapshot.accountData) || !snapshot.tables || !Number.isFinite(Date.parse(snapshot.exportedAt))) throw new Error('exportResponseInvalid');
+  const labels = { ...exportLabels[language], ...exportReportLabels[language], ...merchantExportLabels[language] };
   const presentation = spreadsheetPresentation(snapshot, language);
   const book = XLSX.utils.book_new();
   book.Workbook = { Views: [{ RTL: language === 'ar' }] };

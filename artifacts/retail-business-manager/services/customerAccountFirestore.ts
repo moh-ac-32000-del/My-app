@@ -26,15 +26,18 @@ export function subscribeCustomerAccounts(
   const subscriptions: Array<() => void> = [];
   let stopped = false;
   const exportObservation = observeForLocalExport(spaceId, 'debts');
+  const creditExport = observeForLocalExport(spaceId, 'customerCredits');
   const coordinator = synchronizedSnapshots<CustomerAccountSnapshot & Record<string, unknown>>(
     ['debts', 'credits'],
     (value) => {
       projectCustomerAccounts(value.debts, value.credits, spaceId, storeId);
+      creditExport.receive({ docs: value.credits.map((row) => ({ id: row.id, data: () => row as unknown as Record<string, unknown> })), metadata: { fromCache: false, hasPendingWrites: false } });
       publish(value);
     },
     (error) => {
       stopped = true;
       exportObservation.invalidate();
+      creditExport.invalidate();
       queueMicrotask(() => subscriptions.forEach((stop) => stop()));
       fail(error);
     },
@@ -87,6 +90,7 @@ export function subscribeCustomerAccounts(
     coordinator.stop();
     subscriptions.forEach((stop) => stop());
     exportObservation.invalidate();
+    creditExport.invalidate();
     throw error;
   }
   return () => {

@@ -41,6 +41,21 @@ const purchase = {
 };
 
 describe('merchant trusted command (not deployed)', () => {
+  it('keeps one balance revision per immutable financial operation for complete local-export coverage', async () => {
+    const backend = setup();
+    await backend.command('opening', 'opening-count', { currency: 'TRY', amountExact: '100.00' });
+    await backend.command('purchase', 'purchase-count', purchase);
+    await backend.command('payment', 'cash-count', payment);
+    await backend.command('payment', 'bank-count', { ...payment, source: 'external' });
+    await backend.command('directPayment', 'direct-count', { currency: 'TRY', amountExact: '130.00', customerId: 'c' });
+    await backend.command('reverse', 'reverse-count', { currency: 'TRY', targetOperationId: 'cash-count', reason: 'Correction' });
+    await backend.command('save', 'metadata-count', { name: 'Renamed', phone: '', isActive: true });
+    const operations = Object.entries(backend.docs).filter(([path]) => path.startsWith('spaces/s/merchantOperations/'));
+    expect(operations).toHaveLength(6);
+    expect(backend.docs[balancePath()].revision).toBe(6);
+    await backend.command('payment', 'bank-count', { ...payment, source: 'external' });
+    expect(backend.docs[balancePath()].revision).toBe(6); // Receipt replay cannot inflate coverage.
+  });
   const reverse = (targetOperationId: string) => ({
     currency: 'TRY',
     targetOperationId,

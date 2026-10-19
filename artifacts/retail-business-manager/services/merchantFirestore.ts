@@ -21,6 +21,7 @@ import {
 } from '@/data/merchantDocuments';
 import { synchronizedSnapshots } from '@/data/synchronizedSnapshots';
 import type { MerchantDraftCommand, MerchantSnapshot, MerchantOperation } from '@/types/merchant';
+import { observeForLocalExport } from './localExportObservation';
 
 /** Scoped Firestore observations, never an alternate local ledger or a cross-space collection scan. */
 export function subscribeMerchantAccounts(
@@ -35,6 +36,11 @@ export function subscribeMerchantAccounts(
   if (!storeId.trim()) throw new Error('merchantStoreUnavailable');
   const db = getFirestore(getFirebaseApp());
   const subscriptions: Array<() => void> = [];
+  const merchantExport = observeForLocalExport(spaceId, 'merchants');
+  const balanceExport = observeForLocalExport(spaceId, 'merchantBalances');
+  const operationExport = observeForLocalExport(spaceId, 'merchantOperations');
+  let operationExportHead: Parameters<typeof operationExport.merchantOperations>[0] | null = null;
+  const observed = (rows: Array<{ id: string }>) => ({ docs: rows.map((row) => ({ id: row.id, data: () => row as unknown as Record<string, unknown> })), metadata: { fromCache: false, hasPendingWrites: false } });
   const coordinator = synchronizedSnapshots<MerchantSnapshot & Record<string, unknown>>(
     ['merchants', 'balances', 'operations', 'operationsLimited'],
     (value) => {
@@ -49,8 +55,12 @@ export function subscribeMerchantAccounts(
         throw new Error('invalidCloudMerchantDocument');
       }
       publish(value);
+      merchantExport.receive(observed(value.merchants));
+      balanceExport.receive(observed(value.balances));
+      if (merchantId && operationExportHead) operationExport.merchantOperations(operationExportHead, storeId);
     },
     (error) => {
+      merchantExport.invalidate(); balanceExport.invalidate(); operationExport.invalidate();
       queueMicrotask(() => subscriptions.forEach((unsubscribe) => unsubscribe()));
       fail(error);
     },
@@ -107,11 +117,12 @@ export function subscribeMerchantAccounts(
           { includeMetadataChanges: true },
           (snapshot) => {
             try {
+              const received = snapshot.docs.map((doc) => merchantOperationFromDocument(doc.id, doc.data(), spaceId, storeId));
+              if (received.some((row) => row.merchantId !== merchantId)) throw new Error('merchantHistoryScopeMismatch');
+              operationExportHead = snapshot;
               coordinator.receive(
                 'operations',
-                snapshot.docs
-                  .slice(0, 100)
-                  .map((doc) => merchantOperationFromDocument(doc.id, doc.data(), spaceId, storeId)),
+                received.slice(0, 100),
                 snapshot.metadata.fromCache || snapshot.metadata.hasPendingWrites,
               );
               coordinator.receive(
@@ -160,6 +171,7 @@ export async function loadMerchantHistoryPage(
     !Number.isFinite(Date.parse(cursor.createdAt))
   )
     throw new Error('invalidMerchantHistoryCursor');
+  const pageExport = observeForLocalExport(spaceId, 'merchantOperations');
   const snapshot = await getDocsFromServer(
     query(
       collection(getFirestore(getFirebaseApp()), `${root}/merchantOperations`),
@@ -172,11 +184,13 @@ export async function loadMerchantHistoryPage(
   );
   if (snapshot.metadata.fromCache || snapshot.metadata.hasPendingWrites)
     throw new Error('merchantHistoryNotServerConfirmed');
-  const operations = snapshot.docs
-    .slice(0, 100)
-    .map((doc) => merchantOperationFromDocument(doc.id, doc.data(), spaceId, storeId));
-  if (operations.some((operation) => operation.merchantId !== merchantId))
+  const received = snapshot.docs.map((doc) => merchantOperationFromDocument(doc.id, doc.data(), spaceId, storeId));
+  const operations = received.slice(0, 100);
+  if (received.some((operation) => operation.merchantId !== merchantId))
     throw new Error('merchantHistoryScopeMismatch');
+  pageExport.merchantOperations({
+    docs: snapshot.docs, metadata: snapshot.metadata,
+  }, storeId);
   return { operations, hasMore: snapshot.docs.length > 100 };
 }
 

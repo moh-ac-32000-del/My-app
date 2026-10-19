@@ -2,8 +2,14 @@ import { describe, expect, it } from 'vitest';
 import functionsPackage from '../functions/package.json';
 import firebase from '../firebase.json';
 import workflow from '../../../.github/workflows/retail-business-manager-ci.yml?raw';
+import entrypoint from '../functions/src/index.ts?raw';
 
 describe('supported Functions runtime configuration', () => {
+  it('registers the trusted merchant callable with zero idle instances and a bounded scale cap', () => {
+    expect(entrypoint).toContain("import { merchantCommandHandler } from './merchantCommand.js'");
+    expect(entrypoint).toMatch(/export const merchantCommand = onCall\(\{ invoker: 'public', minInstances: 0, maxInstances: 2, timeoutSeconds: 60 \}/);
+    expect(entrypoint).toContain('merchantCommandHandler(request, { firestore, now: () => new Date().toISOString() })');
+  });
   it('deploys the reviewed Node.js 22 runtime without a conflicting Firebase override', () => {
     expect(functionsPackage.engines.node).toBe('22');
     expect(firebase.functions.source).toBe('functions');

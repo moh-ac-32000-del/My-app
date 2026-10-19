@@ -13,7 +13,7 @@ import { readCustomerCredit, writeCustomerCredit } from './customerCreditState.j
 import { assertWorkspaceAccess } from './workspaceAccess.js';
 import { reverseMerchantOperation } from './merchantReversal.js';
 
-/** Not exported as a deployed callable until client, rules and journal integration are reviewed. */
+/** Trusted command; source registration does not imply deployment or practical acceptance. */
 export interface MerchantRuntime {
   firestore: Firestore;
   now: () => string;

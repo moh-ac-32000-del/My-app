@@ -1,5 +1,5 @@
 import { getFirebaseAuth, isFirebaseConfigured } from './firebase';
-import { rememberLocalExportCollection, localExportEpoch, type LocalExportCollection } from './localExportCache';
+import { rememberLocalExportCollection, rememberLocalMerchantOperations, localExportEpoch, type LocalExportCollection } from './localExportCache';
 
 type ObservedSnapshot = { docs: Array<{ id: string; data: () => Record<string, unknown> }>; metadata?: { fromCache: boolean; hasPendingWrites: boolean } };
 function uid() { try { return isFirebaseConfigured ? getFirebaseAuth().currentUser?.uid ?? null : null; } catch { return null; } }
@@ -10,6 +10,11 @@ export function observeForLocalExport(spaceId: string, collection: LocalExportCo
   const epoch = localExportEpoch();
   const isCurrent = () => !!actor && uid() === actor && localExportEpoch() === epoch;
   return {
+    merchantOperations(snapshot: ObservedSnapshot, storeId: string) {
+      if (!actor || !isCurrent()) return;
+      rememberLocalMerchantOperations(actor, spaceId, storeId, snapshot.docs.map((doc) => ({ id: doc.id, data: doc.data() })),
+        snapshot.metadata?.fromCache === false && snapshot.metadata.hasPendingWrites === false);
+    },
     receive(snapshot: ObservedSnapshot) {
       if (!actor || !isCurrent()) return;
       try {

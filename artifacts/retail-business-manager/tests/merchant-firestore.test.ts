@@ -12,7 +12,7 @@ const state = vi.hoisted(() => ({
   constraints: [] as unknown[],
   read: vi.fn(),
 }));
-vi.mock('@/services/firebase', () => ({ isFirebaseConfigured: true, getFirebaseApp: () => ({}) }));
+vi.mock('@/services/firebase', () => ({ isFirebaseConfigured: true, getFirebaseApp: () => ({}), getFirebaseAuth: () => ({ currentUser: { uid: 'u' } }) }));
 vi.mock('firebase/functions', () => ({ getFunctions: () => ({}), httpsCallable: () => state.call }));
 vi.mock('firebase/firestore', () => ({
   getFirestore: () => ({}),
@@ -38,6 +38,7 @@ vi.mock('firebase/firestore', () => ({
   },
 }));
 import { loadMerchantHistoryPage, sendMerchantCommand, subscribeMerchantAccounts } from '@/services/merchantFirestore';
+import { clearLocalExportCache, LOCAL_EXPORT_COLLECTIONS, readLocalExportData, rememberLocalExportCollection } from '@/services/localExportCache';
 const snapshot = (values: unknown[] = [], fromCache = false, hasPendingWrites = false) => ({
   docs: values.map((value: any) => ({ id: value.id, data: () => value })),
   metadata: { fromCache, hasPendingWrites },
@@ -65,6 +66,7 @@ const balance = {
   version: 1,
 };
 beforeEach(() => {
+  clearLocalExportCache();
   state.listeners = [];
   state.call.mockReset();
   state.syncStop.mockReset();
@@ -73,6 +75,39 @@ beforeEach(() => {
 });
 
 describe('scoped merchant observations', () => {
+  const historyRow = (index: number) => ({ id: `history-${index}`, workspaceId: 's', storeId: 'store', merchantId: 'm', merchantName: 'Merchant',
+    action: 'payment', source: 'external', currency: 'TRY', amountExact: '1.00', balanceBeforeExact: '0.00', balanceAfterExact: '-1.00',
+    cashDeltaExact: '0.00', createdAt: '2026-10-19T12:00:00.000Z', createdByUserId: 'u', note: '' });
+  it('reuses all 101 already read documents for export while displaying only 100 history rows', () => {
+    for (const name of LOCAL_EXPORT_COLLECTIONS) if (!['merchants', 'merchantBalances', 'merchantOperations'].includes(name))
+      rememberLocalExportCollection('u', 's', name, [], true);
+    const publish = vi.fn();
+    const stop = subscribeMerchantAccounts('s', 'store', publish, vi.fn(), 'm');
+    state.listeners[0].next(snapshot([merchant]));
+    state.listeners[1].next(snapshot([{ ...balance, revision: 101 }]));
+    state.listeners[2].next(snapshot(Array.from({ length: 101 }, (_, index) => historyRow(index))));
+    state.sync();
+    expect(publish.mock.calls[0][0].operations).toHaveLength(100);
+    expect(readLocalExportData({ uid: 'u', spaceId: 's', storeId: 'store' }).records.merchantOperations).toHaveLength(101);
+    stop();
+  });
+  it('does not let a page that completes after session reset repopulate export data', async () => {
+    let resolve!: (value: unknown) => void;
+    state.read.mockImplementation(() => new Promise((done) => { resolve = done; }));
+    const page = loadMerchantHistoryPage('s', 'store', 'm', { id: 'cursor', createdAt: '2026-10-19T13:00:00.000Z' });
+    clearLocalExportCache();
+    for (const name of LOCAL_EXPORT_COLLECTIONS) rememberLocalExportCollection('u', 's', name, [], true);
+    resolve(snapshot([historyRow(1)]));
+    await page;
+    expect(readLocalExportData({ uid: 'u', spaceId: 's', storeId: 'store' }).records.merchantOperations).toEqual([]);
+  });
+  it('validates a malformed lookahead row rather than hiding it behind the visible page', () => {
+    const fail = vi.fn();
+    const stop = subscribeMerchantAccounts('s', 'store', vi.fn(), fail, 'm');
+    state.listeners[0].next(snapshot([merchant])); state.listeners[1].next(snapshot([balance]));
+    state.listeners[2].next(snapshot([...Array.from({ length: 100 }, (_, index) => historyRow(index)), { ...historyRow(101), storeId: 'other' }]));
+    state.sync(); expect(fail).toHaveBeenCalledOnce(); stop();
+  });
   it('reads only current-space metadata/balances on the list, not historical operations', () => {
     const publish = vi.fn();
     const stop = subscribeMerchantAccounts('s', 'store', publish, vi.fn());
