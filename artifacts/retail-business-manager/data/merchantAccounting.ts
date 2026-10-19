@@ -1,4 +1,4 @@
-import { CURRENCY_OPTIONS, isCurrencyCode, type CurrencyCode } from '../constants/currencies.js';
+import { CURRENCY_OPTIONS, isCurrencyCode, type CurrencyCode } from '../constants/currencies';
 
 /** Pure proposed projections, NOT persisted balances, authorization or a transaction engine.
  * Canonical decimal strings are the boundary; BigInt never crosses JSON/Firestore boundaries.
