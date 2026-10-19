@@ -10,7 +10,7 @@ const debt = { id: 'debt-a', storeId: 'store-a', amount: 70, dueDate: '2026-10-1
 function database(extra: Record<string, Doc> = {}) {
   const docs: Record<string, Doc> = {
     [base]: { status: 'active' },
-    [`${base}/members/user-a`]: { status: 'active' },
+    [`${base}/members/user-a`]: { status: 'active', role: 'owner' },
     [`${base}/storeProfile/profile`]: { storeId: 'store-a' },
     [`${base}/debts/debt-a`]: debt,
     [`${base}/reminders/reminder-a`]: { ...reminder },
@@ -22,6 +22,7 @@ function database(extra: Record<string, Doc> = {}) {
   const collection = (path: string): any => ({
     doc: (id: string) => reference(`${path}/${id}`),
     where: (field: string, _op: string, value: unknown) => ({
+      query: true,
       get: async () => ({ docs: Object.keys(docs).filter((key) => key.startsWith(`${path}/`) && !key.slice(path.length + 1).includes('/') && docs[key][field] === value).map(snapshot) }),
     }),
   });
@@ -29,7 +30,12 @@ function database(extra: Record<string, Doc> = {}) {
   return {
     docs, writes,
     collection,
-    runTransaction: async (fn: any) => fn({ get: async (ref: any) => snapshot(ref.path), update: (ref: any, value: Doc) => write(ref.path, value, true) }),
+    runTransaction: async (fn: any) => fn({
+      get: async (ref: any) => ref.query ? ref.get() : snapshot(ref.path),
+      create: (ref: any, value: Doc) => { if(docs[ref.path])throw new Error('already-exists'); write(ref.path,value,false); },
+      update: (ref: any, value: Doc) => write(ref.path, value, true),
+      delete: (ref: any) => {writes.push(ref.path); delete docs[ref.path];},
+    }),
     batch: () => ({ create: (ref: any, value: Doc) => { if (docs[ref.path]) throw new Error('already-exists'); write(ref.path, value, false); }, update: (ref: any, value: Doc) => write(ref.path, value, true), delete: (ref: any) => { writes.push(ref.path); delete docs[ref.path]; }, commit: async () => {} }),
   };
 }

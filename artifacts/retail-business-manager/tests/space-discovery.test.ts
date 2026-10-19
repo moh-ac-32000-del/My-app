@@ -132,6 +132,7 @@ describe('Space discovery', () => {
           data: () => ({
             spaceId: 'space-a',
             userId: 'firebase-user-a',
+            role: 'owner',
             status: 'active',
           }),
         };

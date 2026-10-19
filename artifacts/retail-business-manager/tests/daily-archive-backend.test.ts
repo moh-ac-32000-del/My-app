@@ -7,7 +7,7 @@ type Filter = [string, string, any];
 function fakeFirestore() {
   const documents: Record<string, Data> = {
     'spaces/space-a': { status: 'active' },
-    'spaces/space-a/members/user-a': { status: 'active' },
+    'spaces/space-a/members/user-a': { status: 'active', role: 'owner' },
     'spaces/space-a/storeProfile/profile': { storeId: 'store-a' },
   };
   const reads: string[] = [];

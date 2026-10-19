@@ -1,6 +1,7 @@
 import type { Firestore } from 'firebase-admin/firestore';
 import { HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
 import { closingCashBalances } from './closingCashBalances.js';
+import { assertWorkspaceAccess } from './workspaceAccess.js';
 
 type JournalEvent = {
   id: string;
@@ -34,6 +35,7 @@ type ArchiveRecord = {
   snapshot: JournalEvent[];
   workspaceId: string;
   closingCashBalances?: Array<{ currency: string; amount: number }>;
+  closedByUserId?: string;
 };
 
 type ArchiveRequest = {
@@ -59,23 +61,18 @@ export async function dailyArchiveCommandHandler(
   const input = validateRequest(request.data);
   const db = runtime.firestore;
   const spaceRef = db.collection('spaces').doc(input.spaceId);
-  const [space, member, profile] = await Promise.all([
-    spaceRef.get(),
-    spaceRef.collection('members').doc(uid).get(),
-    spaceRef.collection('storeProfile').doc('profile').get(),
-  ]);
-  if (!space.exists || space.data()?.status !== 'active') {
-    throw new HttpsError('failed-precondition', 'Workspace is unavailable');
-  }
-  if (!member.exists || member.data()?.status !== 'active') {
-    throw new HttpsError('permission-denied', 'Active workspace membership is required');
-  }
-  if (!profile.exists || profile.data()?.storeId !== input.storeId) {
-    throw new HttpsError('permission-denied', 'Store profile does not match workspace');
-  }
+  const memberRef = spaceRef.collection('members').doc(uid);
+  const profileRef = spaceRef.collection('storeProfile').doc('profile');
+  const authorize = (space: Record<string, unknown> | undefined, member: unknown, profile: Record<string, unknown> | undefined, action: 'read' | 'write') => {
+    if (space?.status !== 'active') throw new HttpsError('failed-precondition', 'Workspace is unavailable');
+    assertWorkspaceAccess(member, action);
+    if (profile?.storeId !== input.storeId) throw new HttpsError('permission-denied', 'Store profile does not match workspace');
+  };
 
   const archivesRef = spaceRef.collection('dailyArchives');
   if (input.action === 'list') {
+    const [space, member, profile] = await Promise.all([spaceRef.get(), memberRef.get(), profileRef.get()]);
+    authorize(space.data(), member.data(), profile.data(), 'read');
     const snapshot = await archivesRef.where('storeId', '==', input.storeId).get();
     const archives = snapshot.docs
       .map((doc) => normalizeArchive(doc.id, doc.data(), input.spaceId, input.storeId))
@@ -89,6 +86,9 @@ export async function dailyArchiveCommandHandler(
   const endAt = input.endAt!;
   const counterRef = spaceRef.collection('dailyClosingCounters').doc(`${input.storeId}_${date}`);
   const created = await db.runTransaction(async (tx) => {
+    // A role change/removal races with this transaction, not with an earlier permission check.
+    const [space, member, profile] = await Promise.all([tx.get(spaceRef), tx.get(memberRef), tx.get(profileRef)]);
+    authorize(space.data(), member.data(), profile.data(), 'write');
     const [transactionSnap, debtSnap, paymentSnap, existingArchives, counterSnap, cashSnapshot] = await Promise.all([
       tx.get(spaceRef.collection('transactions').where('storeId', '==', input.storeId).where('createdAt', '>=', startAt).where('createdAt', '<', endAt)),
       tx.get(spaceRef.collection('debts').where('storeId', '==', input.storeId).where('createdAt', '>=', startAt).where('createdAt', '<', endAt)),
@@ -170,7 +170,7 @@ export async function dailyArchiveCommandHandler(
     const id = `${date}_${String(closingNumber).padStart(6, '0')}`;
     const archive: ArchiveRecord = {
       id, storeId: input.storeId, workspaceId: input.spaceId, date,
-      closedAt: now, closingNumber, snapshot: events, closingCashBalances: balances,
+      closedAt: now, closedByUserId: uid, closingNumber, snapshot: events, closingCashBalances: balances,
     };
     tx.set(counterRef, { storeId: input.storeId, date, lastClosingNumber: closingNumber, updatedAt: now });
     tx.create(archivesRef.doc(id), archive);

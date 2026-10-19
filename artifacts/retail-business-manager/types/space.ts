@@ -4,7 +4,7 @@ export type SpaceMode = (typeof SPACE_MODES)[number];
 export const SPACE_STATUSES = ['active', 'suspended', 'archived'] as const;
 export type SpaceStatus = (typeof SPACE_STATUSES)[number];
 
-export const MEMBERSHIP_ROLES = ['owner', 'admin', 'manager', 'cashier', 'viewer'] as const;
+export const MEMBERSHIP_ROLES = ['owner', 'editor', 'viewer'] as const;
 export type MembershipRole = (typeof MEMBERSHIP_ROLES)[number];
 export type InvitableMembershipRole = Exclude<MembershipRole, 'owner'>;
 

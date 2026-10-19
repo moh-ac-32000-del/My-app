@@ -16,7 +16,7 @@ function reference(path: string) {
 function fakeFirestore(documents: Record<string, Document> = {}) {
   const store: Record<string, Document> = {
     'spaces/space-A': { status: 'active' },
-    'spaces/space-A/members/user-A': { status: 'active' },
+    'spaces/space-A/members/user-A': { status: 'active', role: 'owner' },
     'spaces/space-A/storeProfile/profile': { storeId: 'store-A' },
     'spaces/space-A/customers/customer-A': {
       id: 'customer-A',

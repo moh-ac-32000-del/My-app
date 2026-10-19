@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { Firestore } from 'firebase-admin/firestore';
 import { HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
+import { assertWorkspaceAccess } from './workspaceAccess.js';
 
 const SUPPORTED_CURRENCIES = new Set(['TRY', 'USD', 'EUR', 'GBP', 'SAR', 'AED', 'SYP']);
 const SUPPORTED_LANGUAGES = new Set(['ar', 'en', 'tr']);
@@ -51,15 +52,14 @@ export async function storeProfileCommandHandler(
       if (!spaceSnap.exists || spaceSnap.data()?.status !== 'active') {
         throw new HttpsError('failed-precondition', 'Workspace is unavailable', { code: 'SPACE_NOT_FOUND' });
       }
-      if (!memberSnap.exists || memberSnap.data()?.status !== 'active') {
-        throw new HttpsError('permission-denied', 'Active workspace membership is required', { code: 'FORBIDDEN' });
-      }
+      assertWorkspaceAccess(memberSnap.data(), 'read');
 
       if (profileSnap.exists) {
         const existing = normalizeStoredProfile(profileSnap.data());
         if (input.action === 'getOrCreate') {
           return { outcome: 'existing', profile: existing, processedAt: runtime.now() };
         }
+        assertWorkspaceAccess(memberSnap.data(), 'owner', spaceSnap.data(), uid);
         const next = { ...input.profile!, id: existing.storeId, storeId: existing.storeId };
         const now = runtime.now();
         tx.set(profileRef, { ...next, updatedAt: now, createdAt: profileSnap.data()?.createdAt ?? now });
@@ -69,6 +69,7 @@ export async function storeProfileCommandHandler(
       if (input.action === 'update') {
         throw new HttpsError('failed-precondition', 'Store profile has not been initialized', { code: 'STORE_PROFILE_MISSING' });
       }
+      assertWorkspaceAccess(memberSnap.data(), 'owner', spaceSnap.data(), uid);
       const now = runtime.now();
       const storeId = `store_${createHash('sha256').update(input.spaceId).digest('hex').slice(0, 24)}`;
       const profile = { ...input.profile!, id: storeId, storeId };

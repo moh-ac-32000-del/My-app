@@ -9,6 +9,7 @@ import {
   deleteDoc,
   doc,
   getDoc,
+  getDocFromServer,
   getDocs,
   setDoc,
   updateDoc,
@@ -67,6 +68,7 @@ function spaceDocument(spaceId, ownerUserId) {
   return {
     spaceId,
     ownerUserId,
+    status: 'active',
     createdAt: '2026-08-30T10:00:00.000Z',
     updatedAt: '2026-08-30T10:00:00.000Z',
   };
@@ -351,7 +353,7 @@ try {
   await clearFirestore();
   await seedMultiSpace('space-A', 'user-A', [
     { uid: 'user-A', role: 'owner' },
-    { uid: 'user-C', role: 'manager' },
+    { uid: 'user-C', role: 'editor' },
   ]);
   await seedMultiSpace('space-B', 'user-B', [
     { uid: 'user-B', role: 'owner' },
@@ -461,7 +463,7 @@ try {
     await clearFirestore();
     await seedMultiSpace('space-A', 'user-A', [
       { uid: 'user-A', role: 'owner' },
-      { uid: 'user-C', role: 'viewer' },
+      { uid: 'user-C', role: 'editor' },
       { uid: 'user-D', role: 'viewer', status: 'suspended' },
     ]);
     await seedMultiSpace('space-B', 'user-B', [
@@ -759,6 +761,49 @@ try {
       await userCForCustomers.cleanup();
       await userDForCustomers.cleanup();
     }
+
+    await seedMultiSpace('role-space', 'role-owner', [
+      { uid: 'role-owner', role: 'owner' }, { uid: 'role-editor', role: 'editor' },
+      { uid: 'role-viewer', role: 'viewer' }, { uid: 'role-legacy', role: 'manager' },
+    ]);
+    await testEnvironment.withSecurityRulesDisabled(async context => {
+      const db = context.firestore();
+      await setDoc(doc(db,'spaces','role-space','storeProfile','profile'),{storeId:'store-A'});
+      await setDoc(doc(db,'spaces','role-space','customers','base'),customerDocument('base',{workspaceId:'role-space'}));
+      for(const name of ['debts','payments','transactions','dailyArchives'])await setDoc(doc(db,'spaces','role-space',name,'history'),{createdByUserId:'role-editor',amount:100});
+    });
+    const roleOwner=testEnvironment.authenticatedContext('role-owner');
+    const roleEditor=testEnvironment.authenticatedContext('role-editor');
+    const roleViewer=testEnvironment.authenticatedContext('role-viewer');
+    const roleLegacy=testEnvironment.authenticatedContext('role-legacy');
+    try {
+      for(const name of ['customers','debts','payments','transactions','dailyArchives']) {
+        await runCase(`Roles — viewer reads ${name}`,()=>getDocFromServer(doc(roleViewer.firestore(),'spaces','role-space',name,name==='customers'?'base':'history')),'ALLOW');
+      }
+      await runCase('Roles — viewer cannot create customer directly',()=>setDoc(customerReference(roleViewer,'role-space','viewer-created'),customerDocument('viewer-created',{workspaceId:'role-space'})),'DENY');
+      await runCase('Roles — viewer cannot edit customer directly',()=>updateDoc(customerReference(roleViewer,'role-space','base'),{name:'forged'}),'DENY');
+      await runCase('Roles — viewer cannot soft delete',()=>updateDoc(customerReference(roleViewer,'role-space','base'),{isActive:false}),'DENY');
+      await runCase('Roles — viewer cannot hard delete',()=>deleteDoc(customerReference(roleViewer,'role-space','base')),'DENY');
+      for(const [context,id] of [[roleOwner,'owner-created'],[roleEditor,'editor-created']]) {
+        await runCase(`Roles — ${id} business create`,()=>setDoc(customerReference(context,'role-space',id),customerDocument(id,{workspaceId:'role-space'})),'ALLOW');
+        await runCase(`Roles — ${id} business update`,()=>updateDoc(customerReference(context,'role-space',id),{name:'Updated'}),'ALLOW');
+      }
+      await runCase('Roles — editor cannot change role directly',()=>updateDoc(memberReference(roleEditor,'role-space','role-editor'),{role:'owner'}),'DENY');
+      await runCase('Roles — editor cannot change ownership directly',()=>updateDoc(multiSpaceReference(roleEditor,'role-space'),{ownerUserId:'role-editor'}),'DENY');
+      await runCase('Roles — legacy manager is not silently promoted',()=>getDocFromServer(customerReference(roleLegacy,'role-space','base')),'DENY');
+      // Discovery deliberately stays editor; authorization must read the canonical membership again.
+      await testEnvironment.withSecurityRulesDisabled(context=>updateDoc(memberReference(context,'role-space','role-editor'),{role:'viewer'}));
+      await runCase('Roles — downgrade blocks the next direct write on the same device',()=>updateDoc(customerReference(roleEditor,'role-space','editor-created'),{name:'after downgrade'}),'DENY');
+      await testEnvironment.withSecurityRulesDisabled(context=>deleteDoc(memberReference(context,'role-space','role-editor')));
+      await runCase('Roles — removal blocks server reads despite stale discovery',()=>getDocFromServer(customerReference(roleEditor,'role-space','base')),'DENY');
+      await runCase('Roles — removal retains historical actor and amount',async()=>{
+        const saved=await getDocFromServer(doc(roleOwner.firestore(),'spaces','role-space','payments','history'));
+        if(saved.data()?.createdByUserId!=='role-editor'||saved.data()?.amount!==100)throw new Error('Historical data changed');
+      },'ALLOW');
+      await testEnvironment.withSecurityRulesDisabled(context=>updateDoc(multiSpaceReference(context,'role-space'),{status:'suspended'}));
+      await runCase('Roles — suspended space blocks financial reads',()=>getDocFromServer(customerReference(roleOwner,'role-space','base')),'DENY');
+      await runCase('Roles — suspended space blocks customer writes',()=>updateDoc(customerReference(roleOwner,'role-space','base'),{name:'suspended write'}),'DENY');
+    } finally {await roleOwner.cleanup();await roleEditor.cleanup();await roleViewer.cleanup();await roleLegacy.cleanup();}
 
     for (const collectionName of [
       'customers',

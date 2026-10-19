@@ -7,7 +7,7 @@ const followUp = { time: '17:00', overdueEnabled: true, pendingEnabled: true, ti
 type Doc = Record<string, any>;
 function fixture(extra: Record<string, Doc> = {}) {
   const docs: Record<string, Doc> = {
-    'spaces/s': { status: 'active' }, 'spaces/s/members/u': { status: 'active' }, 'spaces/s/storeProfile/profile': { storeId: 'store' }, ...extra,
+    'spaces/s': { status: 'active' }, 'spaces/s/members/u': { status: 'active', role: 'owner' }, 'spaces/s/storeProfile/profile': { storeId: 'store' }, ...extra,
   };
   const writes: string[] = [];
   const ref = (name: string): any => ({ path: name, collection: (part: string) => ({ doc: (id: string) => ref(`${name}/${part}/${id}`) }) });

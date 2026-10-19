@@ -5,6 +5,7 @@ import {
 import { getFirebaseApp, isFirebaseConfigured } from '@/services/firebase';
 import type { SpaceDiscoveryResult } from '@/types/space';
 import type { MembershipDiscoveryIndexEntry } from '@/types/trustedBootstrap';
+import { canReadWorkspace } from '@/data/workspaceAccess';
 
 const LEGACY_LOCAL_STORE_ID = 'local-store';
 
@@ -64,7 +65,7 @@ export async function validateUserSpaceMembership(uid: string, spaceId: string):
   const membership = membershipSnapshot.data();
   return membership.spaceId === normalizedSpaceId
     && membership.userId === normalizedUid
-    && membership.status === 'active';
+    && canReadWorkspace(membership);
 }
 
 let firestore: Firestore | null = null;

@@ -140,7 +140,7 @@ describe('cloud workspace discovery', () => {
     mocks.discoverUserSpaces.mockResolvedValueOnce({
       memberships: [
         { spaceId: 'space-A', role: 'owner', status: 'active' },
-        { spaceId: 'space-B', role: 'manager', status: 'active' },
+        { spaceId: 'space-B', role: 'editor', status: 'active' },
       ],
       primarySpaceId: 'space-A',
       lastActiveSpaceId: null,
