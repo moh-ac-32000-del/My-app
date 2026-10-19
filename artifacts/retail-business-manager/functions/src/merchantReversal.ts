@@ -63,11 +63,9 @@ export async function reverseMerchantOperation({
   let cashDeltaExact: string;
   try {
     // Validate every original balance before arithmetic; missing values must never mean zero.
-    summarizeMerchantBalances(input.spaceId, [
-      { ...balance, balance: original.balanceBeforeExact },
-      { ...balance, partyId: `${balance.partyId}-after`, balance: original.balanceAfterExact },
-      { ...balance, partyId: `${balance.partyId}-cash`, balance: original.cashDeltaExact },
-    ]);
+    for (const value of [original.balanceBeforeExact, original.balanceAfterExact, original.cashDeltaExact]) {
+      summarizeMerchantBalances(input.spaceId, [{ ...balance, balance: value }]);
+    }
     next = subtractCustomerExact(
       balance.balance,
       subtractCustomerExact(original.balanceAfterExact, original.balanceBeforeExact),

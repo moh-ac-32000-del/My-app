@@ -72,7 +72,9 @@ function money(value: unknown, signed = false): string {
   const negative = value.startsWith('-');
   const [whole, fraction = ''] = (negative ? value.slice(1) : value).split('.');
   const units = BigInt(whole + fraction.padEnd(2, '0'));
-  return `${negative && units !== BigInt(0) ? '-' : ''}${whole}.${fraction.padEnd(2, '0')}`;
+  const canonical = `${negative && units !== BigInt(0) ? '-' : ''}${whole}.${fraction.padEnd(2, '0')}`;
+  if (canonical.length > 80) invalid('Canonical money exceeds the supported length');
+  return canonical;
 }
 /** Numeric fields remain compatibility mirrors only; reject rather than silently lose cents. */
 function mirror(value: string): number {

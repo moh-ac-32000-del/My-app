@@ -352,6 +352,13 @@ describe('merchant trusted command (not deployed)', () => {
     expect(backend.docs[balancePath()].balanceExact).toBe('-800.00');
   });
 
+  it('rejects an opening whose canonical form exceeds the stored balance precision boundary', async () => {
+    const backend = setup();
+    await expect(backend.command('opening', 'large-opening', { currency: 'TRY', amountExact: '9'.repeat(80) }))
+      .rejects.toMatchObject({ code: 'invalid-argument' });
+    expect(backend.writes).toHaveLength(0);
+  });
+
   it('keeps currencies independent', async () => {
     const backend = setup();
     await backend.command('payment', 'try', payment);
