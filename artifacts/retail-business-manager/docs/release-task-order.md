@@ -24,3 +24,5 @@ The 2026-10-19 deployment warned that Node.js 20 is decommissioned on 2026-10-30
 - https://firebase.google.com/docs/functions/manage-functions#set_nodejs_version
 
 Changing the runtime is not a billing-plan upgrade. Existing usage pricing and resources still apply; do not promise zero usage charges. Deployment must explicitly target the existing reviewed Functions, with no deletions, rules changes, data migration, scheduler or backup activation in task one.
+
+Cloud deployment verification found a separate builder-version mismatch: unpinned Cloud Build selected pnpm 11 and failed on ignored dependency build scripts, although Node 22 CI had passed. Pin `functions/package.json` `engines.pnpm` to `10.18.3` and match both CI installers; do not approve new dependency scripts, alter the dependency lockfile or change financial handlers to work around this. Reference: https://docs.cloud.google.com/docs/buildpacks/nodejs#pnpm_package_manager . After CI/main verification, deploy one workspace callable first and verify its actual runtime/behavior before updating the other nine existing callables.

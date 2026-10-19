@@ -15,4 +15,11 @@ describe('supported Functions runtime configuration', () => {
     expect(versions).toHaveLength(2);
     expect(versions.every(version => version === functionsPackage.engines.node)).toBe(true);
   });
+
+  it('pins Cloud Build dependency installation to the same reviewed pnpm version as CI', () => {
+    expect(functionsPackage.engines.pnpm).toBe('10.18.3');
+    const versions = [...workflow.matchAll(/^\s+version:\s*['"]?(\d+\.\d+\.\d+)['"]?\s*$/gm)].map(match => match[1]);
+    expect(versions).toHaveLength(2);
+    expect(versions.every(version => version === functionsPackage.engines.pnpm)).toBe(true);
+  });
 });
