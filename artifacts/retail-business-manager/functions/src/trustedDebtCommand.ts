@@ -1,6 +1,8 @@
 import { FieldValue, type Firestore } from 'firebase-admin/firestore';
 import { HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
 import { assertWorkspaceAccess } from './workspaceAccess.js';
+import { readCustomerCredit, writeCustomerCredit } from './customerCreditState.js';
+import { legacyAmountExact, planCustomerCharge } from '../../data/customerCreditAccounting.js';
 
 const SUPPORTED_CURRENCIES = new Set(['TRY', 'USD', 'EUR', 'GBP', 'SAR', 'AED', 'SYP']);
 
@@ -93,6 +95,16 @@ export async function trustedDebtCommandHandler(
       }
 
       const now = runtime.now();
+      const credit = await readCustomerCredit(tx, spaceRef, input.storeId, input.customerId, input.currency);
+      const previousCurrency = input.action === 'update' ? debtSnap.data()?.currency : input.currency;
+      if (typeof previousCurrency !== 'string' || !SUPPORTED_CURRENCIES.has(previousCurrency)) {
+        throw new HttpsError('data-loss', 'Stored debt currency is invalid');
+      }
+      const previousCredit = previousCurrency !== input.currency
+        ? await readCustomerCredit(tx, spaceRef, input.storeId, input.customerId, previousCurrency)
+        : null;
+      const charge = input.action === 'create'
+        ? planCustomerCharge(legacyAmountExact(input.amount), credit.amount) : null;
       if (input.action === 'create') {
         tx.create(debtRef, {
           id: input.debtId,
@@ -102,10 +114,16 @@ export async function trustedDebtCommandHandler(
           updatedByUserId: uid,
           customerId: input.customerId,
           currency: input.currency,
-          amount: input.amount,
+          amount: Number(charge!.amountExact),
+          amountExact: charge!.amountExact,
           ...(input.dueDate ? { dueDate: input.dueDate } : {}),
           ...(typeof input.originalAmount === 'number' ? { originalAmount: input.originalAmount } : {}),
           ...(input.settledAt ? { settledAt: input.settledAt } : {}),
+          ...(charge!.creditAppliedExact !== '0.00' ? {
+            originalAmount: input.originalAmount ?? input.amount,
+            creditAppliedExact: charge!.creditAppliedExact,
+            ...(charge!.amountExact === '0.00' ? { settledAt: now } : {}),
+          } : {}),
           createdAt: input.createdAt ?? now,
           updatedAt: input.updatedAt ?? now,
         });
@@ -114,10 +132,13 @@ export async function trustedDebtCommandHandler(
           updatedByUserId: uid,
           currency: input.currency,
           amount: input.amount,
+          amountExact: legacyAmountExact(input.amount),
           dueDate: input.dueDate ?? FieldValue.delete(),
           updatedAt: input.updatedAt ?? now,
         });
       }
+      writeCustomerCredit(tx, credit, charge?.creditExact ?? credit.amount, uid, now);
+      if (previousCredit) writeCustomerCredit(tx, previousCredit, previousCredit.amount, uid, now);
       tx.create(receiptRef, {
         operationId: input.operationId,
         spaceId: input.spaceId,
@@ -127,6 +148,9 @@ export async function trustedDebtCommandHandler(
         status: 'completed',
         processedAt: now,
         payload: payloadForReceipt(input),
+        ...(input.action === 'update' ? { previousDebt: debtSnap.data() } : {}),
+        customerCreditBeforeExact: credit.amount,
+        customerCreditAfterExact: charge?.creditExact ?? credit.amount,
         result: { debtId: input.debtId },
       });
       return { outcome: input.action === 'create' ? 'created' : 'updated', debtId: input.debtId, processedAt: now };

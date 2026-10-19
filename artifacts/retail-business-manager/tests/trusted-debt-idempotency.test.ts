@@ -6,6 +6,7 @@ type Snapshot = { exists: boolean; data: () => Document | undefined };
 
 function reference(path: string) {
   return {
+    id: path.split('/').at(-1)!,
     path,
     collection(name: string) {
       return { doc: (id: string) => reference(`${path}/${name}/${id}`) };
@@ -32,6 +33,7 @@ function fakeFirestore(documents: Record<string, Document> = {}) {
     async runTransaction<T>(callback: (tx: {
       get: (ref: { path: string }) => Promise<Snapshot>;
       create: (ref: { path: string }, data: Document) => void;
+      set: (ref: { path: string }, data: Document) => void;
     }) => Promise<T>): Promise<T> {
       return callback({
         get: async (ref) => {
@@ -39,6 +41,9 @@ function fakeFirestore(documents: Record<string, Document> = {}) {
           return { exists: Boolean(value), data: () => value };
         },
         create: (ref, data) => {
+          store[ref.path] = data;
+        },
+        set: (ref, data) => {
           store[ref.path] = data;
         },
       });

@@ -1,5 +1,7 @@
 import { HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
 import { assertWorkspaceAccess } from './workspaceAccess.js';
+import { readCustomerCredit, writeCustomerCredit } from './customerCreditState.js';
+import { legacyAmountExact, planCustomerPayment } from '../../data/customerCreditAccounting.js';
 import type { Firestore } from 'firebase-admin/firestore';
 
 const SUPPORTED_CURRENCIES = new Set(['TRY', 'USD', 'EUR', 'GBP', 'SAR', 'AED', 'SYP']);
@@ -98,52 +100,38 @@ export async function settleCustomerDebtHandler(
           && data.currency === input.currency
           && typeof data.amount === 'number'
           && Number.isFinite(data.amount)
-          && data.amount > 0)
+          && data.amount >= 0)
         .sort((a, b) => {
           const createdA = typeof a.data.createdAt === 'string' ? a.data.createdAt : '';
           const createdB = typeof b.data.createdAt === 'string' ? b.data.createdAt : '';
           return createdB.localeCompare(createdA) || a.ref.id.localeCompare(b.ref.id);
         });
 
-      const remaining = matchingDebts.reduce((sum, debt) => sum + Number(debt.data.amount), 0);
-      if (input.amount > remaining) {
-        throw new HttpsError('failed-precondition', 'Settlement exceeds the remaining debt', { code: 'SETTLEMENT_EXCEEDS_DEBT' });
-      }
-
       if (existingTransaction.exists || existingPayment.exists) {
         throw new HttpsError('already-exists', 'Settlement record ID already exists', { code: 'IDEMPOTENCY_CONFLICT' });
       }
 
       const now = runtime.now();
-      let amountToApply = input.amount;
-      const debtUpdates: Array<{ ref: (typeof matchingDebts)[number]['ref']; currentAmount: number; originalAmount: number; nextAmount: number }> = [];
-      for (const debt of matchingDebts) {
-        if (amountToApply <= 0) break;
-        const currentAmount = Number(debt.data.amount);
-        const applied = Math.min(currentAmount, amountToApply);
-        const nextAmount = currentAmount - applied;
-        amountToApply -= applied;
-        debtUpdates.push({
-          ref: debt.ref,
-          currentAmount,
-          originalAmount: typeof debt.data.originalAmount === 'number' ? debt.data.originalAmount : currentAmount,
-          nextAmount,
-        });
-      }
-      if (Math.abs(amountToApply) > 0.000001) {
-        throw new HttpsError('failed-precondition', 'Settlement could not be fully applied', { code: 'SETTLEMENT_EXCEEDS_DEBT' });
-      }
+      const credit = await readCustomerCredit(transaction, spaceRef, input.storeId, input.customerId, input.currency);
+      const plan = planCustomerPayment(matchingDebts.map(({ ref, data }) => ({
+        id: ref.id, amount: data.amount, amountExact: data.amountExact, createdAt: data.createdAt,
+      })), credit.amount, legacyAmountExact(input.amount));
+      if (plan.updates.length > 450) throw new HttpsError('resource-exhausted', 'Too many debts for one settlement');
+      const byId = new Map(matchingDebts.map(debt => [debt.ref.id, debt]));
 
       // Firestore transactions require every read to finish before the first write.
-      for (const debt of debtUpdates) {
+      for (const update of plan.updates) {
+        const debt = byId.get(update.id)!;
         transaction.update(debt.ref, {
           updatedByUserId: uid,
-          amount: debt.nextAmount,
-          originalAmount: debt.originalAmount,
-          ...(debt.nextAmount === 0 ? { settledAt: now } : {}),
+          amount: Number(update.amountExact),
+          amountExact: update.amountExact,
+          originalAmount: typeof debt.data.originalAmount === 'number' ? debt.data.originalAmount : debt.data.amount,
+          ...(update.amountExact === '0.00' ? { settledAt: now } : {}),
           updatedAt: now,
         });
       }
+      writeCustomerCredit(transaction, credit, plan.creditExact, uid, now);
       transaction.create(transactionRef, {
         id: input.transactionId,
         storeId: input.storeId,
@@ -178,6 +166,9 @@ export async function settleCustomerDebtHandler(
         status: 'completed',
         processedAt: now,
         payload: payloadForReceipt(input),
+        customerCreditBeforeExact: credit.amount,
+        customerCreditAfterExact: plan.creditExact,
+        debtApplications: plan.updates,
         result: { transactionId: input.transactionId, paymentId: input.paymentId },
       });
 

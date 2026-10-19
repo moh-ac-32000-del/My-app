@@ -44,3 +44,5 @@ try {
 }finally{
   await db.terminate();await deleteApp(app);
 }
+// Reuse this demo emulator invocation rather than starting another service/CI job.
+await import('./merchant-backend.emulator.mjs');

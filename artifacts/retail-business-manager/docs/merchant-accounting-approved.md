@@ -8,7 +8,7 @@ User specification received and confirmed 2026-10-19. This document records requ
 - Customer: debt charges plus explicit opening/adjustment entries, minus payments and direct settlements. Positive = customer owes store; negative = store owes value/credit to customer; zero = balanced.
 - A new charge consumes an existing credit through signed addition; that consumption never creates a fresh cash movement.
 - No automatic netting between different merchants, currencies or workspaces.
-- The existing customer settlement endpoint rejects overpayment and mutates remaining debt amounts. Historical remaining balances must not have their payments subtracted again. Inventory and test compatibility before choosing a migration/projection, preserve audit history and obtain appropriate approval before changing existing records.
+- The currently deployed customer settlement endpoint rejects overpayment and mutates remaining debt amounts. The draft implementation below adds an exact credit adapter without subtracting historical payments again. It is not yet deployed. Preserve audit history and obtain appropriate approval before changing existing records.
 
 ## Purchases and payments
 
@@ -57,8 +57,20 @@ Record the operation once with a unique operation ID and immutable matching payl
 
 Pure numerical cases first, then trusted command tests (including retries, races, overpayments, signed credits, wrong currency/space/role, linked purchase/payment atomicity and direct settlement atomicity), direct-SDK security tests, historical-data compatibility checks and finally isolated end-to-end/device acceptance. No claim of complete merchant functionality until all required layers pass.
 
-## Foundation stage — not wired to existing finances
+## Foundation stage
 
-`data/merchantAccounting.ts` provides pure exact-decimal projections and `tests/merchant-accounting.test.ts` exercises the supplied examples, approved line rounding, overpayments, previous credits, currency/workspace isolation and separate merchant totals. Inputs and outputs are canonical decimal strings; internal BigInt arithmetic is not serialized. Inputs/results are bounded to 80 characters to prevent unbounded parsing, not silently rounded or converted to binary floating-point amounts. No existing customer calculations, callable, financial record, Firestore rules, archive snapshot or screen imports these helpers at this stage.
+`data/merchantAccounting.ts` provides pure exact-decimal projections and `tests/merchant-accounting.test.ts` exercises the supplied examples, approved line rounding, overpayments, previous credits, currency/workspace isolation and separate merchant totals. Inputs and outputs are canonical decimal strings; internal BigInt arithmetic is not serialized. Inputs/results are bounded to 80 characters to prevent unbounded parsing, not silently rounded or converted to binary floating-point amounts.
 
 These helpers are **not** a canonical stored balance, trusted command, receipt/idempotency mechanism, authorization check, migration or completed merchant feature. Server transaction integration must independently revalidate canonical parties/roles and atomically persist all linked effects. The 80-character exact format is for new validated inputs only; legacy precision requires its own compatibility handling rather than automatic rounding. Actual Android execution remains a combined-APK acceptance gate; successful Node/browser-compatible builds are not a device test.
+
+## Draft backend integration — not deployed or release-ready
+
+- `customerCreditAccounting.ts` preserves the stored decimal representation of legacy remaining debts, including fractions finer than cents. `amountExact` is authoritative for new changes and must agree with the numeric compatibility mirror. Existing debt documents are not scanned or rewritten by a migration.
+- Cash settlement permits excess actual money to become `customerCredits` in the same transaction as debt reductions, cash, payment and receipt. New charges consume credit without creating cash. Existing credit is retained when a new direct payment is made. Per-customer/currency revisions serialize settlement, charge and direct-payment transactions, including initially absent credit documents.
+- `merchantCommand.ts` implements trusted metadata save, one initial signed opening per currency, itemized purchase with linked payment, cash/external payment, and direct customer-to-merchant payment. It is deliberately **not exported from Functions index.ts** yet. No new network endpoint is published by this draft.
+- New server-owned collections under the canonical workspace are `merchants`, `merchantBalances`, `merchantOperations` and `customerCredits`. All role/store/party checks are server-side; no local financial source or alternate space system is added. No security rules were changed at this checkpoint.
+- Merchant operations retain before/after balance, item descriptions, notes, actor, server time and linked identifiers. Receipts bind the full normalized payload and actor; changed payload reuse is rejected, and role checks precede replay. Cash and payment numeric mirrors reject lossy new cent amounts rather than silently rounding them.
+- Actual cash changes only for a cash-funded payment. A direct payment creates a linked customer payment and merchant operation but no cash transaction. Historical customer payment records are not subtracted again.
+- Unit/in-memory transaction tests cover the approved examples, scope, authorization, corruption, replay and simulated retry. The demo-only emulator suite additionally covers real Firestore transaction contention, concurrent identical purchases and cross-space rejection. Passing fixture tests alone is not evidence of real Firestore contention or device acceptance.
+
+Required before readiness/merge/deployment: audited correction/reversal flows; scoped client subscriptions and signed customer-credit display; merchant list/detail/input screens in all three languages; consistent daily-journal, immutable archive and local-export projections without duplicate cash; reviewed member read rules and direct-SDK security tests; isolated end-to-end acceptance; combined Android APK validation later. Existing deployed web/APK and financial data remain unchanged. Do not merge this draft merely because backend tests pass.
