@@ -1,15 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 const state = vi.hoisted(() => ({
   get: vi.fn(),
+  user: vi.fn(),
+  query: vi.fn(),
   listeners: [] as Array<{ next: (snapshot: any) => void; error: () => void; stop: ReturnType<typeof vi.fn> }>,
 }));
 vi.mock('@/services/firebase', () => ({ isFirebaseConfigured: true, getFirebaseApp: () => ({}) }));
 vi.mock('firebase/firestore', () => ({
   getFirestore: () => ({}),
   doc: (_db: unknown, ...segments: string[]) => ({ path: segments.join('/') }),
-  getDoc: vi.fn(),
+  getDoc: state.user,
   collection: vi.fn(),
-  getDocs: vi.fn(),
+  getDocs: state.query,
   getDocFromServer: state.get,
   onSnapshot: (_ref: unknown, _options: unknown, next: any, error: any) => {
     const stop = vi.fn();
@@ -17,7 +19,12 @@ vi.mock('firebase/firestore', () => ({
     return stop;
   },
 }));
-import { loadWorkspaceSession, observeWorkspaceSession } from '@/services/firestore';
+import {
+  loadWorkspaceSession,
+  observeWorkspaceSession,
+  validateUserSpaceMembership,
+  listUserWorkspaces,
+} from '@/services/firestore';
 const space = { spaceId: 's', ownerUserId: 'u', status: 'active', mode: 'private', name: 'Shop' };
 const member = { spaceId: 's', userId: 'u', role: 'owner', status: 'active' };
 const snapshot = (value: any, cached = false, pending = false) => ({
@@ -25,14 +32,64 @@ const snapshot = (value: any, cached = false, pending = false) => ({
   metadata: { fromCache: cached, hasPendingWrites: pending },
 });
 describe('canonical workspace session', () => {
+  it('skips a revoked selection hint without treating network errors as missing membership', async () => {
+    state.get.mockRejectedValueOnce({ code: 'permission-denied' });
+    expect(await validateUserSpaceMembership('u', 'removed')).toBe(false);
+    state.get.mockRejectedValueOnce({ code: 'unavailable' });
+    await expect(validateUserSpaceMembership('u', 's')).rejects.toMatchObject({ code: 'unavailable' });
+  });
   beforeEach(() => {
     state.listeners = [];
     state.get.mockReset();
     state.get.mockImplementation(async (ref) => snapshot(ref.path.endsWith('/members/u') ? member : space));
+    state.user.mockResolvedValue({ exists: () => true, data: () => ({ primarySpaceId: 's' }) });
+    state.query.mockReset();
+    state.query.mockResolvedValue({ docs: [] });
   });
   it('requires canonical server reads, not a saved selector or discovery role', async () => {
     expect(await loadWorkspaceSession('u', 's')).toMatchObject({ space: { spaceId: 's' }, role: 'owner' });
     expect(state.get.mock.calls.map(([ref]) => ref.path).sort()).toEqual(['spaces/s', 'spaces/s/members/u']);
+  });
+  it('refreshes chooser names and roles and removes revoked discovery hints', async () => {
+    state.query.mockResolvedValue({
+      docs: ['s', 'removed'].map((spaceId) => ({
+        data: () => ({ spaceId, role: 'viewer', status: 'active', spaceNameSnapshot: 'Old name' }),
+      })),
+    });
+    state.get.mockImplementation(async (ref) => {
+      if (ref.path.includes('/removed')) throw { code: 'permission-denied' };
+      return snapshot(ref.path.endsWith('/members/u') ? member : space);
+    });
+    expect(await listUserWorkspaces('u')).toEqual([
+      expect.objectContaining({ spaceId: 's', role: 'owner', spaceNameSnapshot: 'Shop' }),
+    ]);
+  });
+  it('does not mislabel a failed network lookup as a removed workspace', async () => {
+    state.query.mockResolvedValue({ docs: [{ data: () => ({ spaceId: 's', role: 'owner', status: 'active' }) }] });
+    state.get.mockRejectedValue({ code: 'unavailable' });
+    await expect(listUserWorkspaces('u')).rejects.toMatchObject({ code: 'unavailable' });
+  });
+  it('bounds chooser validation to four workspaces concurrently, without financial queries', async () => {
+    state.query.mockResolvedValue({
+      docs: Array.from({ length: 10 }, (_, i) => ({
+        data: () => ({ spaceId: `s${i}`, role: 'editor', status: 'active' }),
+      })),
+    });
+    let active = 0;
+    let maximum = 0;
+    state.get.mockImplementation(async (ref) => {
+      active++;
+      maximum = Math.max(active, maximum);
+      await Promise.resolve();
+      active--;
+      const spaceId = ref.path.split('/')[1];
+      return snapshot(
+        ref.path.endsWith('/members/u') ? { ...member, spaceId, role: 'editor' } : { ...space, spaceId, name: spaceId },
+      );
+    });
+    expect(await listUserWorkspaces('u')).toHaveLength(10);
+    expect(maximum).toBeLessThanOrEqual(8);
+    expect(state.get.mock.calls.every(([ref]) => /^spaces\/[^/]+(?:\/members\/u)?$/.test(ref.path))).toBe(true);
   });
   it.each([
     { role: 'manager' },

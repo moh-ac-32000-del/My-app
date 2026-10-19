@@ -6,14 +6,20 @@ import { AppShell, GlassCard, PageHeader } from '@/components/AppShell';
 import { useStore } from '@/context/StoreContext';
 import { useI18n } from '@/hooks/useI18n';
 import { useColors } from '@/hooks/useColors';
-import { discoverUserSpaces } from '@/services/firestore';
+import { listUserWorkspaces } from '@/services/firestore';
 import { getFirebaseAuth } from '@/services/firebase';
 import type { MembershipDiscoveryIndexEntry } from '@/types/trustedBootstrap';
 import { WorkspaceButton, WorkspaceInput } from '@/components/WorkspaceControls';
 import { invitationToken, workspaceCommand, type WorkspaceQuota } from '@/services/workspaceManagement';
+import {
+  rememberInvitation,
+  rememberInitialInvitation,
+  pendingInvitation,
+  clearInvitation,
+} from '@/data/invitationIntent';
 
 export default function WorkspacesScreen() {
-  const { activeSpaceId, cloudSpace, workspaceRole, switchWorkspace, isAuthenticated } = useStore();
+  const { activeSpaceId, cloudSpace, workspaceRole, switchWorkspace, isAuthenticated, isReady } = useStore();
   const { t, isRTL } = useI18n();
   const colors = useColors();
   const router = useRouter();
@@ -24,22 +30,27 @@ export default function WorkspacesScreen() {
   const [quota, setQuota] = useState<WorkspaceQuota | null>(null);
   const [name, setName] = useState('');
   const [mode, setMode] = useState<'private' | 'shared'>('private');
-  const [invite, setInvite] = useState('');
+  const [invite, setInvite] = useState(() => pendingInvitation() ?? '');
   const [busy, setBusy] = useState(false);
   const [actionFailed, setActionFailed] = useState(false);
   const createAttempt = useRef<{ payload: string; operationId: string } | null>(null);
   const locked = useRef(false);
   React.useEffect(() => {
     let current = true;
-    void Linking.getInitialURL().then((url) => {
-      if (current && url) {
-        const token = invitationToken(url);
-        if (token) setInvite(token);
-      }
-    });
+    void Linking.getInitialURL()
+      .then((url) => {
+        if (url) {
+          rememberInitialInvitation(url);
+          if (current && pendingInvitation()) setInvite(pendingInvitation()!);
+        }
+      })
+      .catch(() => undefined);
     const subscription = Linking.addEventListener('url', ({ url }) => {
       const token = invitationToken(url);
-      if (token) setInvite(token);
+      if (token) {
+        rememberInvitation(token);
+        setInvite(token);
+      }
     });
     return () => {
       current = false;
@@ -73,6 +84,7 @@ export default function WorkspacesScreen() {
         result = await workspaceCommand({ action, token });
       }
       if (getFirebaseAuth().currentUser?.uid !== uid) return;
+      if (action === 'accept') clearInvitation();
       await switchWorkspace(result.spaceId);
       router.replace('/');
     } catch {
@@ -88,14 +100,18 @@ export default function WorkspacesScreen() {
       setItems([]);
       setLoading(true);
       setFailed(false);
+      if (!isReady)
+        return () => {
+          current = false;
+        };
       const uid = getFirebaseAuth().currentUser?.uid;
       if (!uid || !isAuthenticated) {
         router.replace('/login');
         return;
       }
-      void discoverUserSpaces(uid)
+      void listUserWorkspaces(uid)
         .then((result) => {
-          if (current) setItems(result.memberships.filter((m) => m.status === 'active'));
+          if (current) setItems(result);
         })
         .catch(() => {
           if (current) setFailed(true);
@@ -114,7 +130,7 @@ export default function WorkspacesScreen() {
       return () => {
         current = false;
       };
-    }, [isAuthenticated, refresh, router]),
+    }, [isReady, isAuthenticated, refresh, router]),
   );
   const align = { textAlign: isRTL ? ('right' as const) : ('left' as const) };
   return (

@@ -201,6 +201,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     profileRef.current = defaultProfile;
     setProfile(defaultProfile);
     transactionsRef.current = [];
+    transactionLoadPromiseRef.current = Promise.resolve();
     setTransactions([]);
 
     void (async () => {
@@ -256,7 +257,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     if (!user) {
       return;
     }
-    startPostAuthCloudInitialization(user, authTransitionRef.current);
+    if (initializationInFlightRef.current !== null) return;
+    startPostAuthCloudInitialization(user, ++authTransitionRef.current);
   }, [startPostAuthCloudInitialization]);
   const retryActiveSpace = retryInitialization;
 
@@ -299,6 +301,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             if (authTransitionRef.current !== transition || activeScopeRef.current !== activeSpaceId || !workspaceRoleRef.current) return;
             profileRef.current = nextProfile;
             setProfile(nextProfile);
+            setInitializationError(null);
           }).catch(() => {
             if (authTransitionRef.current === transition) setInitializationError('cloudSpaceUnavailable');
           });
@@ -610,8 +613,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       retryInitialization,
       cloudSpace,
       workspaceRole,
-      canWriteBusiness: !activeSpaceError && (workspaceRole === 'owner' || workspaceRole === 'editor'),
-      canManageSpace: !activeSpaceError && workspaceRole === 'owner',
+      canWriteBusiness: isReady && !!profile.id && !initializationError && !activeSpaceError && (workspaceRole === 'owner' || workspaceRole === 'editor'),
+      canManageSpace: isReady && !!profile.id && !initializationError && !activeSpaceError && workspaceRole === 'owner',
       sessionKey: `${firebaseUser?.uid ?? ''}/${activeSpaceId ?? ''}/${workspaceRole ?? ''}/${authTransitionRef.current}`,
       switchWorkspace,
       assertBusinessAccess,

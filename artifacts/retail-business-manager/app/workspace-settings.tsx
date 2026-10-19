@@ -128,10 +128,12 @@ export default function WorkspaceSettingsScreen() {
               <SectionTitle title={t('workspaceQuota')} />
               <GlassCard style={{ gap: 12, marginBottom: 18 }}>
                 <Text style={text}>
-                  {t('workspacePrivate')}: {overview.used.private} / {overview.limits.private}
+                  {t('workspacePrivate')}: {overview.used.private} / {overview.limits.private} ·{' '}
+                  {t('workspaceRemaining')}: {Math.max(0, overview.limits.private - overview.used.private)}
                 </Text>
                 <Text style={text}>
-                  {t('workspaceShared')}: {overview.used.shared} / {overview.limits.shared}
+                  {t('workspaceShared')}: {overview.used.shared} / {overview.limits.shared} · {t('workspaceRemaining')}:{' '}
+                  {Math.max(0, overview.limits.shared - overview.used.shared)}
                 </Text>
                 <Text style={[text, { color: colors.mutedForeground }]}>{t('workspaceQuotaHint')}</Text>
               </GlassCard>

@@ -1,4 +1,5 @@
 import type {
+  MembershipRole,
   MembershipStatus,
   OperationReceipt,
   OwnerMembership,
@@ -62,7 +63,7 @@ export interface SpaceProvisioningWriteSet {
 
 export interface MembershipDiscoveryIndexEntry {
   spaceId: string;
-  role: 'owner';
+  role: MembershipRole;
   status: MembershipStatus;
   spaceNameSnapshot: string;
   joinedAt: string;

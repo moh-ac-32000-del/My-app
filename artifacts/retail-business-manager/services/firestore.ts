@@ -29,6 +29,11 @@ function sessionFromData(
     !space ||
     space.status !== 'active' ||
     space.spaceId !== spaceId ||
+    typeof space.name !== 'string' ||
+    !space.name.trim() ||
+    typeof space.ownerUserId !== 'string' ||
+    !space.ownerUserId ||
+    !['private', 'shared'].includes(space.mode) ||
     !member ||
     member.userId !== uid ||
     member.spaceId !== spaceId ||
@@ -142,6 +147,33 @@ export async function discoverUserSpaces(uid: string): Promise<SpaceDiscoveryRes
   };
 }
 
+/** Refresh names and roles only when the chooser opens; no financial reads or all-space polling. */
+export async function listUserWorkspaces(uid: string): Promise<MembershipDiscoveryIndexEntry[]> {
+  const discovery = await discoverUserSpaces(uid);
+  const candidates = discovery.memberships.filter((item) => item.status === 'active');
+  const verified: MembershipDiscoveryIndexEntry[] = [];
+  // Keep concurrency bounded for users with many joined workspaces.
+  for (let offset = 0; offset < candidates.length; offset += 4) {
+    await Promise.all(
+      candidates.slice(offset, offset + 4).map(async (item) => {
+        try {
+          const session = await loadWorkspaceSession(uid, item.spaceId);
+          verified.push({ ...item, spaceNameSnapshot: session.space.name, role: session.role, status: 'active' });
+        } catch (error) {
+          const denied =
+            (error instanceof Error && error.message === 'activeWorkspaceMembershipMissing') ||
+            (!!error &&
+              typeof error === 'object' &&
+              'code' in error &&
+              ['permission-denied', 'not-found'].includes(String(error.code)));
+          if (!denied) throw error;
+        }
+      }),
+    );
+  }
+  return verified.sort((a, b) => a.spaceNameSnapshot.localeCompare(b.spaceNameSnapshot));
+}
+
 export async function validateUserSpaceMembership(uid: string, spaceId: string): Promise<boolean> {
   const normalizedUid = uid.trim();
   const normalizedSpaceId = spaceId.trim();
@@ -152,7 +184,7 @@ export async function validateUserSpaceMembership(uid: string, spaceId: string):
     throw new Error('cloudSpaceIdInvalid');
   }
 
-  const membershipSnapshot = await getDoc(
+  const membershipSnapshot = await getDocFromServer(
     doc(
       getFirestoreInstance(),
       FIRESTORE_WORKSPACE_COLLECTIONS.spaces,
@@ -160,8 +192,19 @@ export async function validateUserSpaceMembership(uid: string, spaceId: string):
       FIRESTORE_WORKSPACE_COLLECTIONS.members,
       normalizedUid,
     ),
-  );
-  if (!membershipSnapshot.exists()) {
+  ).catch((error: unknown) => {
+    // Revoked membership is expected for stale discovery/last-active hints.
+    // Connection failures are not proof of revocation and must remain visible.
+    if (
+      error &&
+      typeof error === 'object' &&
+      'code' in error &&
+      ['permission-denied', 'not-found'].includes(String(error.code))
+    )
+      return null;
+    throw error;
+  });
+  if (!membershipSnapshot || !membershipSnapshot.exists()) {
     return false;
   }
 

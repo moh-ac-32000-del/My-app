@@ -1,5 +1,7 @@
 # My-app workspace access: foundation and release gates
 
+This document records the original authorization-only stage of PR #52. The reviewed continuation is documented in [workspace-management.md](workspace-management.md); its implementation supersedes the client/management items marked not yet implemented below, without removing deployment and practical-test gates.
+
 Repository: `moh-ac-32000-del/My-app` only. This change is the authorization foundation, not activation of the complete workspace feature. No financial calculation implementation is changed. No live financial data, memberships, rules or functions have been deployed/migrated by this change.
 
 ## Approved contract

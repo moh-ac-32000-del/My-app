@@ -70,18 +70,18 @@ function ScopedBusinessProviders() {
   const { sessionKey } = useStore();
   const queryClient = React.useMemo(() => new QueryClient(), [sessionKey]);
   return (
-          <DebtProvider key={sessionKey}>
-            <PaymentProvider>
-              <CustomerProvider>
-                <QueryClientProvider client={queryClient}>
-                  <GestureHandlerRootView>
-                    <KeyboardProvider>
-                      <RootLayoutNav />
-                    </KeyboardProvider>
-                  </GestureHandlerRootView>
-                </QueryClientProvider>
-              </CustomerProvider>
-            </PaymentProvider>
-          </DebtProvider>
+    <DebtProvider key={sessionKey}>
+      <PaymentProvider>
+        <CustomerProvider>
+          <QueryClientProvider client={queryClient}>
+            <GestureHandlerRootView>
+              <KeyboardProvider>
+                <RootLayoutNav />
+              </KeyboardProvider>
+            </GestureHandlerRootView>
+          </QueryClientProvider>
+        </CustomerProvider>
+      </PaymentProvider>
+    </DebtProvider>
   );
 }
