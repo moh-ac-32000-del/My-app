@@ -21,7 +21,7 @@ import type { MembershipDiscoveryIndexEntry } from '@/types/trustedBootstrap';
 
 describe('Multi-Space domain contracts', () => {
   it('defines the initial membership roles without custom permissions', () => {
-    expect(MEMBERSHIP_ROLES).toEqual(['owner', 'admin', 'manager', 'cashier', 'viewer']);
+    expect(MEMBERSHIP_ROLES).toEqual(['owner', 'editor', 'viewer']);
   });
 
   it('defines the membership statuses', () => {
@@ -99,7 +99,7 @@ describe('Multi-Space domain contracts', () => {
     const invitation: Invitation = {
       invitationId: 'invitation-contract',
       spaceId: 'space-contract',
-      role: 'manager',
+      role: 'editor',
       status: 'pending',
       invitedByUserId: 'firebase-user-contract',
       inviteeEmailNormalized: 'invitee@example.test',

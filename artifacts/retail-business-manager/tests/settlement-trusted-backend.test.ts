@@ -90,7 +90,7 @@ function createFakeFirestore(seed: Record<string, Data>) {
 function baseSeed(): Record<string, Data> {
   return {
     'spaces/space-A': { status: 'active' },
-    'spaces/space-A/members/user-A': { status: 'active' },
+    'spaces/space-A/members/user-A': { status: 'active', role: 'owner' },
     'spaces/space-A/storeProfile/profile': { storeId: 'store-A' },
     'spaces/space-A/customers/customer-A': {
       id: 'customer-A', storeId: 'store-A', workspaceId: 'space-A', isActive: true,

@@ -11,10 +11,14 @@ import { createTrustedPaymentRuntime, createPaymentHandler } from './createPayme
 import { createStoreProfileRuntime, storeProfileCommandHandler } from './storeProfileCommand.js';
 import { createReminderRuntime, reminderCommandHandler } from './reminderCommand.js';
 import { createDailyArchiveRuntime, dailyArchiveCommandHandler } from './dailyArchiveCommand.js';
+import { workspaceCommandHandler } from './workspaceCommand.js';
 
 initializeApp();
 
 const firestore = getFirestore();
+export const workspaceCommand = onCall({ invoker: 'public', minInstances: 0, maxInstances: 2, timeoutSeconds: 60 }, (request) => (
+  workspaceCommandHandler(request, {firestore, now: () => new Date().toISOString()})
+));
 export const pushDeviceCommand = onCall({ invoker: 'public', minInstances: 0, maxInstances: 1, concurrency: 1, memory: '256MiB', cpu: 'gcf_gen1', timeoutSeconds: 30 }, (request) => (
   pushDeviceCommandHandler(request, { firestore, messaging: getMessaging(), now: () => Date.now() })
 ));

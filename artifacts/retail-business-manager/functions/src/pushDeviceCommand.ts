@@ -3,6 +3,7 @@ import type { Firestore } from 'firebase-admin/firestore';
 import type { Messaging } from 'firebase-admin/messaging';
 import { HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
 import { parsePushFollowUp } from './pushFollowUpPreferences.js';
+import { assertWorkspaceAccess } from './workspaceAccess.js';
 
 type Input = { action: 'register' | 'status' | 'disable' | 'test' | 'preferences'; actorUid: string; token: string; spaceId: string; storeId: string; language?: 'ar' | 'en' | 'tr'; followUp?: unknown };
 export interface PushDeviceRuntime { firestore: Firestore; messaging: Pick<Messaging, 'send'>; now: () => number }
@@ -41,6 +42,8 @@ export async function pushDeviceCommandHandler(request: CallableRequest<Input>, 
     if (spaceSnap.data()?.status !== 'active' || member.data()?.status !== 'active' || profile.data()?.storeId !== input.storeId) {
       throw new HttpsError('permission-denied', 'Active matching workspace membership required');
     }
+    // A viewer may manage their own device preferences, not shared business records.
+    assertWorkspaceAccess(member.data(), 'read');
     if (input.action === 'status') return { enabled: Boolean(matches && device?.enabled) };
     if (input.action === 'register') {
       tx.set(ref, { uid, token: input.token, spaceId: input.spaceId, storeId: input.storeId, language: input.language ?? 'ar',

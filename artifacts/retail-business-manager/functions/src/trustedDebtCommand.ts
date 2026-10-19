@@ -1,5 +1,6 @@
 import { FieldValue, type Firestore } from 'firebase-admin/firestore';
 import { HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
+import { assertWorkspaceAccess } from './workspaceAccess.js';
 
 const SUPPORTED_CURRENCIES = new Set(['TRY', 'USD', 'EUR', 'GBP', 'SAR', 'AED', 'SYP']);
 
@@ -51,9 +52,7 @@ export async function trustedDebtCommandHandler(
       if (!spaceSnap.exists || spaceSnap.data()?.status !== 'active') {
         throw new HttpsError('failed-precondition', 'Workspace is unavailable', { code: 'SPACE_NOT_FOUND' });
       }
-      if (!memberSnap.exists || memberSnap.data()?.status !== 'active') {
-        throw new HttpsError('permission-denied', 'Active workspace membership is required', { code: 'FORBIDDEN' });
-      }
+      assertWorkspaceAccess(memberSnap.data(), 'write');
       if (!profileSnap.exists || profileSnap.data()?.storeId !== input.storeId) {
         throw new HttpsError('permission-denied', 'Store profile does not match workspace', { code: 'STORE_SCOPE_MISMATCH' });
       }
@@ -100,6 +99,7 @@ export async function trustedDebtCommandHandler(
           storeId: input.storeId,
           workspaceId: input.spaceId,
           createdByUserId: uid,
+          updatedByUserId: uid,
           customerId: input.customerId,
           currency: input.currency,
           amount: input.amount,
@@ -111,6 +111,7 @@ export async function trustedDebtCommandHandler(
         });
       } else {
         tx.update(debtRef, {
+          updatedByUserId: uid,
           currency: input.currency,
           amount: input.amount,
           dueDate: input.dueDate ?? FieldValue.delete(),

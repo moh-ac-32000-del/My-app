@@ -22,6 +22,7 @@ vi.mock('firebase/firestore', () => ({
   collection: firestoreState.collection,
   doc: firestoreState.doc,
   getDoc: firestoreState.getDoc,
+  getDocFromServer: firestoreState.getDoc,
   getDocs: firestoreState.getDocs,
   getFirestore: firestoreState.getFirestore,
   setDoc: firestoreState.setDoc,
@@ -132,6 +133,7 @@ describe('Space discovery', () => {
           data: () => ({
             spaceId: 'space-a',
             userId: 'firebase-user-a',
+            role: 'owner',
             status: 'active',
           }),
         };

@@ -19,7 +19,7 @@ import type { DailyJournalEvent } from '@/services/storage';
 export default function DashboardScreen() {
   const colors = useColors();
   const router = useRouter();
-  const { profile, isReady, isAuthenticated, initializationError, retryInitialization, transactions, activeSpaceId } = useStore();
+  const { profile, isReady, isAuthenticated, initializationError, retryInitialization, transactions, activeSpaceId, activeSpaceLoading } = useStore();
   const { t, isRTL, direction, language } = useI18n();
   const insets = useSafeAreaInsets();
   const balances = useMemo(
@@ -39,6 +39,9 @@ export default function DashboardScreen() {
       router.replace('/login');
     }
   }, [isReady, isAuthenticated, router]);
+  useEffect(() => {
+    if (isReady && isAuthenticated && !activeSpaceLoading && !activeSpaceId) router.replace('/workspaces' as never);
+  }, [isReady,isAuthenticated,activeSpaceLoading,activeSpaceId,router]);
 
   const getJournalTitle = (event: DailyJournalEvent): string => {
     if (event.type === 'cash_in') return t('cashIn');
@@ -66,10 +69,12 @@ export default function DashboardScreen() {
           </Pressable>
           <Pressable
             testID="profile-button"
-            onPress={() => router.push('/settings')}
+            accessibilityRole="button"
+            accessibilityLabel={t('workspaces')}
+            onPress={() => router.push('/workspaces' as never)}
             style={({ pressed }) => [styles.profileButton, { backgroundColor: colors.accent, borderColor: colors.border }, pressed && styles.pressed]}
           >
-            <Text style={[styles.profileInitial, { color: colors.primary }]}>{(profile.name || t('storeNameDefault')).slice(0, 1)}</Text>
+            <Ionicons name="layers-outline" size={22} color={colors.primary} />
           </Pressable>
           </View>
         }

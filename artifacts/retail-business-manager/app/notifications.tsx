@@ -21,7 +21,7 @@ export default function NotificationsScreen() {
   const colors = useColors();
   const router = useRouter();
   const { t, language, isRTL } = useI18n();
-  const { activeSpaceId, profile, isReady, isAuthenticated } = useStore();
+  const { activeSpaceId, profile, isReady, isAuthenticated, canWriteBusiness } = useStore();
   const { debts, canonicalSpaceId: debtSpaceId, isLoading: debtLoading, error: debtError, retryDebts } = useDebts();
   const { customers, canonicalSpaceId: customerSpaceId } = useCustomers();
   const [reminders, setReminders] = useState<Reminder[]>([]);
@@ -69,7 +69,7 @@ export default function NotificationsScreen() {
   const summary = activeSpaceId && debtSpaceId === activeSpaceId && !loading && !error
     ? buildFollowUpSummary(debts, reminders, activeSpaceId, profile.id, new Date()) : null;
   const mark = async (reminder: Reminder, status: 'completed' | 'delete') => {
-    if (busy.current || loading || error || !isAuthenticated || !activeSpaceId || debtSpaceId !== activeSpaceId) return;
+    if (!canWriteBusiness || busy.current || loading || error || !isAuthenticated || !activeSpaceId || debtSpaceId !== activeSpaceId) return;
     const scope = `${actorUid}/${activeSpaceId}/${profile.id}`;
     if (!actorUid || currentScope.current !== scope) return;
     busy.current = true;
@@ -115,12 +115,12 @@ export default function NotificationsScreen() {
                     <Text style={[styles.text, align, { color: colors.mutedForeground }]}>{formatLocalizedDateTime(new Date(reminder.remindAt), language)}</Text>
                     {debt ? <Text style={[styles.text, align, { color: colors.foreground }]}>{t('remainingDebt')}: {formatMoney(debt.amount, debt.currency, language)} ({debt.currency})</Text> : null}
                     {note ? <Text style={[styles.text, align, { color: colors.mutedForeground }]}>{note}</Text> : null}
-                    {status === 'pending' ? <View style={[styles.actions, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
+                    {canWriteBusiness && status === 'pending' ? <View style={[styles.actions, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
                       <Pressable accessibilityRole="button" disabled={busyId !== null} onPress={() => void mark(reminder, 'completed')} style={[styles.statusAction, { backgroundColor: colors.accent }]}>
                         <Text style={[styles.title, { color: colors.primary }]}>{busyId === reminder.id ? t('followUpSaving') : t('followUpMarkDone')}</Text>
                       </Pressable>
                     </View> : null}
-                    {deleteId === reminder.id ? <View testID={`confirm-delete-${reminder.id}`} style={[styles.card, { borderWidth: 1, borderColor: colors.destructive, borderRadius: 14, padding: 12 }]}>
+                    {canWriteBusiness ? (deleteId === reminder.id ? <View testID={`confirm-delete-${reminder.id}`} style={[styles.card, { borderWidth: 1, borderColor: colors.destructive, borderRadius: 14, padding: 12 }]}>
                       <Text style={[styles.text, align, { color: colors.foreground }]}>{t('reminderDeleteHint')}</Text>
                       <View style={[styles.actions, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
                         <Pressable accessibilityRole="button" disabled={busyId !== null} onPress={() => void mark(reminder, 'delete')} style={styles.statusAction}>
@@ -130,7 +130,7 @@ export default function NotificationsScreen() {
                       </View>
                     </View> : <Pressable accessibilityRole="button" disabled={busyId !== null} onPress={() => setDeleteId(reminder.id)} style={styles.action}>
                       <Text style={[styles.text, align, { color: colors.destructive }]}>{t('reminderDelete')}</Text>
-                    </Pressable>}
+                    </Pressable>) : null}
                     {debt && customer ? <Pressable accessibilityRole="button" onPress={() => router.push({ pathname: '/customer/[id]', params: { id: debt.customerId } })} style={styles.action}>
                       <Text style={[styles.title, align, { color: colors.primary }]}>{t('notificationCenterOpenCustomer')}</Text>
                     </Pressable> : null}

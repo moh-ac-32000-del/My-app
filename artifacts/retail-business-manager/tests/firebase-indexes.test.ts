@@ -3,6 +3,11 @@ import config from '../firebase.json';
 import indexes from '../firestore.indexes.json';
 
 describe('daily closing Firestore index deployment', () => {
+  it('bounds invitation scans to live pending workspace invitations',()=>{
+    expect(indexes.indexes).toContainEqual({collectionGroup:'spaceInvitations',queryScope:'COLLECTION',fields:[
+      {fieldPath:'spaceId',order:'ASCENDING'},{fieldPath:'status',order:'ASCENDING'},{fieldPath:'expiresAt',order:'ASCENDING'},
+    ]});
+  });
   it('connects the existing index manifest to the Firebase deployment', () => {
     expect(config.firestore.indexes).toBe('firestore.indexes.json');
   });

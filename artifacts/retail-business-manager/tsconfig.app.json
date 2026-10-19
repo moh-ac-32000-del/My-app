@@ -24,6 +24,8 @@
     "expo-env.d.ts"
   ],
   "exclude": [
+    "tests/workspace-command.test.ts",
+    "tests/workspace-access.test.ts",
     "functions/**/*",
     "tests/bootstrap-primary-space-function.test.ts",
     "tests/daily-archive-command.test.ts",

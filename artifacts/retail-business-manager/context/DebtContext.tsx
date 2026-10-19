@@ -26,6 +26,9 @@ export function DebtProvider({ children }: { children: ReactNode }) {
     activeSpaceLoading,
     activeSpaceError,
     retryActiveSpace,
+    canWriteBusiness,
+    assertBusinessAccess,
+    sessionKey,
   } = useStore();
   const [debts, setDebts] = useState<Debt[]>([]);
   const [canonicalSpaceId, setCanonicalSpaceId] = useState<string | null>(null);
@@ -121,15 +124,16 @@ export function DebtProvider({ children }: { children: ReactNode }) {
   }, [retryActiveSpace]);
 
   const updateDebt = useCallback(async (debt: Debt) => {
+    assertBusinessAccess(canonicalSpaceId, sessionKey);
     if (isFirebaseConfigured) {
-      if (!canonicalSpaceId) {
+      if (!canWriteBusiness || !canonicalSpaceId || canonicalSpaceId !== activeSpaceId) {
         throw new Error('debtWorkspaceUnavailable');
       }
       await updateDebtDocument(canonicalSpaceId, debt);
       return;
     }
     throw new Error('localDebtUpdateUnsupported');
-  }, [canonicalSpaceId, profile.id]);
+  }, [canonicalSpaceId, profile.id, activeSpaceId, canWriteBusiness, assertBusinessAccess, sessionKey]);
 
   const value = useMemo(
     () => ({

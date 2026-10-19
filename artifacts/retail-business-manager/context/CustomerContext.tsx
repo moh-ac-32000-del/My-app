@@ -29,6 +29,9 @@ export function CustomerProvider({ children }: { children: ReactNode }) {
     activeSpaceLoading,
     activeSpaceError,
     retryActiveSpace,
+    canWriteBusiness,
+    assertBusinessAccess,
+    sessionKey,
   } = useStore();
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [canonicalSpaceId, setCanonicalSpaceId] = useState<string | null>(null);
@@ -119,25 +122,28 @@ export function CustomerProvider({ children }: { children: ReactNode }) {
   }, [retryActiveSpace]);
 
   const createCustomer = useCallback(async (customer: Customer) => {
-    if (!canonicalSpaceId) {
+    assertBusinessAccess(canonicalSpaceId, sessionKey);
+    if (!canWriteBusiness || !canonicalSpaceId || canonicalSpaceId !== activeSpaceId) {
       throw new Error('customerWorkspaceUnavailable');
     }
     await createCustomerDocument(canonicalSpaceId, customer);
-  }, [canonicalSpaceId]);
+  }, [canonicalSpaceId, activeSpaceId, canWriteBusiness, assertBusinessAccess, sessionKey]);
 
   const updateCustomer = useCallback(async (customer: Customer) => {
-    if (!canonicalSpaceId) {
+    assertBusinessAccess(canonicalSpaceId, sessionKey);
+    if (!canWriteBusiness || !canonicalSpaceId || canonicalSpaceId !== activeSpaceId) {
       throw new Error('customerWorkspaceUnavailable');
     }
     await updateCustomerDocument(canonicalSpaceId, customer);
-  }, [canonicalSpaceId]);
+  }, [canonicalSpaceId, activeSpaceId, canWriteBusiness, assertBusinessAccess, sessionKey]);
 
   const softDeleteCustomer = useCallback(async (customer: Customer) => {
-    if (!canonicalSpaceId) {
+    assertBusinessAccess(canonicalSpaceId, sessionKey);
+    if (!canWriteBusiness || !canonicalSpaceId || canonicalSpaceId !== activeSpaceId) {
       throw new Error('customerWorkspaceUnavailable');
     }
     await softDeleteCustomerDocument(canonicalSpaceId, customer);
-  }, [canonicalSpaceId]);
+  }, [canonicalSpaceId, activeSpaceId, canWriteBusiness, assertBusinessAccess, sessionKey]);
 
   const value = useMemo(
     () => ({
