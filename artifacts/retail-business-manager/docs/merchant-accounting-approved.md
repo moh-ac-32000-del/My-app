@@ -46,7 +46,7 @@ Record the operation once with a unique operation ID and immutable matching payl
 
 ## Financial safeguards and totals
 
-- Use exact monetary arithmetic (integer minor units or precise decimals) and specify currency precision/rounding before implementation; avoid uncontrolled binary floating-point calculations, including line-item multiplication. Do not silently round legacy records.
+- The user subsequently approved this precision for new merchant invoices: quantity up to three fractional digits, unit price up to four, each positive line total rounded half-up to two fractional digits (0.005 → 0.01), then sum the rounded lines. Account/payment amounts use two fractional digits. Use exact monetary arithmetic, not uncontrolled binary floating-point multiplication. Do not silently round or rewrite legacy records; their compatibility is a separate integration gate.
 - Aggregate positive merchant balances as payables; absolute negative balances as store credit; net = payables − credit, per currency. Present separately, not as permission to settle unrelated merchants.
 - Every purchase/payment/settlement has an idempotent operation identifier; same identifier with a different payload must fail, not replay success.
 - Record actor identity and linked record IDs. Approved operations are corrected by documented reversals or a reviewed archive-compatible procedure, not silent deletion.
@@ -56,3 +56,9 @@ Record the operation once with a unique operation ID and immutable matching payl
 ## Verification gates
 
 Pure numerical cases first, then trusted command tests (including retries, races, overpayments, signed credits, wrong currency/space/role, linked purchase/payment atomicity and direct settlement atomicity), direct-SDK security tests, historical-data compatibility checks and finally isolated end-to-end/device acceptance. No claim of complete merchant functionality until all required layers pass.
+
+## Foundation stage — not wired to existing finances
+
+`data/merchantAccounting.ts` provides pure exact-decimal projections and `tests/merchant-accounting.test.ts` exercises the supplied examples, approved line rounding, overpayments, previous credits, currency/workspace isolation and separate merchant totals. Inputs and outputs are canonical decimal strings; internal BigInt arithmetic is not serialized. Inputs/results are bounded to 80 characters to prevent unbounded parsing, not silently rounded or converted to binary floating-point amounts. No existing customer calculations, callable, financial record, Firestore rules, archive snapshot or screen imports these helpers at this stage.
+
+These helpers are **not** a canonical stored balance, trusted command, receipt/idempotency mechanism, authorization check, migration or completed merchant feature. Server transaction integration must independently revalidate canonical parties/roles and atomically persist all linked effects. The 80-character exact format is for new validated inputs only; legacy precision requires its own compatibility handling rather than automatic rounding. Actual Android execution remains a combined-APK acceptance gate; successful Node/browser-compatible builds are not a device test.
