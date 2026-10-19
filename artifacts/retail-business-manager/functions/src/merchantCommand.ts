@@ -11,6 +11,7 @@ import {
 import { legacyAmountExact, planCustomerPayment } from '../../data/customerCreditAccounting.js';
 import { readCustomerCredit, writeCustomerCredit } from './customerCreditState.js';
 import { assertWorkspaceAccess } from './workspaceAccess.js';
+import { reverseMerchantOperation } from './merchantReversal.js';
 
 /** Not exported as a deployed callable until client, rules and journal integration are reviewed. */
 export interface MerchantRuntime {
@@ -18,7 +19,7 @@ export interface MerchantRuntime {
   now: () => string;
 }
 type Input = {
-  action: 'save' | 'opening' | 'purchase' | 'payment' | 'directPayment';
+  action: 'save' | 'opening' | 'purchase' | 'payment' | 'directPayment' | 'reverse';
   spaceId: string;
   storeId: string;
   merchantId: string;
@@ -32,6 +33,8 @@ type Input = {
   source?: 'cash' | 'external';
   customerId?: string;
   note?: string;
+  targetOperationId?: string;
+  reason?: string;
   lines?: Array<{ name: string; quantity: string; unitPrice: string }>;
 };
 const digest = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
@@ -84,19 +87,21 @@ function mirror(value: string): number {
 function validate(value: unknown): Input {
   if (!record(value)) invalid('Invalid merchant request');
   const action = value.action;
-  if (!['save', 'opening', 'purchase', 'payment', 'directPayment'].includes(action as string))
+  if (!['save', 'opening', 'purchase', 'payment', 'directPayment', 'reverse'].includes(action as string))
     invalid('Invalid action');
   const base = ['action', 'spaceId', 'storeId', 'merchantId', 'operationId'];
   const allowed =
-    action === 'save'
-      ? ['name', 'phone', 'isActive']
-      : action === 'opening'
-        ? ['currency', 'amountExact', 'note']
-        : action === 'purchase'
-          ? ['currency', 'paidExact', 'source', 'lines', 'note']
-          : action === 'payment'
-            ? ['currency', 'amountExact', 'source', 'note']
-            : ['currency', 'amountExact', 'customerId', 'note'];
+    action === 'reverse'
+      ? ['currency', 'targetOperationId', 'reason']
+      : action === 'save'
+        ? ['name', 'phone', 'isActive']
+        : action === 'opening'
+          ? ['currency', 'amountExact', 'note']
+          : action === 'purchase'
+            ? ['currency', 'paidExact', 'source', 'lines', 'note']
+            : action === 'payment'
+              ? ['currency', 'amountExact', 'source', 'note']
+              : ['currency', 'amountExact', 'customerId', 'note'];
   if (Object.keys(value).some((key) => ![...base, ...allowed].includes(key))) invalid('Unexpected request field');
   const input: Input = {
     action: action as Input['action'],
@@ -114,6 +119,12 @@ function validate(value: unknown): Input {
   }
   if (!isCurrencyCode(value.currency)) invalid('Unsupported currency');
   input.currency = value.currency;
+  if (action === 'reverse') {
+    input.targetOperationId = id(value.targetOperationId);
+    if (input.targetOperationId === input.operationId) invalid('Reversal requires a new operation identifier');
+    input.reason = label(value.reason, 2000, true);
+    return input;
+  }
   input.note = label(value.note ?? '', 2000);
   if (action === 'purchase' || action === 'payment') {
     if (value.source !== 'cash' && value.source !== 'external') invalid('Payment source is required');
@@ -278,6 +289,29 @@ export async function merchantCommandHandler(request: CallableRequest<unknown>, 
     }
     if (input.action === 'opening' && balanceSnap.exists)
       throw new HttpsError('failed-precondition', 'Opening must precede all account operations');
+    if (input.action === 'reverse') {
+      if (!balanceSnap.exists) throw new HttpsError('data-loss', 'Original merchant account balance is missing');
+      const result = await reverseMerchantOperation({
+        tx,
+        space,
+        balanceRef,
+        balance,
+        revision: state?.revision ?? 0,
+        operationRef,
+        uid,
+        now,
+        input: {
+          spaceId: input.spaceId,
+          storeId: input.storeId,
+          merchantId: input.merchantId,
+          operationId: input.operationId,
+          currency,
+          targetOperationId: input.targetOperationId!,
+          reason: input.reason!,
+        },
+      });
+      return finish(result);
+    }
     let next = balance.balance;
     let cashDeltaExact = '0.00';
     let details: Record<string, unknown> = {};

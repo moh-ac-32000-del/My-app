@@ -148,6 +148,33 @@ try {
   assert.equal((await rejected.space.collection('customerCredits').get()).size, 0);
   assert.equal((await rejected.space.collection('debts').doc('old-debt').get()).data().amount, 100);
   console.log('Merchant emulator — cross-space customer rejection leaves both financial accounts unchanged: PASS');
+
+  const corrections = await fixture('reversal');
+  await corrections.merchant('directPayment', 'direct', {
+    customerId: corrections.base.customerId,
+    amountExact: '130.00',
+  });
+  const reversed = await Promise.allSettled(
+    ['one', 'two'].map((operationId) =>
+      corrections.merchant('reverse', operationId, {
+        targetOperationId: 'direct',
+        reason: 'Correct erroneous direct payment',
+      }),
+    ),
+  );
+  assert.equal(reversed.filter((result) => result.status === 'fulfilled').length, 1);
+  assert.equal(reversed.filter((result) => result.status === 'rejected').length, 1);
+  assert.equal((await corrections.balance()).data().balanceExact, '0.00');
+  assert.equal((await corrections.credit()).data().creditExact, '0.00');
+  assert.equal(
+    (await corrections.space.collection('debts').get()).docs.reduce((sum, doc) => sum + doc.data().amount, 0),
+    100,
+  );
+  assert.equal((await corrections.space.collection('transactions').get()).size, 0);
+  assert.equal((await corrections.space.collection('merchantOperations').get()).size, 2);
+  console.log(
+    'Merchant emulator — competing reversals preserve original history and create exactly one noncash correction: PASS',
+  );
 } finally {
   await db.terminate();
   await deleteApp(app);
