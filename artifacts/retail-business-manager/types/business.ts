@@ -79,6 +79,11 @@ export interface Payment extends BusinessEntity {
   transactionId?: string;
   paidAt: string;
   note?: string;
+  amountExact?: string;
+  source?: 'customer-to-merchant';
+  merchantId?: string;
+  merchantName?: string;
+  merchantOperationId?: string;
 }
 
 export interface DailyArchive {
@@ -96,6 +101,12 @@ export interface Debt extends BusinessEntity {
   customerId: string;
   currency: CurrencyCode;
   amount: number;
+  /** Exact remaining amount on trusted new writes; old records keep their original number. */
+  amountExact?: string;
+  creditAppliedExact?: string;
+  merchantOperationId?: string;
+  correctionOfMerchantOperationId?: string;
+  note?: string;
   dueDate?: string;
   originalAmount?: number;
   settledAt?: string;

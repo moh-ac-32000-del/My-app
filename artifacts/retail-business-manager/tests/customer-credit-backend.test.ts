@@ -35,6 +35,15 @@ const charge = (id = 'charge', amount = 20) => ({
 });
 
 describe('customer credit trusted backend integration', () => {
+  it('preserves exact remaining precision on a date-only edit from a numeric-mirror client', async () => {
+    const backend = workspaceBackend();
+    backend.docs['spaces/s/debts/d'].amount = 1;
+    backend.docs['spaces/s/debts/d'].amountExact = '1.0000000000000000001';
+    await trustedDebtCommandHandler({ auth: { uid: 'u' }, data: { action: 'update', spaceId: 's', storeId: 'store',
+      customerId: 'c', debtId: 'd', operationId: 'change-date', currency: 'TRY', amount: 1, dueDate: '2026-11-01' } } as never, backend.runtime);
+    expect(backend.docs['spaces/s/debts/d'].amountExact).toBe('1.0000000000000000001');
+    expect(backend.docs['spaces/s/operationReceipts/change-date'].previousDebt.amountExact).toBe('1.0000000000000000001');
+  });
   it('consumes excess cash on a later charge without recording new cash', async () => {
     const backend = workspaceBackend();
     await settleCustomerDebtHandler(settlement() as never, backend.runtime);

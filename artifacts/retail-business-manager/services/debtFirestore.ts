@@ -17,6 +17,7 @@ import { loadCloudReminders } from '@/services/cloudReminders';
 import { validateDebtInput } from '@/services/storage';
 import type { Debt } from '@/types/business';
 import { createTrustedDebt, updateTrustedDebt } from '@/services/trustedDebtFirestore';
+import { canonicalCredit, legacyAmountExact } from '@/data/customerCreditAccounting';
 
 type DebtSnapshot = {
   id: string;
@@ -138,6 +139,17 @@ export function normalizeDebtDocument(
     createdAt: value.createdAt as string,
     updatedAt: value.updatedAt as string,
   };
+
+  try {
+    if (value.amountExact !== undefined) debt.amountExact = legacyAmountExact(value.amount, value.amountExact);
+    if (value.creditAppliedExact !== undefined) debt.creditAppliedExact = canonicalCredit(value.creditAppliedExact);
+    for (const key of ['merchantOperationId', 'correctionOfMerchantOperationId', 'note'] as const) {
+      if (value[key] !== undefined) {
+        if (typeof value[key] !== 'string') return null;
+        debt[key] = value[key];
+      }
+    }
+  } catch { return null; }
 
   return validateDebtInput(debt) === null ? debt : null;
 }

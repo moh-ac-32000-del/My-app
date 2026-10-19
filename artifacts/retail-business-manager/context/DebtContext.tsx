@@ -2,13 +2,15 @@ import React, { createContext, ReactNode, useCallback, useEffect, useMemo, useSt
 import type { Debt } from '@/types/business';
 import { getFirebaseAuth, isFirebaseConfigured } from '@/services/firebase';
 import {
-  subscribeToDebts,
   updateDebtDocument,
 } from '@/services/debtFirestore';
+import { subscribeCustomerAccounts } from '@/services/customerAccountFirestore';
+import type { CustomerCredit } from '@/types/merchant';
 import { useStore } from '@/context/StoreContext';
 
 interface DebtContextValue {
   debts: Debt[];
+  credits: CustomerCredit[];
   canonicalSpaceId: string | null;
   isLoading: boolean;
   error: string | null;
@@ -31,6 +33,7 @@ export function DebtProvider({ children }: { children: ReactNode }) {
     sessionKey,
   } = useStore();
   const [debts, setDebts] = useState<Debt[]>([]);
+  const [credits, setCredits] = useState<CustomerCredit[]>([]);
   const [canonicalSpaceId, setCanonicalSpaceId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -43,6 +46,7 @@ export function DebtProvider({ children }: { children: ReactNode }) {
     let unsubscribe: (() => void) | null = null;
 
     setDebts([]);
+    setCredits([]);
     setCanonicalSpaceId(null);
     setError(null);
 
@@ -81,15 +85,18 @@ export function DebtProvider({ children }: { children: ReactNode }) {
     }
 
     const spaceId = activeSpaceId;
+    if (!profile.id) { setIsLoading(true); return () => { active = false; }; }
     setCanonicalSpaceId(spaceId);
     setIsLoading(true);
-    unsubscribe = subscribeToDebts(
+    unsubscribe = subscribeCustomerAccounts(
       spaceId,
-      (nextDebts) => {
+      profile.id,
+      ({ debts: nextDebts, credits: nextCredits }) => {
         if (!active) {
           return;
         }
         setDebts(nextDebts);
+        setCredits(nextCredits);
         setIsLoading(false);
         setError(null);
       },
@@ -100,6 +107,7 @@ export function DebtProvider({ children }: { children: ReactNode }) {
         // Firestore listeners terminate after an error. Clear the previous
         // workspace snapshot so it cannot be mistaken for current cloud data.
         setDebts([]);
+        setCredits([]);
         setCanonicalSpaceId(null);
         setIsLoading(false);
         setError(listenerError.message);
@@ -138,13 +146,14 @@ export function DebtProvider({ children }: { children: ReactNode }) {
   const value = useMemo(
     () => ({
       debts,
+      credits,
       canonicalSpaceId,
       isLoading,
       error,
       retryDebts,
       updateDebt,
     }),
-    [canonicalSpaceId, debts, error, isLoading, retryDebts, updateDebt],
+    [canonicalSpaceId, debts, credits, error, isLoading, retryDebts, updateDebt],
   );
 
   return <DebtContext.Provider value={value}>{children}</DebtContext.Provider>;

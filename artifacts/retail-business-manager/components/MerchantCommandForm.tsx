@@ -1,13 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Text, View } from 'react-native';
-import { collection, doc, getFirestore } from 'firebase/firestore';
 import { GlassCard } from '@/components/AppShell';
 import { MerchantButton, MerchantField } from '@/components/MerchantAccountUI';
 import { useCustomers } from '@/context/CustomerContext';
 import { useStore } from '@/context/StoreContext';
 import { useColors } from '@/hooks/useColors';
 import { useI18n } from '@/hooks/useI18n';
-import { getFirebaseApp } from '@/services/firebase';
+import { createOperationId } from '@/services/operationId';
 import { calculateMerchantPurchase } from '@/data/merchantAccounting';
 import { exactMoneyEntry, formatExactMoney } from '@/data/exactMoneyPresentation';
 import { CURRENCY_OPTIONS, type CurrencyCode } from '@/constants/currencies';
@@ -24,9 +23,7 @@ export const merchantActionLabels: Record<Action, TranslationKey> = {
   reverse: 'merchantReverse',
 };
 /** Creating a document reference generates a random ID locally; it does not read/write Firestore. */
-export function merchantDraftId() {
-  return doc(collection(getFirestore(getFirebaseApp()), 'unused-id-generation')).id;
-}
+export const merchantDraftId = createOperationId;
 
 export function MerchantCommandForm({
   action,

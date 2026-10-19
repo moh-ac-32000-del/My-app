@@ -1,6 +1,10 @@
 export type Language = 'ar' | 'en' | 'tr';
 
 const ar = {
+  customerCreditBalance: 'رصيد دائن لصالح العميل',
+  customerCreditUsed: 'سُدد من الرصيد الدائن، دون حركة صندوق',
+  customerCreditSummary: 'أرصدة العملاء الدائنة — منفصلة عن الديون',
+  customerCreditHint: 'حق محفوظ للعميل يُستهلك عند تسجيل دين لاحق بنفس العملة، دون حركة صندوق جديدة. لا نخصمه من دين عميل آخر.',
   merchants: 'التجار',
   merchantName: 'اسم التاجر',
   merchantAdd: 'إضافة تاجر',
@@ -278,7 +282,7 @@ const ar = {
   paymentHistoryEmpty: 'لا توجد دفعات مسجلة بعد',
   paymentHistoryEmptyHint: 'سيظهر سجل الدفعات هنا عند توفره',
   settlement: 'سداد',
-  settlementFormHint: 'اختر عملة عليها دين وأدخل مبلغ السداد',
+  settlementFormHint: 'دفعة نقدية تدخل الصندوق، بما فيها الدفعة المقدمة. يُحفظ ما يزيد عن الدين رصيدًا دائنًا للعميل بنفس العملة.',
   settlementCurrency: 'عملة السداد',
   settlementAmountRequired: 'أدخل مبلغ السداد',
   settlementAmountInvalid: 'أدخل مبلغ سداد صحيحًا وأكبر من صفر',
@@ -402,6 +406,10 @@ const ar = {
 export type TranslationKey = keyof typeof ar;
 
 const en: Record<TranslationKey, string> = {
+  customerCreditBalance: 'Credit in the customer’s favor',
+  customerCreditUsed: 'Covered by existing credit, without drawer cash',
+  customerCreditSummary: 'Customer credits — separate from receivables',
+  customerCreditHint: 'Retained customer credit is used by later charges in the same currency without new drawer cash. It is never netted against another customer’s debt.',
   merchants: 'Merchants',
   merchantName: 'Merchant name',
   merchantAdd: 'Add merchant',
@@ -679,7 +687,7 @@ const en: Record<TranslationKey, string> = {
   paymentHistoryEmpty: 'No payments recorded yet',
   paymentHistoryEmptyHint: 'Payment history will appear here when available',
   settlement: 'Settlement',
-  settlementFormHint: 'Choose a currency with an outstanding debt and enter the payment amount',
+  settlementFormHint: 'Actual cash received into the drawer, including advance payments. Any excess becomes customer credit in the same currency.',
   settlementCurrency: 'Settlement currency',
   settlementAmountRequired: 'Enter the settlement amount',
   settlementAmountInvalid: 'Enter a valid settlement amount greater than zero',
@@ -801,6 +809,10 @@ const en: Record<TranslationKey, string> = {
 };
 
 const tr: Record<TranslationKey, string> = {
+  customerCreditBalance: 'Müşteri lehine alacak',
+  customerCreditUsed: 'Mevcut alacaktan karşılandı; kasa hareketi yok',
+  customerCreditSummary: 'Müşteri alacakları — borçlardan ayrı',
+  customerCreditHint: 'Müşteri alacağı, aynı para birimindeki sonraki borçta yeni kasa hareketi olmadan kullanılır. Başka müşterinin borcundan düşülmez.',
   merchants: 'Tedarikçiler',
   merchantName: 'Tedarikçi adı',
   merchantAdd: 'Tedarikçi ekle',
@@ -1078,7 +1090,7 @@ const tr: Record<TranslationKey, string> = {
   paymentHistoryEmpty: 'Henüz ödeme kaydı yok',
   paymentHistoryEmptyHint: 'Ödeme kayıtları mevcut olduğunda burada görünecek',
   settlement: 'Tahsilat',
-  settlementFormHint: 'Borcu bulunan bir para birimi seçin ve ödeme tutarını girin',
+  settlementFormHint: 'Avans dahil kasaya gerçekten giren nakit ödeme. Borcu aşan tutar, aynı para biriminde müşteri alacağı olarak korunur.',
   settlementCurrency: 'Tahsilat para birimi',
   settlementAmountRequired: 'Tahsilat tutarını girin',
   settlementAmountInvalid: 'Sıfırdan büyük geçerli bir tahsilat tutarı girin',

@@ -46,16 +46,16 @@ export default function CustomersScreen() {
   const router = useRouter();
   const { profile, activeSpaceId, isReady, isAuthenticated, canWriteBusiness } = useStore();
   const { customers, isLoading, error, retryCustomers, createCustomer } = useCustomers();
-  const { debts, canonicalSpaceId: debtSpaceId, isLoading: debtsLoading, error: debtError, retryDebts } = useDebts();
+  const { debts, credits = [], canonicalSpaceId: debtSpaceId, isLoading: debtsLoading, error: debtError, retryDebts } = useDebts();
   const { t, isRTL } = useI18n();
   const [search, setSearch] = useState<string>('');
   const [isFormVisible, setIsFormVisible] = useState<boolean>(false);
 
   const visibleCustomers = useMemo(() => filterCustomers(customers, search), [customers, search]);
   const debtSummary = useMemo(() => selectCustomerDebtSummary({
-    debts, storeId: profile.id, activeSpaceId, debtSpaceId,
+    debts, credits, storeId: profile.id, activeSpaceId, debtSpaceId,
     isLoading: debtsLoading || !isReady || !isAuthenticated, error: debtError,
-  }), [debts, profile.id, activeSpaceId, debtSpaceId, debtsLoading, isReady, isAuthenticated, debtError]);
+  }), [debts, credits, profile.id, activeSpaceId, debtSpaceId, debtsLoading, isReady, isAuthenticated, debtError]);
 
   const addCustomer = async (draft: CustomerDraft) => {
     if (!draft.name.trim()) {

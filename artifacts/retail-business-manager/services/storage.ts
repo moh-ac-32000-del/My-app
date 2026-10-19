@@ -117,6 +117,8 @@ export function createDebtId(): string {
 export interface SettlementDraft {
   amount: number;
   currency: CurrencyCode;
+  /** Optional stable transport identity for retries; not a locally persisted financial record. */
+  intentId?: string;
 }
 
 export interface SettlementResult {

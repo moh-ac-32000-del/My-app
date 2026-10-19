@@ -175,6 +175,14 @@ try {
   console.log(
     'Merchant emulator — competing reversals preserve original history and create exactly one noncash correction: PASS',
   );
+
+  const precision = await fixture('precision-edit');
+  await precision.space.collection('debts').doc('old-debt').update({ amount: 1, amountExact: '1.0000000000000000001' });
+  await trustedDebtCommandHandler(request({ ...precision.base, action: 'update', amount: 1,
+    debtId: 'old-debt', operationId: 'date-only-edit', dueDate: '2026-11-01' }), runtime);
+  assert.equal((await precision.space.collection('debts').doc('old-debt').get()).data().amountExact, '1.0000000000000000001');
+  assert.equal((await precision.space.collection('operationReceipts').doc('date-only-edit').get()).data().previousDebt.amountExact, '1.0000000000000000001');
+  console.log('Customer credit emulator — numeric-mirror date-only edits preserve exact remaining precision: PASS');
 } finally {
   await db.terminate();
   await deleteApp(app);

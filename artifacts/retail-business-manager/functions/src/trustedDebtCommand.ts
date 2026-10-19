@@ -132,7 +132,9 @@ export async function trustedDebtCommandHandler(
           updatedByUserId: uid,
           currency: input.currency,
           amount: input.amount,
-          amountExact: legacyAmountExact(input.amount),
+          // A date-only edit from an older client must not truncate exact remaining precision.
+          amountExact: input.amount === debtSnap.data()?.amount && input.currency === debtSnap.data()?.currency
+            ? legacyAmountExact(input.amount, debtSnap.data()?.amountExact) : legacyAmountExact(input.amount),
           dueDate: input.dueDate ?? FieldValue.delete(),
           updatedAt: input.updatedAt ?? now,
         });

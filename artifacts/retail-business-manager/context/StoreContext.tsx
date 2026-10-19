@@ -594,6 +594,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       customerId,
       draft,
     );
+    assertBusinessAccess(activeSpaceId, renderSessionKey);
     return result;
   };
 

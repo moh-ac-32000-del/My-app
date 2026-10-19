@@ -26,18 +26,23 @@ export async function settleCustomerDebtInCloud(
   }
 
   const now = new Date().toISOString();
+  if (draft.intentId !== undefined && !/^[A-Za-z0-9_-]{1,100}$/.test(draft.intentId)) {
+    throw new Error('invalidSettlementIntent');
+  }
   const transaction = createCashTransaction(storeId, {
     type: 'cash_in',
     amount: draft.amount,
     currency: draft.currency,
     note: `payment_${customerId}`,
   }, now);
+  if (draft.intentId) transaction.id = `customer_cash_${draft.intentId}`;
   const payment = createPayment(storeId, customerId, {
     amount: draft.amount,
     currency: draft.currency,
     transactionId: transaction.id,
   }, now);
-  const operationId = `settlement_${transaction.id}`;
+  if (draft.intentId) payment.id = `customer_payment_${draft.intentId}`;
+  const operationId = draft.intentId ? `customer_settlement_${draft.intentId}` : `settlement_${transaction.id}`;
 
   const callable = httpsCallable<
     {

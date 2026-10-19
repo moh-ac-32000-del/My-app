@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { formatMoney } from '@/constants/currencies';
+import { formatExactMoney } from '@/data/exactMoneyPresentation';
 import { translate, type Language } from '@/constants/i18n';
 import { buildCustomerStatement } from '@/services/customerSharing';
 import type { Customer, Debt } from '@/types/business';
@@ -16,6 +17,14 @@ const debt: Debt = {
 };
 
 describe('customer sharing', () => {
+  it.each<Language>(['ar', 'en', 'tr'])('shows the customer credit as a right, not as an outstanding debt in %s', language => {
+    const t = (key: Parameters<typeof translate>[0]) => translate(key, language);
+    const message = buildCustomerStatement(customer, [], language, t, 'Shop', now, [{ currency: 'TRY', amount: '-30.00' }]);
+    expect(message).toContain(t('customerCreditBalance'));
+    expect(message).toContain(formatExactMoney('30.00', 'TRY', language));
+    expect(message).toContain(t('statementNoOutstanding'));
+    expect(message).not.toContain(`💰 ${t('statementOutstanding')}`);
+  });
   it.each<Language>(['ar', 'en', 'tr'])('formats remaining debt in %s without changing financial values', (language) => {
     const debts: Debt[] = [debt, { ...debt, id: 'debt-b', currency: 'USD', amount: 20 }];
     const before = JSON.stringify({ customer, debts });
