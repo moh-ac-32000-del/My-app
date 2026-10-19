@@ -3,7 +3,8 @@
   "private": true,
   "main": "lib/functions/src/index.js",
   "engines": {
-    "node": "22"
+    "node": "22",
+    "pnpm": "10.18.3"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
