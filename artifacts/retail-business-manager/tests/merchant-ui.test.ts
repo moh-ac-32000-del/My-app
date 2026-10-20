@@ -25,8 +25,17 @@ vi.mock('react-native', () => ({
       'aria-label': accessibilityLabel,
     }),
   ActivityIndicator: () => React.createElement('div', { 'data-testid': 'loading' }),
+  Modal: ({ children }: any) => React.createElement('div', null, children),
+  ScrollView: ({ children }: any) => React.createElement('div', null, children),
+}));
+vi.mock('@expo/vector-icons', () => ({ Ionicons: ({ name }: any) => React.createElement('i', { 'data-icon': name }) }));
+vi.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ bottom: 0 }) }));
+vi.mock('@/components/KeyboardAwareScrollViewCompat', () => ({
+  KeyboardAwareScrollViewCompat: ({ children }: any) => React.createElement('div', null, children),
 }));
 vi.mock('@react-native-community/datetimepicker', () => ({ default: () => null }));
+vi.mock('@/services/saveMerchantStatement', () => ({ saveMerchantStatement: vi.fn() }));
+vi.mock('@/services/merchantStatementAccess', () => ({ authorizeMerchantStatement: vi.fn() }));
 vi.mock('@/hooks/useMerchantSettings', () => ({
   useMerchantSettings: () => ({
     data: {
@@ -109,6 +118,8 @@ import { MerchantOperationCard } from '@/components/MerchantOperationCard';
 import { MerchantDateField } from '@/components/MerchantDateField';
 import { useMerchantAccounts } from '@/hooks/useMerchantAccounts';
 import MerchantSettingsScreen from '@/app/merchant-settings';
+import { MerchantStatementModal } from '@/components/MerchantStatementModal';
+import { merchantStatementText } from '@/constants/merchantStatementText';
 function card() {
   return renderToStaticMarkup(
     React.createElement(MerchantOperationCard, { operation: useMerchantAccounts().operations[0] }),
@@ -125,6 +136,22 @@ beforeEach(() => {
   state.limited = false;
 });
 describe('merchant screens (server-rendered, not device acceptance)', () => {
+  it('blocks the PDF component itself for Viewer and asks explicit consent to load missing history', () => {
+    const props = { merchant: useMerchantAccounts().merchants[0], operations: [], operationsLimited: true,
+      historyLoading: false, loadMore: vi.fn(), onClose: vi.fn() };
+    const owner = renderToStaticMarkup(React.createElement(MerchantStatementModal, props as never));
+    expect(owner).toContain('merchant-statement-load-consent');
+    expect(owner).toContain(merchantStatementText.ar.consent);
+    expect(owner).not.toContain('merchant-statement-save');
+    state.role = 'viewer';
+    expect(renderToStaticMarkup(React.createElement(MerchantStatementModal, props as never))).toBe('');
+  });
+  it('keeps balances and large correction buttons out of compact ledger rows', () => {
+    const markup = card();
+    expect(markup).not.toContain(translate('merchantBalance', 'ar'));
+    expect(markup).not.toContain(translate('merchantReverse', 'ar'));
+    expect(markup).not.toContain('−300');
+  });
   it('allows a viewer to request older history without exposing financial actions', () => {
     state.role = 'viewer';
     state.limited = true;
@@ -167,11 +194,13 @@ describe('merchant screens (server-rendered, not device acceptance)', () => {
     expect(markup).toContain('Goods description');
     const page = renderToStaticMarkup(React.createElement(MerchantScreen));
     expect(page).toContain('merchant-action-purchase');
-    expect(page).toContain('merchant-tab-purchases');
-    expect(page).toContain('merchant-tab-payments');
+    expect(page).not.toContain('merchant-tab-purchases');
+    expect(page).not.toContain('merchant-tab-payments');
+    expect(page).toContain('merchant-action-payment');
+    expect(page).toContain('merchant-action-directPayment');
     expect(page).not.toContain('merchant-action-save');
     expect(page).not.toContain('merchant-action-opening');
-    expect(page).toContain('merchant-settings-gear');
+    expect(page).toContain('merchant-account-menu');
   });
   it('does not show a second reversal action after an operation has been corrected', () => {
     state.reversed = true;
@@ -195,7 +224,13 @@ describe('merchant screens (server-rendered, not device acceptance)', () => {
           command: vi.fn(),
           onDone: vi.fn(),
           onCancel: vi.fn(),
-          target: { id: 'op', currency: 'TRY' } as never,
+          target: {
+            id: 'op',
+            currency: 'TRY',
+            balanceBeforeExact: '0.00',
+            balanceAfterExact: '100.00',
+            cashDeltaExact: '0.00',
+          } as never,
         }),
       );
       expect(markup).toContain('merchant-confirm');
@@ -228,14 +263,14 @@ describe('merchant screens (server-rendered, not device acceptance)', () => {
       expect(markup).toContain(translate('merchantDateHint', language));
     },
   );
-  it('provides workspace-wide material/method settings but no viewer write controls', () => {
+  it('provides workspace-wide payment methods without the retired material catalog or viewer write controls', () => {
     const markup = renderToStaticMarkup(React.createElement(MerchantSettingsScreen));
-    expect(markup).toContain('Shared material');
+    expect(markup).not.toContain('Shared material');
     expect(markup).toContain('Method A');
     expect(markup).toContain('merchant-settings-save');
     state.role = 'viewer';
     const viewer = renderToStaticMarkup(React.createElement(MerchantSettingsScreen));
-    expect(viewer).toContain('Shared material');
+    expect(viewer).not.toContain('Shared material');
     expect(viewer).not.toContain('merchant-settings-save');
   });
 });

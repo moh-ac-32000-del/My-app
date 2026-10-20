@@ -20,13 +20,16 @@ export interface MerchantRuntime {
   now: () => string;
 }
 type Input = {
-  action: 'save' | 'opening' | 'purchase' | 'payment' | 'directPayment' | 'reverse';
+  action: 'save' | 'opening' | 'purchase' | 'payment' | 'directPayment' | 'reverse' | 'statement';
   spaceId: string;
   storeId: string;
   merchantId: string;
   operationId: string;
   name?: string;
   phone?: string;
+  address?: string;
+  notes?: string;
+  openingBalances?: Array<{ currency: CurrencyCode; amountExact: string }>;
   isActive?: boolean;
   currency?: CurrencyCode;
   amountExact?: string;
@@ -40,6 +43,7 @@ type Input = {
   targetOperationId?: string;
   reason?: string;
   lines?: Array<{ name: string; quantity: string; unitPrice: string }>;
+  separateLines?: true;
 };
 const digest = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 function invalid(message: string): never {
@@ -93,21 +97,31 @@ function mirror(value: string): number {
 function validate(value: unknown): Input {
   if (!record(value)) invalid('Invalid merchant request');
   const action = value.action;
-  if (!['save', 'opening', 'purchase', 'payment', 'directPayment', 'reverse'].includes(action as string))
+  if (!['save', 'opening', 'purchase', 'payment', 'directPayment', 'reverse', 'statement'].includes(action as string))
     invalid('Invalid action');
   const base = ['action', 'spaceId', 'storeId', 'merchantId', 'operationId'];
   const allowed =
-    action === 'reverse'
-      ? ['currency', 'targetOperationId', 'reason']
-      : action === 'save'
-        ? ['name', 'phone', 'isActive']
-        : action === 'opening'
-          ? ['currency', 'amountExact', 'note']
-          : action === 'purchase'
-            ? ['currency', 'paidExact', 'source', 'lines', 'note', 'operationDate']
-            : action === 'payment'
-              ? ['currency', 'amountExact', 'source', 'note', 'operationDate', 'paymentMethodId', 'paymentMethodName']
-              : ['currency', 'amountExact', 'customerId', 'note'];
+    action === 'statement'
+      ? []
+      : action === 'reverse'
+        ? ['currency', 'targetOperationId', 'reason']
+        : action === 'save'
+          ? ['name', 'phone', 'address', 'notes', 'isActive', 'openingBalances']
+          : action === 'opening'
+            ? ['currency', 'amountExact', 'note']
+            : action === 'purchase'
+              ? ['currency', 'paidExact', 'source', 'lines', 'note', 'operationDate', 'separateLines']
+              : action === 'payment'
+                ? ['currency', 'amountExact', 'source', 'note', 'operationDate', 'paymentMethodId', 'paymentMethodName']
+                : [
+                    'currency',
+                    'amountExact',
+                    'customerId',
+                    'note',
+                    'operationDate',
+                    'paymentMethodId',
+                    'paymentMethodName',
+                  ];
   if (Object.keys(value).some((key) => ![...base, ...allowed].includes(key))) invalid('Unexpected request field');
   const input: Input = {
     action: action as Input['action'],
@@ -116,9 +130,27 @@ function validate(value: unknown): Input {
     merchantId: id(value.merchantId),
     operationId: id(value.operationId),
   };
+  if (action === 'statement') return input;
   if (action === 'save') {
     input.name = label(value.name, 200, true);
     input.phone = label(value.phone ?? '', 100);
+    if (value.address !== undefined) input.address = label(value.address, 500);
+    if (value.notes !== undefined) input.notes = label(value.notes, 2000);
+    if (value.openingBalances !== undefined) {
+      if (!Array.isArray(value.openingBalances) || value.openingBalances.length > 20)
+        invalid('Invalid opening balances');
+      input.openingBalances = value.openingBalances.map((row) => {
+        if (
+          !record(row) ||
+          Object.keys(row).some((key) => !['currency', 'amountExact'].includes(key)) ||
+          !isCurrencyCode(row.currency)
+        )
+          invalid('Invalid opening balance');
+        return { currency: row.currency, amountExact: money(row.amountExact, true) };
+      });
+      if (new Set(input.openingBalances.map((row) => row.currency)).size !== input.openingBalances.length)
+        invalid('Duplicate opening currency');
+    }
     if (typeof value.isActive !== 'boolean') invalid('isActive is required');
     input.isActive = value.isActive;
     return input;
@@ -133,14 +165,18 @@ function validate(value: unknown): Input {
   }
   input.note = label(value.note ?? '', 2000);
   if (value.operationDate !== undefined) {
-    try { input.operationDate = merchantOperationDate(value.operationDate); }
-    catch { invalid('Invalid documentary date'); }
+    try {
+      input.operationDate = merchantOperationDate(value.operationDate);
+    } catch {
+      invalid('Invalid documentary date');
+    }
   }
   if (value.paymentMethodId !== undefined || value.paymentMethodName !== undefined) {
     input.paymentMethodId = id(value.paymentMethodId);
     input.paymentMethodName = label(value.paymentMethodName, 200, true);
     // A descriptive method is not an instruction to choose a different money source.
-    if (value.source !== 'cash') invalid('Descriptive payment methods apply to actual drawer payments');
+    if (action !== 'directPayment' && value.source !== 'cash')
+      invalid('Descriptive payment methods apply to actual drawer payments');
   }
   if (action === 'purchase' || action === 'payment') {
     if (value.source !== 'cash' && value.source !== 'external') invalid('Payment source is required');
@@ -159,6 +195,11 @@ function validate(value: unknown): Input {
       };
     });
     input.paidExact = money(value.paidExact);
+    if (value.separateLines !== undefined) {
+      if (value.separateLines !== true || input.paidExact !== '0.00' || input.source !== 'cash')
+        invalid('Separate purchase lines must be on account without a simultaneous payment');
+      input.separateLines = true;
+    }
     mirror(input.paidExact);
     try {
       const result = projectMerchantPurchase(
@@ -173,7 +214,11 @@ function validate(value: unknown): Input {
         { amount: input.paidExact, currency: input.currency },
         input.source!,
       );
-      if (result.total.amount === '0.00') invalid('Purchase must have positive value');
+      if (
+        result.total.amount === '0.00' ||
+        (input.separateLines && result.lineTotals.some((line) => line.amount === '0.00'))
+      )
+        invalid('Purchase must have positive value');
     } catch (error) {
       if (error instanceof HttpsError) throw error;
       invalid('Invalid purchase precision');
@@ -203,7 +248,7 @@ export async function merchantCommandHandler(request: CallableRequest<unknown>, 
     const memberSnap = await tx.get(space.collection('members').doc(uid));
     const profileSnap = await tx.get(space.collection('storeProfile').doc('profile'));
     const merchantSnap = await tx.get(merchantRef);
-    const receiptSnap = await tx.get(receiptRef);
+    const receiptSnap = input.action === 'statement' ? null : await tx.get(receiptRef);
     if (!spaceSnap.exists || spaceSnap.data()?.status !== 'active')
       throw new HttpsError('failed-precondition', 'Workspace unavailable');
     assertWorkspaceAccess(memberSnap.data(), 'write');
@@ -217,7 +262,29 @@ export async function merchantCommandHandler(request: CallableRequest<unknown>, 
         merchant?.storeId !== input.storeId)
     )
       throw new HttpsError('data-loss', 'Merchant scope is invalid');
-    if (receiptSnap.exists) {
+    if (input.action === 'statement') {
+      // Read-only fresh Owner/Editor authorization and a small completeness proof.
+      // Never scan financial history or write a receipt merely to authorize a local export.
+      if (!merchantSnap.exists) throw new HttpsError('not-found', 'Merchant not found');
+      const snapshots = await tx.get(space.collection('merchantBalances').where('merchantId', '==', input.merchantId));
+      const balances = snapshots.docs.map((snapshot) => {
+        const row = snapshot.data();
+        if (
+          row.id !== digest([input.merchantId, row.currency]) ||
+          row.workspaceId !== input.spaceId ||
+          row.storeId !== input.storeId ||
+          !isCurrencyCode(row.currency) ||
+          row.version !== 1 ||
+          !Number.isSafeInteger(row.revision) ||
+          row.revision < 1 ||
+          typeof row.balanceExact !== 'string'
+        )
+          throw new HttpsError('data-loss', 'Invalid statement completeness proof');
+        return { currency: row.currency, revision: row.revision, balanceExact: money(row.balanceExact, true) };
+      });
+      return { merchantId: input.merchantId, outcome: 'authorized', balances, processedAt: runtime.now() };
+    }
+    if (receiptSnap?.exists) {
       const receipt = receiptSnap.data();
       if (
         receipt?.command !== 'merchantCommand' ||
@@ -239,9 +306,15 @@ export async function merchantCommandHandler(request: CallableRequest<unknown>, 
       if (settings?.workspaceId !== input.spaceId || settings.storeId !== input.storeId || settings.version !== 1)
         throw new HttpsError('failed-precondition', 'Payment methods unavailable');
       let method;
-      try { method = validateMerchantSettings(settings).paymentMethods.find(row => row.id === input.paymentMethodId && row.isActive); }
-      catch { throw new HttpsError('data-loss','Invalid payment methods'); }
-      if (!method || method.name !== input.paymentMethodName) throw new HttpsError('failed-precondition','Payment method changed; reload');
+      try {
+        method = validateMerchantSettings(settings).paymentMethods.find(
+          (row) => row.id === input.paymentMethodId && row.isActive,
+        );
+      } catch {
+        throw new HttpsError('data-loss', 'Invalid payment methods');
+      }
+      if (!method || method.name !== input.paymentMethodName)
+        throw new HttpsError('failed-precondition', 'Payment method changed; reload');
     }
     const scope = { workspaceId: input.spaceId, storeId: input.storeId };
     const finish = (result: Record<string, unknown>) => {
@@ -259,6 +332,22 @@ export async function merchantCommandHandler(request: CallableRequest<unknown>, 
       return result;
     };
     if (input.action === 'save') {
+      if (merchantSnap.exists && input.openingBalances !== undefined)
+        throw new HttpsError('failed-precondition', 'Opening balances are only accepted when creating a merchant');
+      const openings = (input.openingBalances ?? [])
+        .filter((row) => row.amountExact !== '0.00')
+        .map((row) => ({
+          ...row,
+          balanceId: digest([input.merchantId, row.currency]),
+          operationId: `opening-${digest([input.operationId, row.currency])}`,
+        }));
+      // Read every target before writing the merchant: creation and all openings are atomic.
+      for (const row of openings) {
+        const existingBalance = await tx.get(space.collection('merchantBalances').doc(row.balanceId));
+        const existingOperation = await tx.get(space.collection('merchantOperations').doc(row.operationId));
+        if (existingBalance.exists || existingOperation.exists)
+          throw new HttpsError('already-exists', 'Opening balance target already exists');
+      }
       const result = {
         merchantId: input.merchantId,
         outcome: merchantSnap.exists ? 'updated' : 'created',
@@ -269,12 +358,42 @@ export async function merchantCommandHandler(request: CallableRequest<unknown>, 
         ...scope,
         name: input.name!,
         phone: input.phone!,
+        ...(input.address !== undefined ? { address: input.address } : {}),
+        ...(input.notes !== undefined ? { notes: input.notes } : {}),
         isActive: input.isActive!,
         updatedAt: now,
         updatedByUserId: uid,
       };
       if (merchantSnap.exists) tx.update(merchantRef, data);
       else tx.create(merchantRef, { ...data, createdAt: now, createdByUserId: uid });
+      for (const row of openings) {
+        tx.create(space.collection('merchantBalances').doc(row.balanceId), {
+          id: row.balanceId,
+          ...scope,
+          merchantId: input.merchantId,
+          currency: row.currency,
+          version: 1,
+          revision: 1,
+          balanceExact: row.amountExact,
+          updatedAt: now,
+          updatedByUserId: uid,
+        });
+        tx.create(space.collection('merchantOperations').doc(row.operationId), {
+          id: row.operationId,
+          ...scope,
+          merchantId: input.merchantId,
+          merchantName: input.name!,
+          action: 'opening',
+          currency: row.currency,
+          balanceBeforeExact: '0.00',
+          balanceAfterExact: row.amountExact,
+          amountExact: row.amountExact,
+          cashDeltaExact: '0.00',
+          note: '',
+          createdAt: now,
+          createdByUserId: uid,
+        });
+      }
       return finish(result);
     }
     if (!merchantSnap.exists || merchant?.isActive !== true)
@@ -337,6 +456,65 @@ export async function merchantCommandHandler(request: CallableRequest<unknown>, 
         },
       });
       return finish(result);
+    }
+    if (input.action === 'purchase' && input.separateLines) {
+      // One receipt seals the entire form. Each material is independently reversible,
+      // while all materials and the final balance commit in this single transaction.
+      const rows = input.lines!.map((line, index) => ({
+        line,
+        ref: space.collection('merchantOperations').doc(`purchase-${digest([input.operationId, index])}`),
+      }));
+      for (const row of rows) {
+        if ((await tx.get(row.ref)).exists) throw new HttpsError('already-exists', 'Purchase line ID already exists');
+      }
+      const revision = (state?.revision ?? 0) + rows.length;
+      if (!Number.isSafeInteger(revision)) throw new HttpsError('resource-exhausted', 'Balance revision exhausted');
+      let currentBalance = balance;
+      const operations = rows.map(({ line, ref }) => {
+        const projection = projectMerchantPurchase(currentBalance, [line], { amount: '0.00', currency }, 'cash');
+        const operation = {
+          id: ref.id,
+          ...scope,
+          merchantId: input.merchantId,
+          merchantName: merchant.name,
+          action: 'purchase',
+          currency,
+          note: input.note!,
+          ...(input.operationDate ? { operationDate: input.operationDate } : {}),
+          balanceBeforeExact: currentBalance.balance,
+          balanceAfterExact: projection.balance.balance,
+          cashDeltaExact: '0.00',
+          totalExact: projection.total.amount,
+          paidExact: '0.00',
+          source: 'cash',
+          lines: [{ ...line, totalExact: projection.total.amount }],
+          createdAt: now,
+          createdByUserId: uid,
+        };
+        currentBalance = projection.balance;
+        return { ref, operation };
+      });
+      for (const { ref, operation } of operations) tx.create(ref, operation);
+      tx.set(balanceRef, {
+        id: balanceId,
+        ...scope,
+        merchantId: input.merchantId,
+        currency,
+        version: 1,
+        balanceExact: currentBalance.balance,
+        revision,
+        updatedAt: now,
+        updatedByUserId: uid,
+      });
+      return finish({
+        merchantId: input.merchantId,
+        operationId: input.operationId,
+        operationIds: operations.map((row) => row.ref.id),
+        balanceExact: currentBalance.balance,
+        cashDeltaExact: '0.00',
+        outcome: 'completed',
+        processedAt: now,
+      });
     }
     let next = balance.balance;
     let cashDeltaExact = '0.00';
@@ -477,7 +655,9 @@ export async function merchantCommandHandler(request: CallableRequest<unknown>, 
       currency,
       note: input.note!,
       ...(input.operationDate ? { operationDate: input.operationDate } : {}),
-      ...(input.paymentMethodId ? { paymentMethodId: input.paymentMethodId, paymentMethodName: input.paymentMethodName! } : {}),
+      ...(input.paymentMethodId
+        ? { paymentMethodId: input.paymentMethodId, paymentMethodName: input.paymentMethodName! }
+        : {}),
       balanceBeforeExact: balance.balance,
       balanceAfterExact: next,
       cashDeltaExact,
@@ -499,7 +679,9 @@ export async function merchantCommandHandler(request: CallableRequest<unknown>, 
         note: input.note!,
         merchantName: merchant.name,
         ...(input.operationDate ? { operationDate: input.operationDate } : {}),
-        ...(input.paymentMethodId ? { paymentMethodId: input.paymentMethodId, paymentMethodName: input.paymentMethodName! } : {}),
+        ...(input.paymentMethodId
+          ? { paymentMethodId: input.paymentMethodId, paymentMethodName: input.paymentMethodName! }
+          : {}),
         createdAt: now,
         updatedAt: now,
         createdByUserId: uid,

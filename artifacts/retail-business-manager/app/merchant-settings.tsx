@@ -2,13 +2,10 @@ import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Text, View } from 'react-native';
 import { AppShell, GlassCard, PageHeader, SectionTitle } from '@/components/AppShell';
 import { MerchantButton, MerchantField } from '@/components/MerchantAccountUI';
-import { MerchantSelect } from '@/components/MerchantSelect';
 import { useMerchantSettings } from '@/hooks/useMerchantSettings';
 import { useStore } from '@/context/StoreContext';
 import { useI18n } from '@/hooks/useI18n';
 import { useColors } from '@/hooks/useColors';
-import { CURRENCY_OPTIONS, type CurrencyCode } from '@/constants/currencies';
-import { exactMoneyEntry, formatExactMoney } from '@/data/exactMoneyPresentation';
 import { createOperationId } from '@/services/operationId';
 import type { MerchantSettings } from '@/types/merchantSettings';
 
@@ -17,17 +14,13 @@ export default function MerchantSettingsScreen() {
   return <MerchantSettingsEditor key={sessionKey} />;
 }
 function MerchantSettingsEditor() {
-  const { canWriteBusiness, profile } = useStore();
+  const { canWriteBusiness } = useStore();
   const { data, error, retry, save } = useMerchantSettings();
-  const { t, isRTL, language } = useI18n();
+  const { t, isRTL } = useI18n();
   const colors = useColors();
   const [draft, setDraft] = useState<MerchantSettings | null>(data),
     [dirty, setDirty] = useState(false);
-  const [name, setName] = useState(''),
-    [price, setPrice] = useState(''),
-    [currency, setCurrency] = useState<CurrencyCode>(profile.currency);
-  const [editId, setEditId] = useState(''),
-    [method, setMethod] = useState('');
+  const [method, setMethod] = useState('');
   const [busy, setBusy] = useState(false),
     [message, setMessage] = useState<'invalid' | 'uncertain' | 'confirmed' | null>(null);
   const pending = useRef<{ id: string; settings: MerchantSettings } | null>(null),
@@ -48,26 +41,6 @@ function MerchantSettingsEditor() {
     setDraft((current) => (current ? fn(current) : current));
     setDirty(true);
     setMessage(null);
-  };
-  const addMaterial = () => {
-    try {
-      if (!name.trim() || !draft || (!editId && draft.materials.length >= 100)) throw new Error('invalid');
-      const exact = exactMoneyEntry(price, 4);
-      const id = editId || createOperationId();
-      change((current) => ({
-        ...current,
-        materials: editId
-          ? current.materials.map((row) =>
-              row.id === id ? { ...row, name: name.trim(), prices: { ...row.prices, [currency]: exact } } : row,
-            )
-          : [...current.materials, { id, name: name.trim(), prices: { [currency]: exact }, isActive: true }],
-      }));
-      setName('');
-      setPrice('');
-      setEditId('');
-    } catch {
-      setMessage('invalid');
-    }
   };
   const submit = async () => {
     if (busy || !canWriteBusiness || !data || !draft) return;
@@ -117,79 +90,6 @@ function MerchantSettingsEditor() {
         )
       ) : (
         <View style={{ gap: 18 }}>
-          <Text style={{ ...style, color: colors.mutedForeground }}>{t('merchantSettingsHint')}</Text>
-          <SectionTitle title={t('merchantMaterials')} />
-          <GlassCard style={{ gap: 12 }}>
-            {draft.materials.map((row) => (
-              <View
-                key={row.id}
-                style={{ gap: 7, paddingBottom: 12, borderBottomWidth: 1, borderColor: colors.border }}
-              >
-                <Text style={{ ...style, fontWeight: '700' }}>
-                  {row.name}
-                  {row.isActive ? '' : ` · ${t('merchantInactive')}`}
-                </Text>
-                {Object.entries(row.prices).map(([code, value]) => (
-                  <Text key={code} style={style}>
-                    {formatExactMoney(value!, code as CurrencyCode, language)}
-                  </Text>
-                ))}
-                {canWriteBusiness ? (
-                  <View style={{ flexDirection: isRTL ? 'row-reverse' : 'row', flexWrap: 'wrap', gap: 8 }}>
-                    <MerchantButton
-                      title={t('saveChanges')}
-                      disabled={locked}
-                      onPress={() => {
-                        setEditId(row.id);
-                        setName(row.name);
-                        setPrice(row.prices[currency] ?? '');
-                      }}
-                    />
-                    <MerchantButton
-                      title={t(row.isActive ? 'merchantDisable' : 'merchantEnable')}
-                      disabled={locked}
-                      onPress={() =>
-                        change((current) => ({
-                          ...current,
-                          materials: current.materials.map((item) =>
-                            item.id === row.id ? { ...item, isActive: !item.isActive } : item,
-                          ),
-                        }))
-                      }
-                    />
-                  </View>
-                ) : null}
-              </View>
-            ))}
-            {canWriteBusiness ? (
-              <>
-                <MerchantField title={t('merchantItem')} value={name} onChange={setName} disabled={locked} />
-                <MerchantSelect
-                  title={t('currency')}
-                  value={currency}
-                  options={CURRENCY_OPTIONS.map((row) => ({ id: row.code, name: row.code }))}
-                  disabled={locked}
-                  onChange={(id) => {
-                    setCurrency(id as CurrencyCode);
-                    setPrice(draft.materials.find((row) => row.id === editId)?.prices[id as CurrencyCode] ?? '');
-                  }}
-                />
-                <MerchantField title={t('merchantPrice')} value={price} onChange={setPrice} decimal disabled={locked} />
-                <MerchantButton title={t(editId ? 'saveChanges' : 'add')} onPress={addMaterial} disabled={locked} />
-                {editId ? (
-                  <MerchantButton
-                    title={t('cancel')}
-                    disabled={locked}
-                    onPress={() => {
-                      setEditId('');
-                      setName('');
-                      setPrice('');
-                    }}
-                  />
-                ) : null}
-              </>
-            ) : null}
-          </GlassCard>
           <SectionTitle title={t('merchantPaymentMethods')} />
           <GlassCard style={{ gap: 12 }}>
             <Text style={{ ...style, color: colors.mutedForeground }}>{t('merchantMethodHint')}</Text>
@@ -287,9 +187,6 @@ function MerchantSettingsEditor() {
                 onPress={() => {
                   setDirty(false);
                   setDraft(null);
-                  setEditId('');
-                  setName('');
-                  setPrice('');
                   setMethod('');
                   setMessage(null);
                   retry();

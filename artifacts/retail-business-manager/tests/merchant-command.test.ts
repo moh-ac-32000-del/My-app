@@ -41,6 +41,201 @@ const purchase = {
 };
 
 describe('merchant trusted command (not deployed)', () => {
+  const separatePurchase = { ...purchase, paidExact: '0.00', separateLines: true };
+  const createWithOpenings = {
+    name: 'New merchant',
+    phone: '123',
+    address: 'Test address',
+    notes: 'Internal note',
+    isActive: true,
+    openingBalances: [
+      { currency: 'TRY', amountExact: '100.00' },
+      { currency: 'USD', amountExact: '-20.00' },
+    ],
+  };
+  it('authorizes a complete local statement with current role and small revision proof, without writes or history scans', async () => {
+    const backend = setup();
+    await backend.command('purchase', 'batch', separatePurchase);
+    const writes = backend.writes.length,
+      reads = backend.reads.length;
+    await expect(backend.command('statement', 'authorization')).resolves.toMatchObject({
+      outcome: 'authorized',
+      merchantId: 'm',
+      balances: [{ currency: 'TRY', revision: 3, balanceExact: '4500.00' }],
+    });
+    expect(backend.writes).toHaveLength(writes);
+    expect(backend.reads.slice(reads).some((path) => path.startsWith('spaces/s/merchantOperations'))).toBe(false);
+    backend.docs['spaces/s/merchants/m'].isActive = false;
+    await expect(backend.command('statement', 'inactive-readable')).resolves.toMatchObject({ outcome: 'authorized' });
+    backend.docs['spaces/s/members/u'].role = 'viewer';
+    await expect(backend.command('statement', 'viewer-cannot-export')).rejects.toMatchObject({
+      code: 'permission-denied',
+    });
+    expect(backend.writes).toHaveLength(writes);
+  });
+
+  it('creates merchant metadata and independent signed currency openings together, with no cash', async () => {
+    const backend = setup();
+    delete backend.docs['spaces/s/merchants/m'];
+    await backend.command('save', 'create', createWithOpenings);
+    expect(backend.docs['spaces/s/merchants/m']).toMatchObject({
+      address: 'Test address',
+      notes: 'Internal note',
+      isActive: true,
+    });
+    expect(backend.docs[balancePath()]).toMatchObject({ balanceExact: '100.00', revision: 1 });
+    expect(backend.docs[balancePath('USD')]).toMatchObject({ balanceExact: '-20.00', revision: 1 });
+    expect(Object.keys(backend.docs).filter((path) => path.startsWith('spaces/s/merchantOperations/'))).toHaveLength(2);
+    expect(Object.keys(backend.docs).some((path) => path.startsWith('spaces/s/transactions/'))).toBe(false);
+    const writes = backend.writes.length;
+    await expect(backend.command('save', 'create', createWithOpenings)).resolves.toMatchObject({ outcome: 'replayed' });
+    expect(backend.writes).toHaveLength(writes);
+    await expect(backend.command('save', 'change-opening', createWithOpenings)).rejects.toMatchObject({
+      code: 'failed-precondition',
+    });
+    expect(backend.writes).toHaveLength(writes);
+    await backend.command('save', 'edit-metadata', {
+      name: 'Edited',
+      phone: '',
+      address: 'New address',
+      notes: '',
+      isActive: false,
+    });
+    expect(backend.docs[balancePath()].balanceExact).toBe('100.00');
+    expect(backend.docs[balancePath('USD')].balanceExact).toBe('-20.00');
+  });
+
+  it('never creates a partial merchant when any opening target collides', async () => {
+    const backend = setup();
+    delete backend.docs['spaces/s/merchants/m'];
+    backend.docs[balancePath('USD')] = { sentinel: true };
+    await expect(backend.command('save', 'create', createWithOpenings)).rejects.toMatchObject({
+      code: 'already-exists',
+    });
+    expect(backend.writes).toHaveLength(0);
+    expect(backend.docs['spaces/s/merchants/m']).toBeUndefined();
+    expect(backend.docs[balancePath()]).toBeUndefined();
+  });
+
+  it('rejects duplicate currencies, unsupported amounts and forged metadata without writes', async () => {
+    for (const extra of [
+      { openingBalances: [createWithOpenings.openingBalances[0], createWithOpenings.openingBalances[0]] },
+      { openingBalances: [{ currency: 'TRY', amountExact: '1.001' }] },
+      { openingBalances: [{ currency: 'TRY', amountExact: '1.00', userId: 'other' }] },
+      { address: 'a'.repeat(501) },
+      { notes: 'a'.repeat(2001) },
+    ]) {
+      const backend = setup();
+      delete backend.docs['spaces/s/merchants/m'];
+      await expect(backend.command('save', 'create', { ...createWithOpenings, ...extra })).rejects.toMatchObject({
+        code: 'invalid-argument',
+      });
+      expect(backend.writes).toHaveLength(0);
+    }
+  });
+
+  it('atomically records every material separately, without cash, preserving per-operation coverage', async () => {
+    const backend = setup();
+    const result = await backend.command('purchase', 'batch', separatePurchase);
+    expect(result).toMatchObject({ balanceExact: '4500.00', cashDeltaExact: '0.00' });
+    const operations = Object.entries(backend.docs)
+      .filter(([path]) => path.startsWith('spaces/s/merchantOperations/'))
+      .map(([, row]) => row);
+    expect(operations).toHaveLength(3);
+    expect(operations.map((row) => row.totalExact)).toEqual(['2000.00', '1500.00', '1000.00']);
+    expect(operations.every((row) => row.lines.length === 1 && row.paidExact === '0.00')).toBe(true);
+    expect(backend.docs[balancePath()]).toMatchObject({ balanceExact: '4500.00', revision: 3 });
+    expect(Object.keys(backend.docs).some((path) => path.startsWith('spaces/s/transactions/'))).toBe(false);
+    const writes = backend.writes.length;
+    await expect(backend.command('purchase', 'batch', separatePurchase)).resolves.toMatchObject({
+      outcome: 'replayed',
+    });
+    expect(backend.writes).toHaveLength(writes);
+    await expect(
+      backend.command('purchase', 'batch', {
+        ...separatePurchase,
+        lines: [{ name: 'Different', quantity: '1', unitPrice: '5' }],
+      }),
+    ).rejects.toMatchObject({ code: 'already-exists' });
+    expect(backend.writes).toHaveLength(writes);
+    await backend.command('reverse', 'one-material-correction', {
+      currency: 'TRY',
+      targetOperationId: operations[1].id,
+      reason: 'Only batteries entered incorrectly',
+    });
+    expect(backend.docs[balancePath()]).toMatchObject({ balanceExact: '3000.00', revision: 4 });
+    expect(backend.docs[`spaces/s/merchantOperations/${operations[0].id}`].reversedByOperationId).toBeUndefined();
+  });
+
+  it('rejects the entire material batch if any line is invalid or rounds to zero', async () => {
+    for (const line of [
+      { name: 'Bad', quantity: '0.0001', unitPrice: '100' },
+      { name: 'Zero', quantity: '0.001', unitPrice: '0.0001' },
+    ]) {
+      const backend = setup();
+      await expect(
+        backend.command('purchase', 'batch', {
+          ...separatePurchase,
+          lines: [purchase.lines[0], line],
+        }),
+      ).rejects.toMatchObject({ code: 'invalid-argument' });
+      expect(backend.writes).toHaveLength(0);
+    }
+  });
+
+  it('rejects a child-ID collision before any batch write', async () => {
+    const backend = setup();
+    backend.docs[`spaces/s/merchantOperations/purchase-${hash(['batch', 2])}`] = { sentinel: true };
+    await expect(backend.command('purchase', 'batch', separatePurchase)).rejects.toMatchObject({
+      code: 'already-exists',
+    });
+    expect(backend.writes).toHaveLength(0);
+  });
+
+  it('seals simultaneous batch retries once and recomputes against the transaction retry balance', async () => {
+    const backend = setup();
+    backend.retryOnce(() => {
+      backend.docs[balancePath()] = {
+        id: hash(['m', 'TRY']),
+        workspaceId: 's',
+        storeId: 'store',
+        merchantId: 'm',
+        currency: 'TRY',
+        version: 1,
+        balanceExact: '-200.00',
+        revision: 1,
+      };
+    });
+    const results = await Promise.all([
+      backend.command('purchase', 'batch', separatePurchase),
+      backend.command('purchase', 'batch', separatePurchase),
+    ]);
+    expect(results.map((result) => result.outcome).sort()).toEqual(['completed', 'replayed']);
+    expect(backend.docs[balancePath()]).toMatchObject({ balanceExact: '4300.00', revision: 4 });
+  });
+
+  it('cannot use separate material purchases to bypass read-only membership or inactivity', async () => {
+    const viewer = setup('viewer');
+    await expect(viewer.command('purchase', 'batch', separatePurchase)).rejects.toMatchObject({
+      code: 'permission-denied',
+    });
+    expect(viewer.writes).toHaveLength(0);
+    const inactive = setup();
+    inactive.docs['spaces/s/merchants/m'].isActive = false;
+    await expect(inactive.command('purchase', 'batch', separatePurchase)).rejects.toMatchObject({ code: 'not-found' });
+    expect(inactive.writes).toHaveLength(0);
+  });
+
+  it('requires separate purchases to remain on account, preserving the old combined-purchase API', async () => {
+    for (const changed of [{ paidExact: '1.00' }, { source: 'external' }, { separateLines: false }]) {
+      const backend = setup();
+      await expect(backend.command('purchase', 'batch', { ...separatePurchase, ...changed })).rejects.toMatchObject({
+        code: 'invalid-argument',
+      });
+      expect(backend.writes).toHaveLength(0);
+    }
+  });
+
   it('keeps one balance revision per immutable financial operation for complete local-export coverage', async () => {
     const backend = setup();
     await backend.command('opening', 'opening-count', { currency: 'TRY', amountExact: '100.00' });
@@ -48,7 +243,11 @@ describe('merchant trusted command (not deployed)', () => {
     await backend.command('payment', 'cash-count', payment);
     await backend.command('payment', 'bank-count', { ...payment, source: 'external' });
     await backend.command('directPayment', 'direct-count', { currency: 'TRY', amountExact: '130.00', customerId: 'c' });
-    await backend.command('reverse', 'reverse-count', { currency: 'TRY', targetOperationId: 'cash-count', reason: 'Correction' });
+    await backend.command('reverse', 'reverse-count', {
+      currency: 'TRY',
+      targetOperationId: 'cash-count',
+      reason: 'Correction',
+    });
     await backend.command('save', 'metadata-count', { name: 'Renamed', phone: '', isActive: true });
     const operations = Object.entries(backend.docs).filter(([path]) => path.startsWith('spaces/s/merchantOperations/'));
     expect(operations).toHaveLength(6);
@@ -369,8 +568,9 @@ describe('merchant trusted command (not deployed)', () => {
 
   it('rejects an opening whose canonical form exceeds the stored balance precision boundary', async () => {
     const backend = setup();
-    await expect(backend.command('opening', 'large-opening', { currency: 'TRY', amountExact: '9'.repeat(80) }))
-      .rejects.toMatchObject({ code: 'invalid-argument' });
+    await expect(
+      backend.command('opening', 'large-opening', { currency: 'TRY', amountExact: '9'.repeat(80) }),
+    ).rejects.toMatchObject({ code: 'invalid-argument' });
     expect(backend.writes).toHaveLength(0);
   });
 

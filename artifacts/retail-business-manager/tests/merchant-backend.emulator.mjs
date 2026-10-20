@@ -90,6 +90,45 @@ async function fixture(suffix) {
   };
 }
 try {
+  const materials = await fixture('separate-materials');
+  const materialInput = { separateLines: true, paidExact: '0.00', source: 'cash', lines: [
+    { name: 'Screens', quantity: '2', unitPrice: '100.0050' },
+    { name: 'Batteries', quantity: '3', unitPrice: '20.0000' },
+  ] };
+  const materialResults = await Promise.all([
+    materials.merchant('purchase', 'atomic-materials', materialInput),
+    materials.merchant('purchase', 'atomic-materials', materialInput),
+  ]);
+  assert.deepEqual(materialResults.map(row => row.outcome).sort(), ['completed', 'replayed']);
+  assert.equal((await materials.balance()).data().balanceExact, '260.01');
+  assert.equal((await materials.balance()).data().revision, 2);
+  const materialRows = (await materials.space.collection('merchantOperations').get()).docs;
+  assert.equal(materialRows.length, 2);
+  assert.ok(materialRows.every(row => row.data().lines.length === 1));
+  assert.equal((await materials.space.collection('transactions').get()).size, 0);
+  await assert.rejects(materials.merchant('purchase', 'atomic-materials', {
+    ...materialInput, lines: [{ name: 'Changed', quantity: '1', unitPrice: '1' }],
+  }), { code: 'already-exists' });
+  const battery = materialRows.find(row => row.data().lines[0].name === 'Batteries');
+  await materials.merchant('reverse', 'one-material-only', { targetOperationId: battery.id, reason: 'Wrong material' });
+  assert.equal((await materials.balance()).data().balanceExact, '200.01');
+  assert.equal((await materials.balance()).data().revision, 3);
+  console.log('Merchant material emulator — atomic separate rows, concurrent replay, changed-payload rejection and single-material correction: PASS');
+  const beforeInvalid = (await materials.space.collection('merchantOperations').get()).size;
+  await assert.rejects(materials.merchant('purchase', 'invalid-batch', {
+    ...materialInput, lines: [...materialInput.lines, { name: 'Bad', quantity: '0.0001', unitPrice: '1' }],
+  }), { code: 'invalid-argument' });
+  assert.equal((await materials.space.collection('merchantOperations').get()).size, beforeInvalid);
+  assert.equal((await materials.space.collection('operationReceipts').doc('invalid-batch').get()).exists, false);
+  console.log('Merchant material emulator — an invalid material cannot leave a partial purchase or receipt: PASS');
+  const statementRequest = request({ action: 'statement', operationId: 'statement-auth',
+    spaceId: materials.space.id, storeId: materials.base.storeId, merchantId: 'test-merchant' });
+  assert.deepEqual((await merchantCommandHandler(statementRequest, runtime)).balances,
+    [{ currency: 'TRY', revision: 3, balanceExact: '200.01' }]);
+  assert.equal((await materials.space.collection('operationReceipts').doc('statement-auth').get()).exists, false);
+  await materials.space.collection('members').doc('merchant-test-owner').update({ role: 'viewer' });
+  await assert.rejects(merchantCommandHandler(statementRequest, runtime), { code: 'permission-denied' });
+  console.log('Merchant statement emulator — fresh Viewer rejection and read-only completeness authorization: PASS');
   const catalog = await fixture('shared-catalog');
   const catalogInput = {spaceId:catalog.space.id,storeId:catalog.base.storeId,operationId:'catalog-a',settings:{revision:0,materials:[{id:'goods',name:'Shared goods',prices:{TRY:'100.0000'},isActive:true}],paymentMethods:[{id:'bank-label',name:'Bank label only',isActive:true}]}};
   const saves = await Promise.allSettled(['catalog-a','catalog-b'].map(operationId=>merchantSettingsCommandHandler(request({...catalogInput,operationId}),runtime)));

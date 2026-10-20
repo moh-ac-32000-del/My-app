@@ -6,6 +6,8 @@ export interface Merchant {
   storeId: string;
   name: string;
   phone: string;
+  address?: string;
+  notes?: string;
   isActive: boolean;
   createdAt: string;
   createdByUserId: string;
@@ -73,7 +75,15 @@ export interface MerchantSnapshot {
 }
 type Financial = { currency: CurrencyCode; note?: string };
 export type MerchantDraftCommand = { operationId: string; merchantId: string } & (
-  | { action: 'save'; name: string; phone: string; isActive: boolean }
+  | {
+      action: 'save';
+      name: string;
+      phone: string;
+      address?: string;
+      notes?: string;
+      isActive: boolean;
+      openingBalances?: Array<{ currency: CurrencyCode; amountExact: string }>;
+    }
   | (Financial & { action: 'opening'; amountExact: string })
   | (Financial & {
       action: 'purchase';
@@ -81,8 +91,23 @@ export type MerchantDraftCommand = { operationId: string; merchantId: string } &
       paidExact: string;
       source: 'cash' | 'external';
       operationDate?: string;
+      separateLines?: true;
     })
-  | (Financial & { action: 'payment'; amountExact: string; source: 'cash' | 'external'; operationDate?: string; paymentMethodId?: string; paymentMethodName?: string })
-  | (Financial & { action: 'directPayment'; amountExact: string; customerId: string })
+  | (Financial & {
+      action: 'payment';
+      amountExact: string;
+      source: 'cash' | 'external';
+      operationDate?: string;
+      paymentMethodId?: string;
+      paymentMethodName?: string;
+    })
+  | (Financial & {
+      action: 'directPayment';
+      amountExact: string;
+      customerId: string;
+      operationDate?: string;
+      paymentMethodId?: string;
+      paymentMethodName?: string;
+    })
   | { action: 'reverse'; currency: CurrencyCode; targetOperationId: string; reason: string }
 );

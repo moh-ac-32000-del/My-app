@@ -51,6 +51,43 @@ function setup(role: unknown = 'owner') {
   return { ...backend, save, payment };
 }
 describe('shared merchant reference settings and documentary dates', () => {
+  it('keeps a direct-payment method descriptive, preserves actual recording time, and replays after method rename', async () => {
+    const b = setup();
+    await b.save();
+    const input = {
+      auth: { uid: 'u' },
+      data: {
+        action: 'directPayment',
+        spaceId: 's',
+        storeId: 'store',
+        merchantId: 'm',
+        operationId: 'direct-method',
+        currency: 'TRY',
+        amountExact: '130.00',
+        customerId: 'c',
+        operationDate: '2026-01-01',
+        paymentMethodId: 'method',
+        paymentMethodName: 'Bank transfer (label only)',
+      },
+    };
+    await merchantCommandHandler(input as never, b.runtime);
+    expect(b.docs['spaces/s/merchantOperations/direct-method']).toMatchObject({
+      paymentMethodName: 'Bank transfer (label only)',
+      operationDate: '2026-01-01',
+      createdAt: workspaceTestTime,
+      cashDeltaExact: '0.00',
+      source: 'customer-to-merchant',
+    });
+    expect(Object.keys(b.docs).some((path) => path.startsWith('spaces/s/transactions/'))).toBe(false);
+    b.docs['spaces/s/merchantSettings/config'].paymentMethods[0].name = 'Renamed';
+    const writes = b.writes.length;
+    await expect(merchantCommandHandler(input as never, b.runtime)).resolves.toMatchObject({ outcome: 'replayed' });
+    expect(b.writes).toHaveLength(writes);
+    await expect(
+      merchantCommandHandler({ ...input, data: { ...input.data, operationId: 'new-direct' } } as never, b.runtime),
+    ).rejects.toMatchObject({ code: 'failed-precondition' });
+    expect(b.writes).toHaveLength(writes);
+  });
   it.each(['owner', 'editor'])('%s saves shared settings without financial postings', async (role) => {
     const b = setup(role);
     await b.save();

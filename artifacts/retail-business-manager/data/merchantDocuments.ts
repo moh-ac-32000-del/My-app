@@ -40,6 +40,8 @@ export function merchantFromDocument(id: string, value: unknown, spaceId: string
     storeId,
     name: text(record.name),
     phone: text(record.phone, false),
+    ...(record.address !== undefined ? { address: text(record.address, false) } : {}),
+    ...(record.notes !== undefined ? { notes: text(record.notes, false) } : {}),
     isActive: record.isActive,
     createdAt: date(record.createdAt),
     updatedAt: date(record.updatedAt),

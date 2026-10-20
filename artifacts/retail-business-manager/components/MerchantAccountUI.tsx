@@ -19,9 +19,11 @@ export function MerchantButton({
   disabled?: boolean;
   selected?: boolean;
   testID?: string;
-  tone?: 'primary' | 'payment';
+  tone?: 'primary' | 'payment' | 'purchase' | 'direct';
 }) {
   const colors = useColors();
+  const accent =
+    tone === 'payment' ? '#ef4444' : tone === 'purchase' ? '#3b82f6' : tone === 'direct' ? '#eab308' : colors.primary;
   return (
     <Pressable
       testID={testID}
@@ -31,18 +33,24 @@ export function MerchantButton({
       onPress={onPress}
       style={{
         borderWidth: 1,
-        borderColor: tone === 'payment' ? colors.warning : colors.border,
+        borderColor: tone !== 'primary' ? accent : colors.border,
         borderRadius: 14,
         paddingHorizontal: 16,
         paddingVertical: 13,
         opacity: disabled ? 0.45 : 1,
-        backgroundColor: selected ? (tone === 'payment' ? colors.warning : colors.primary) : colors.input,
+        backgroundColor: selected ? accent : colors.input,
         minHeight: 46,
       }}
     >
       <Text
         style={{
-          color: selected ? colors.primaryForeground : colors.foreground,
+          color: selected
+            ? tone === 'direct'
+              ? '#111827'
+              : tone === 'primary'
+                ? colors.primaryForeground
+                : '#ffffff'
+            : colors.foreground,
           textAlign: 'center',
           fontWeight: '600',
         }}

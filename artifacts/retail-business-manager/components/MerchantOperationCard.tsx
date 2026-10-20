@@ -1,89 +1,69 @@
 import React from 'react';
-import { Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import { GlassCard } from './AppShell';
-import { MerchantButton } from './MerchantAccountUI';
 import { merchantActionLabels } from './MerchantCommandForm';
 import { useColors } from '@/hooks/useColors';
 import { useI18n } from '@/hooks/useI18n';
 import { formatExactMoney } from '@/data/exactMoneyPresentation';
+import { subtractCustomerExact } from '@/data/customerCreditAccounting';
 import type { MerchantOperation } from '@/types/merchant';
 
-export function MerchantOperationCard({
-  operation,
-  onReverse,
-}: {
-  operation: MerchantOperation;
-  onReverse?: () => void;
-}) {
+/** One compact ledger row: balances belong to the account header, never to the row. */
+export function MerchantOperationCard({ operation, onPress }: { operation: MerchantOperation; onPress?: () => void }) {
   const colors = useColors();
   const { t, language, isRTL } = useI18n();
+  const accent =
+    operation.action === 'directPayment'
+      ? '#eab308'
+      : operation.action === 'payment'
+        ? '#ef4444'
+        : operation.action === 'purchase'
+          ? '#3b82f6'
+          : colors.mutedForeground;
   const text = { color: colors.foreground, textAlign: isRTL ? ('right' as const) : ('left' as const) };
-  const payment = operation.action === 'payment' || operation.action === 'directPayment';
+  const rawAmount = operation.totalExact ?? operation.amountExact ?? '0.00';
+  const amount = operation.action === 'reverse' ? subtractCustomerExact('0.00', rawAmount) : rawAmount;
   return (
-    <GlassCard
-      testID={`merchant-operation-${operation.id}`}
-      style={{ gap: 10, borderColor: payment ? colors.warning : colors.border, borderWidth: payment ? 2 : 1 }}
-    >
-      <Text style={{ ...text, fontWeight: '700', color: payment ? colors.warning : colors.primary }}>
-        {t(merchantActionLabels[operation.action])}
-      </Text>
-      {operation.operationDate ? (
-        <Text style={text}>
-          {t('merchantOperationDate')}: {operation.operationDate}
-        </Text>
-      ) : null}
-      <Text style={{ ...text, color: colors.mutedForeground }}>
-        {new Date(operation.createdAt).toLocaleString(language === 'tr' ? 'tr-TR' : language)}
-      </Text>
-      {operation.paymentMethodName ? (
-        <Text style={text}>
-          {t('merchantPaymentMethod')}: {operation.paymentMethodName}
-        </Text>
-      ) : null}
-      {operation.customerName ? (
-        <Text style={text}>
-          {t('merchantCustomer')}: {operation.customerName}
-        </Text>
-      ) : null}
-      {operation.note ? <Text style={text}>{operation.note}</Text> : null}
-      {operation.lines?.map((line, index) => (
-        <View key={index} style={{ gap: 4 }}>
-          <Text style={text}>{line.name}</Text>
-          <Text style={{ ...text, color: colors.mutedForeground }}>
-            {line.quantity} × {line.unitPrice} = {formatExactMoney(line.totalExact, operation.currency, language)}
+    <Pressable accessibilityRole="button" accessibilityLabel={t('merchantDetails')} onPress={onPress}>
+      <GlassCard testID={`merchant-operation-${operation.id}`} style={{ gap: 8, padding: 14, borderColor: accent }}>
+        <View style={{ flexDirection: isRTL ? 'row-reverse' : 'row', justifyContent: 'space-between', gap: 10 }}>
+          <Text style={{ ...text, color: accent, fontFamily: 'Inter_700Bold', flexShrink: 1 }}>
+            {t(merchantActionLabels[operation.action])}
+          </Text>
+          <Text style={{ ...text, fontFamily: 'Inter_700Bold' }}>
+            {formatExactMoney(amount, operation.currency, language)}
           </Text>
         </View>
-      ))}
-      {operation.totalExact ? (
-        <Text style={text}>
-          {t('merchantTotal')}: {formatExactMoney(operation.totalExact, operation.currency, language)}
+        <Text style={{ ...text, color: colors.mutedForeground }}>
+          {operation.operationDate ?? new Date(operation.createdAt).toLocaleDateString(language)}
         </Text>
-      ) : null}
-      {operation.amountExact ? (
-        <Text style={{ ...text, fontSize: 20, fontWeight: '700' }}>
-          {t('amount')}: {formatExactMoney(operation.amountExact, operation.currency, language)}
-        </Text>
-      ) : null}
-      {operation.paidExact && operation.paidExact !== '0.00' ? (
-        <Text style={text}>
-          {t('merchantPaid')}: {formatExactMoney(operation.paidExact, operation.currency, language)}
-        </Text>
-      ) : null}
-      {operation.source === 'external' ? <Text style={text}>{t('merchantExternal')}</Text> : null}
-      <Text style={text}>
-        {t('merchantBalance')}: {formatExactMoney(operation.balanceAfterExact, operation.currency, language)}
-      </Text>
-      <Text style={{ ...text, color: colors.mutedForeground }}>
-        {operation.cashDeltaExact === '0.00'
-          ? t('merchantNoncash')
-          : `${t('merchantCashEffect')}: ${formatExactMoney(operation.cashDeltaExact, operation.currency, language)}`}
-      </Text>
-      {operation.reversedByOperationId ? (
-        <Text style={{ ...text, color: colors.warning }}>{t('merchantReversed')}</Text>
-      ) : null}
-      {onReverse && !operation.reversedByOperationId && operation.action !== 'reverse' ? (
-        <MerchantButton title={t('merchantReverse')} onPress={onReverse} />
-      ) : null}
-    </GlassCard>
+        {operation.lines?.map((line, index) => (
+          <Text key={index} style={text}>
+            {line.name}
+          </Text>
+        ))}
+        {operation.paymentMethodName ? (
+          <Text style={text}>
+            {t('merchantPaymentMethod')}: {operation.paymentMethodName}
+          </Text>
+        ) : null}
+        {operation.customerName ? (
+          <Text style={text}>
+            {t('merchantCustomer')}: {operation.customerName}
+          </Text>
+        ) : null}
+        {operation.note ? (
+          <Text numberOfLines={2} style={{ ...text, color: colors.mutedForeground }}>
+            {operation.note}
+          </Text>
+        ) : null}
+        {operation.cashDeltaExact === '0.00' ? (
+          <Text style={{ ...text, color: colors.mutedForeground }}>{t('merchantNoncash')}</Text>
+        ) : null}
+        {operation.reversedByOperationId ? (
+          <Text style={{ ...text, color: colors.warning }}>{t('merchantReversed')}</Text>
+        ) : null}
+      </GlassCard>
+    </Pressable>
   );
 }

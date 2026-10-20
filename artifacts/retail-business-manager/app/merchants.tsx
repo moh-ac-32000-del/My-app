@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { AppShell, EmptyState, GlassCard, PageHeader } from '@/components/AppShell';
 import { MerchantButton, MerchantField, MerchantGear } from '@/components/MerchantAccountUI';
 import { MerchantCommandForm } from '@/components/MerchantCommandForm';
@@ -19,6 +20,7 @@ export default function MerchantsScreen() {
   const colors = useColors();
   const [search, setSearch] = useState('');
   const [adding, setAdding] = useState(false);
+  const [activeOnly, setActiveOnly] = useState(true);
   const [confirmed, setConfirmed] = useState(false);
   const totals = useMemo(() => {
     try {
@@ -48,14 +50,27 @@ export default function MerchantsScreen() {
           <View style={{ flexDirection: isRTL ? 'row-reverse' : 'row', gap: 8 }}>
             <MerchantGear label={t('merchantSettings')} onPress={() => router.push('/merchant-settings' as never)} />
             {canWriteBusiness && !isLoading && !unavailable && !adding ? (
-              <MerchantButton
-                title={t('add')}
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={t('add')}
                 testID="merchant-add"
                 onPress={() => {
                   setConfirmed(false);
                   setAdding(true);
                 }}
-              />
+                style={{
+                  width: 42,
+                  height: 42,
+                  borderRadius: 15,
+                  borderWidth: 1,
+                  borderColor: colors.primary,
+                  backgroundColor: colors.primary,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Ionicons name="add" size={21} color={colors.primaryForeground} />
+              </Pressable>
             ) : null}
           </View>
         }
@@ -96,11 +111,16 @@ export default function MerchantsScreen() {
             </GlassCard>
           ))}
           <MerchantField title={t('merchantName')} value={search} onChange={setSearch} />
+          <View style={{ flexDirection: isRTL ? 'row-reverse' : 'row', gap: 8 }}>
+            <MerchantButton title={t('merchantActive')} selected={activeOnly} onPress={() => setActiveOnly(true)} />
+            <MerchantButton title={t('merchantInactive')} selected={!activeOnly} onPress={() => setActiveOnly(false)} />
+          </View>
           {merchants.length === 0 ? (
             <EmptyState icon="storefront-outline" title={t('merchantEmpty')} hint={t('merchantOpeningHint')} />
           ) : (
             merchants
               .filter((merchant) => merchant.name.toLocaleLowerCase().includes(search.toLocaleLowerCase()))
+              .filter((merchant) => merchant.isActive === activeOnly)
               .sort((a, b) => Number(b.isActive) - Number(a.isActive) || a.name.localeCompare(b.name, language))
               .map((merchant) => (
                 <Pressable
@@ -109,8 +129,33 @@ export default function MerchantsScreen() {
                   accessibilityRole="button"
                   onPress={() => router.push({ pathname: '/merchant/[id]' as never, params: { id: merchant.id } })}
                 >
-                  <GlassCard style={{ gap: 9 }}>
-                    <Text style={{ ...text, fontSize: 20, fontWeight: '600' }}>{merchant.name}</Text>
+                  <GlassCard style={{ gap: 9, padding: 14 }}>
+                    <View style={{ flexDirection: isRTL ? 'row-reverse' : 'row', alignItems: 'center', gap: 11 }}>
+                      <View
+                        style={{
+                          width: 46,
+                          height: 46,
+                          borderRadius: 16,
+                          borderWidth: 1,
+                          borderColor: colors.primary,
+                          backgroundColor: colors.input,
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                        }}
+                      >
+                        <Text style={{ color: colors.primary, fontFamily: 'Inter_700Bold', fontSize: 18 }}>
+                          {merchant.name.charAt(0)}
+                        </Text>
+                      </View>
+                      <Text style={{ ...text, flex: 1, fontSize: 15, fontFamily: 'Inter_700Bold' }}>
+                        {merchant.name}
+                      </Text>
+                      <Ionicons
+                        name={isRTL ? 'chevron-back' : 'chevron-forward'}
+                        size={18}
+                        color={colors.mutedForeground}
+                      />
+                    </View>
                     {merchant.phone ? (
                       <Text style={{ ...text, color: colors.mutedForeground }}>{merchant.phone}</Text>
                     ) : null}
