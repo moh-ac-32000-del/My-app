@@ -38,6 +38,7 @@
     "tests/settlement-trusted-backend.test.ts",
     "tests/customer-credit-backend.test.ts",
     "tests/merchant-command.test.ts",
+    "tests/merchant-settings.test.ts",
     "tests/trusted-debt-idempotency.test.ts",
     "tests/trusted-cash-transaction-idempotency.test.ts",
     "node_modules",
