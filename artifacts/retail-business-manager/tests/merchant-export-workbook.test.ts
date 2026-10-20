@@ -5,9 +5,31 @@ import { exactExportCell } from '@/services/exactSpreadsheetReport';
 import { groupedReportLabels } from '@/services/spreadsheetGroupedReport';
 import { merchantExportLabels } from '@/constants/merchantExportLabels';
 import { merchantExportFixture } from './fixtures/merchantExportSnapshot';
+import { merchantJournalEvent } from '@/data/merchantJournal';
+import type { MerchantOperation } from '@/types/merchant';
 const rows = (sheet: XLSX.WorkSheet) =>
   XLSX.utils.sheet_to_json<(string | number | null)[]>(sheet, { header: 1, raw: true, defval: null });
 describe('readable exact merchant/customer-credit XLSX', () => {
+  it.each(['ar','en','tr'] as const)('retains documentary dates and literal method labels in statements and archived reports in %s',language=>{
+    const fixture=merchantExportFixture();
+    const original=fixture.records.merchantOperations.find(row=>row.id==='purchase')!.data;
+    const op={...original,id:'cash-payment',action:'payment',totalExact:undefined,paidExact:undefined,lines:undefined,amountExact:'50.00',source:'cash',transactionId:'cash-payment',balanceBeforeExact:'3370.00',balanceAfterExact:'3320.00',cashDeltaExact:'-50.00',operationDate:'2026-10-01',paymentMethodId:'method',paymentMethodName:'=BANK LABEL'} as unknown as MerchantOperation;
+    fixture.records.merchantOperations.push({id:op.id,data:op as unknown as Record<string,unknown>});
+    const balance=fixture.records.merchantBalances.find(row=>row.data.merchantId==='m')!.data;
+    balance.revision=3;balance.balanceExact='3320.00';
+    fixture.records.transactions.push({id:op.id,data:{id:op.id,workspaceId:'s',storeId:'store',merchantId:'m',merchantOperationId:op.id,type:'cash_out',amount:50,amountExact:'50.00',currency:'TRY',createdAt:op.createdAt,updatedAt:op.createdAt,note:''}});
+    (fixture.records.dailyArchives[0].data.snapshot as unknown[]).push(merchantJournalEvent(op));
+    const snapshot=fixture.snapshot(),before=JSON.stringify(snapshot);
+    const book=XLSX.read(spreadsheetBytes(snapshot,language),{type:'array'});
+    for(const name of [merchantExportLabels[language].merchants,groupedReportLabels[language].cash]) {
+      const sheet=book.Sheets[name];
+      expect(JSON.stringify(sheet)).toContain('=BANK LABEL');
+      expect(Object.entries(sheet).some(([key,value])=>!key.startsWith('!')&&String(value.v).includes('=BANK LABEL')&&value.t==='s'&&!value.f)).toBe(true);
+    }
+    expect(snapshot.accountData!.operations.find(row=>row.id===op.id)?.operationDate).toBe('2026-10-01');
+    expect(snapshot.accountData!.archives[0].snapshot.at(-1)?.operationDate).toBe('2026-10-01');
+    expect(JSON.stringify(snapshot)).toBe(before);
+  });
   it('does not visually round a representable fine fraction to zero or underflow a subnormal value', () => {
     for (const value of ['1.005', '120.005', '0.000000000000001']) {
       const cell = exactExportCell(value);

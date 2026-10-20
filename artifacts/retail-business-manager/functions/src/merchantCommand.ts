@@ -12,6 +12,7 @@ import { legacyAmountExact, planCustomerPayment } from '../../data/customerCredi
 import { readCustomerCredit, writeCustomerCredit } from './customerCreditState.js';
 import { assertWorkspaceAccess } from './workspaceAccess.js';
 import { reverseMerchantOperation } from './merchantReversal.js';
+import { merchantOperationDate, validateMerchantSettings } from '../../data/merchantSettings.js';
 
 /** Trusted command; source registration does not imply deployment or practical acceptance. */
 export interface MerchantRuntime {
@@ -33,6 +34,9 @@ type Input = {
   source?: 'cash' | 'external';
   customerId?: string;
   note?: string;
+  operationDate?: string;
+  paymentMethodId?: string;
+  paymentMethodName?: string;
   targetOperationId?: string;
   reason?: string;
   lines?: Array<{ name: string; quantity: string; unitPrice: string }>;
@@ -100,9 +104,9 @@ function validate(value: unknown): Input {
         : action === 'opening'
           ? ['currency', 'amountExact', 'note']
           : action === 'purchase'
-            ? ['currency', 'paidExact', 'source', 'lines', 'note']
+            ? ['currency', 'paidExact', 'source', 'lines', 'note', 'operationDate']
             : action === 'payment'
-              ? ['currency', 'amountExact', 'source', 'note']
+              ? ['currency', 'amountExact', 'source', 'note', 'operationDate', 'paymentMethodId', 'paymentMethodName']
               : ['currency', 'amountExact', 'customerId', 'note'];
   if (Object.keys(value).some((key) => ![...base, ...allowed].includes(key))) invalid('Unexpected request field');
   const input: Input = {
@@ -128,6 +132,16 @@ function validate(value: unknown): Input {
     return input;
   }
   input.note = label(value.note ?? '', 2000);
+  if (value.operationDate !== undefined) {
+    try { input.operationDate = merchantOperationDate(value.operationDate); }
+    catch { invalid('Invalid documentary date'); }
+  }
+  if (value.paymentMethodId !== undefined || value.paymentMethodName !== undefined) {
+    input.paymentMethodId = id(value.paymentMethodId);
+    input.paymentMethodName = label(value.paymentMethodName, 200, true);
+    // A descriptive method is not an instruction to choose a different money source.
+    if (value.source !== 'cash') invalid('Descriptive payment methods apply to actual drawer payments');
+  }
   if (action === 'purchase' || action === 'payment') {
     if (value.source !== 'cash' && value.source !== 'external') invalid('Payment source is required');
     input.source = value.source;
@@ -219,6 +233,16 @@ export async function merchantCommandHandler(request: CallableRequest<unknown>, 
       return { ...receipt.result, outcome: 'replayed' };
     }
     const now = runtime.now();
+    if (input.paymentMethodId) {
+      const settingsSnap = await tx.get(space.collection('merchantSettings').doc('config'));
+      const settings = settingsSnap.data();
+      if (settings?.workspaceId !== input.spaceId || settings.storeId !== input.storeId || settings.version !== 1)
+        throw new HttpsError('failed-precondition', 'Payment methods unavailable');
+      let method;
+      try { method = validateMerchantSettings(settings).paymentMethods.find(row => row.id === input.paymentMethodId && row.isActive); }
+      catch { throw new HttpsError('data-loss','Invalid payment methods'); }
+      if (!method || method.name !== input.paymentMethodName) throw new HttpsError('failed-precondition','Payment method changed; reload');
+    }
     const scope = { workspaceId: input.spaceId, storeId: input.storeId };
     const finish = (result: Record<string, unknown>) => {
       tx.create(receiptRef, {
@@ -452,6 +476,8 @@ export async function merchantCommandHandler(request: CallableRequest<unknown>, 
       action: input.action,
       currency,
       note: input.note!,
+      ...(input.operationDate ? { operationDate: input.operationDate } : {}),
+      ...(input.paymentMethodId ? { paymentMethodId: input.paymentMethodId, paymentMethodName: input.paymentMethodName! } : {}),
       balanceBeforeExact: balance.balance,
       balanceAfterExact: next,
       cashDeltaExact,
@@ -471,6 +497,9 @@ export async function merchantCommandHandler(request: CallableRequest<unknown>, 
         merchantId: input.merchantId,
         merchantOperationId: input.operationId,
         note: input.note!,
+        merchantName: merchant.name,
+        ...(input.operationDate ? { operationDate: input.operationDate } : {}),
+        ...(input.paymentMethodId ? { paymentMethodId: input.paymentMethodId, paymentMethodName: input.paymentMethodName! } : {}),
         createdAt: now,
         updatedAt: now,
         createdByUserId: uid,

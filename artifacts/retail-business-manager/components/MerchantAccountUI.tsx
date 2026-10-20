@@ -12,12 +12,14 @@ export function MerchantButton({
   disabled = false,
   selected = false,
   testID,
+  tone = 'primary',
 }: {
   title: string;
   onPress: () => void;
   disabled?: boolean;
   selected?: boolean;
   testID?: string;
+  tone?: 'primary' | 'payment';
 }) {
   const colors = useColors();
   return (
@@ -29,12 +31,12 @@ export function MerchantButton({
       onPress={onPress}
       style={{
         borderWidth: 1,
-        borderColor: colors.border,
+        borderColor: tone === 'payment' ? colors.warning : colors.border,
         borderRadius: 14,
         paddingHorizontal: 16,
         paddingVertical: 13,
         opacity: disabled ? 0.45 : 1,
-        backgroundColor: selected ? colors.primary : colors.input,
+        backgroundColor: selected ? (tone === 'payment' ? colors.warning : colors.primary) : colors.input,
         minHeight: 46,
       }}
     >
@@ -47,6 +49,39 @@ export function MerchantButton({
       >
         {title}
       </Text>
+    </Pressable>
+  );
+}
+export function MerchantGear({
+  onPress,
+  disabled = false,
+  label,
+}: {
+  onPress: () => void;
+  disabled?: boolean;
+  label: string;
+}) {
+  const colors = useColors();
+  return (
+    <Pressable
+      testID="merchant-settings-gear"
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      disabled={disabled}
+      onPress={onPress}
+      style={{
+        width: 46,
+        height: 46,
+        borderRadius: 15,
+        borderWidth: 1,
+        borderColor: colors.border,
+        backgroundColor: colors.input,
+        alignItems: 'center',
+        justifyContent: 'center',
+        opacity: disabled ? 0.5 : 1,
+      }}
+    >
+      <Text style={{ fontSize: 26, color: colors.primary }}>⚙</Text>
     </Pressable>
   );
 }

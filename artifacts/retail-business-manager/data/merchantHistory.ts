@@ -34,6 +34,9 @@ const immutable: Array<keyof MerchantOperation> = [
   'debtId',
   'customerChargeExact',
   'reversedAction',
+  'operationDate',
+  'paymentMethodId',
+  'paymentMethodName',
 ];
 
 /** Keep page boundaries stable as new head entries arrive. Never net, mutate or recalculate operations. */

@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { AppShell, EmptyState, GlassCard, PageHeader } from '@/components/AppShell';
-import { MerchantButton, MerchantField } from '@/components/MerchantAccountUI';
+import { MerchantButton, MerchantField, MerchantGear } from '@/components/MerchantAccountUI';
 import { MerchantCommandForm } from '@/components/MerchantCommandForm';
 import { useMerchantAccounts } from '@/hooks/useMerchantAccounts';
 import { useStore } from '@/context/StoreContext';
@@ -45,16 +45,19 @@ export default function MerchantsScreen() {
       <PageHeader
         title={t('merchants')}
         action={
-          canWriteBusiness && !isLoading && !unavailable && !adding ? (
-            <MerchantButton
-              title={t('add')}
-              testID="merchant-add"
-              onPress={() => {
-                setConfirmed(false);
-                setAdding(true);
-              }}
-            />
-          ) : null
+          <View style={{ flexDirection: isRTL ? 'row-reverse' : 'row', gap: 8 }}>
+            <MerchantGear label={t('merchantSettings')} onPress={() => router.push('/merchant-settings' as never)} />
+            {canWriteBusiness && !isLoading && !unavailable && !adding ? (
+              <MerchantButton
+                title={t('add')}
+                testID="merchant-add"
+                onPress={() => {
+                  setConfirmed(false);
+                  setAdding(true);
+                }}
+              />
+            ) : null}
+          </View>
         }
       />
       {isLoading ? (

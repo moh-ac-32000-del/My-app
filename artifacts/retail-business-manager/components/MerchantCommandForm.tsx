@@ -2,6 +2,10 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Text, View } from 'react-native';
 import { GlassCard } from '@/components/AppShell';
 import { MerchantButton, MerchantField } from '@/components/MerchantAccountUI';
+import { MerchantSelect } from '@/components/MerchantSelect';
+import { MerchantDateField } from '@/components/MerchantDateField';
+import { useMerchantSettings } from '@/hooks/useMerchantSettings';
+import { localMerchantDate, merchantOperationDate } from '@/data/merchantSettings';
 import { useCustomers } from '@/context/CustomerContext';
 import { useStore } from '@/context/StoreContext';
 import { useColors } from '@/hooks/useColors';
@@ -44,16 +48,17 @@ export function MerchantCommandForm({
   const { customers, canonicalSpaceId, isLoading: customersLoading, error: customerError } = useCustomers();
   const { t, language, isRTL } = useI18n();
   const colors = useColors();
+  const settings = useMerchantSettings(action === 'purchase' || action === 'payment');
   const [name, setName] = useState(merchant?.name ?? '');
   const [phone, setPhone] = useState(merchant?.phone ?? '');
   const [currency, setCurrency] = useState<CurrencyCode>(target?.currency ?? profile.currency);
   const [amount, setAmount] = useState('');
-  const [paid, setPaid] = useState('0');
-  const [source, setSource] = useState<'cash' | 'external'>('cash');
+  const [operationDate, setOperationDate] = useState(() => localMerchantDate());
+  const [paymentMethodId, setPaymentMethodId] = useState('');
   const [note, setNote] = useState('');
   const [customerId, setCustomerId] = useState('');
   const [search, setSearch] = useState('');
-  const [lines, setLines] = useState([{ name: '', quantity: '1', unitPrice: '' }]);
+  const [lines, setLines] = useState([{ materialId: '', name: '', quantity: '1', unitPrice: '' }]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<'invalid' | 'uncertain' | null>(null);
   const pending = useRef<MerchantDraftCommand | null>(null);
@@ -104,14 +109,27 @@ export function MerchantCommandForm({
           };
         } else if (action === 'purchase') {
           const items = normalizedLines();
-          if (items.some((line) => !line.name) || !total || total === '0.00') throw new Error('purchase');
+          if (
+            !settings.data ||
+            lines.some(
+              (line) =>
+                !settings.data!.materials.some(
+                  (item) => item.id === line.materialId && item.isActive && item.name === line.name,
+                ),
+            ) ||
+            items.some((line) => !line.name) ||
+            !total ||
+            total === '0.00'
+          )
+            throw new Error('purchase');
           pending.current = {
             ...base,
             action,
             currency,
             lines: items,
-            source,
-            paidExact: exactMoneyEntry(paid, 2),
+            source: 'cash',
+            paidExact: '0.00',
+            operationDate: merchantOperationDate(operationDate),
             note: note.trim(),
           };
         } else if (action === 'reverse') {
@@ -135,9 +153,21 @@ export function MerchantCommandForm({
             )
               throw new Error('customer');
             pending.current = { ...base, action, currency, amountExact, customerId, note: note.trim() };
-          } else if (action === 'payment')
-            pending.current = { ...base, action, currency, amountExact, source, note: note.trim() };
-          else pending.current = { ...base, action: 'opening', currency, amountExact, note: note.trim() };
+          } else if (action === 'payment') {
+            const method = settings.data?.paymentMethods.find((row) => row.id === paymentMethodId && row.isActive);
+            if (!method) throw new Error('paymentMethod');
+            pending.current = {
+              ...base,
+              action,
+              currency,
+              amountExact,
+              source: 'cash',
+              operationDate: merchantOperationDate(operationDate),
+              paymentMethodId: method.id,
+              paymentMethodName: method.name,
+              note: note.trim(),
+            };
+          } else pending.current = { ...base, action: 'opening', currency, amountExact, note: note.trim() };
         }
       } catch {
         setError('invalid');
@@ -155,13 +185,15 @@ export function MerchantCommandForm({
     } catch (caught) {
       if (!alive.current) return;
       const code = caught && typeof caught === 'object' && 'code' in caught ? String(caught.code) : '';
-      const definite = [
-        'functions/invalid-argument',
-        'functions/permission-denied',
-        'functions/failed-precondition',
-        'functions/not-found',
-        'functions/resource-exhausted',
-      ].includes(code);
+      const definite =
+        error !== 'uncertain' &&
+        [
+          'functions/invalid-argument',
+          'functions/permission-denied',
+          'functions/failed-precondition',
+          'functions/not-found',
+          'functions/resource-exhausted',
+        ].includes(code);
       if (definite) pending.current = null;
       setError(definite ? 'invalid' : 'uncertain');
     } finally {
@@ -172,10 +204,35 @@ export function MerchantCommandForm({
     <MerchantField title={title} value={value} onChange={onChange} decimal={decimal} disabled={locked} />
   );
   return (
-    <GlassCard testID="merchant-command-form" style={{ gap: 16 }}>
+    <GlassCard
+      testID="merchant-command-form"
+      style={{ gap: 16, ...(action === 'payment' ? { borderColor: colors.warning, borderWidth: 2 } : {}) }}
+    >
       <Text style={{ color: colors.foreground, fontSize: 20, fontWeight: '700', textAlign: isRTL ? 'right' : 'left' }}>
         {t(merchantActionLabels[action])}
       </Text>
+      {action === 'purchase' || action === 'payment' ? (
+        <>
+          <Text
+            style={{
+              color: action === 'payment' ? colors.warning : colors.primary,
+              fontWeight: '600',
+              textAlign: isRTL ? 'right' : 'left',
+            }}
+          >
+            {t(action === 'payment' ? 'merchantPaymentHint' : 'merchantPurchaseHint')}
+          </Text>
+          {!settings.data ||
+          settings.error ||
+          (action === 'purchase'
+            ? !settings.data.materials.some((row) => row.isActive)
+            : !settings.data.paymentMethods.some((row) => row.isActive)) ? (
+            <Text style={{ color: colors.warning }}>
+              {t(settings.error ? 'merchantUnavailable' : 'merchantCatalogRequired')}
+            </Text>
+          ) : null}
+        </>
+      ) : null}
       {action === 'save' ? (
         <>
           {field(t('merchantName'), name, setName)}
@@ -186,17 +243,23 @@ export function MerchantCommandForm({
           {action === 'reverse' ? (
             <Text style={{ color: colors.warning }}>{t('merchantCorrectionHint')}</Text>
           ) : (
-            <View style={{ flexDirection: isRTL ? 'row-reverse' : 'row', flexWrap: 'wrap', gap: 8 }}>
-              {CURRENCY_OPTIONS.map((item) => (
-                <MerchantButton
-                  key={item.code}
-                  title={item.code}
-                  selected={currency === item.code}
-                  disabled={locked}
-                  onPress={() => setCurrency(item.code)}
-                />
-              ))}
-            </View>
+            <MerchantSelect
+              title={t('currency')}
+              value={currency}
+              options={CURRENCY_OPTIONS.map((item) => ({ id: item.code, name: item.code }))}
+              disabled={locked}
+              onChange={(value) => {
+                const code = value as CurrencyCode;
+                setCurrency(code);
+                if (action === 'purchase')
+                  setLines((current) =>
+                    current.map((line) => ({
+                      ...line,
+                      unitPrice: settings.data?.materials.find((row) => row.id === line.materialId)?.prices[code] ?? '',
+                    })),
+                  );
+              }}
+            />
           )}
           {action === 'opening' ? (
             <Text style={{ color: colors.mutedForeground }}>{t('merchantOpeningHint')}</Text>
@@ -220,6 +283,16 @@ export function MerchantCommandForm({
               )}
             </>
           ) : null}
+          {action === 'payment' ? (
+            <MerchantSelect
+              testID="merchant-payment-method"
+              title={t('merchantPaymentMethod')}
+              value={paymentMethodId}
+              options={(settings.data?.paymentMethods ?? []).filter((row) => row.isActive)}
+              onChange={setPaymentMethodId}
+              disabled={locked || !settings.data}
+            />
+          ) : null}
           {action === 'purchase' ? (
             <>
               {lines.map((line, index) => (
@@ -227,15 +300,37 @@ export function MerchantCommandForm({
                   key={index}
                   style={{ gap: 10, padding: 12, borderWidth: 1, borderColor: colors.border, borderRadius: 16 }}
                 >
-                  {(['name', 'quantity', 'unitPrice'] as const).map((key) => (
+                  <MerchantSelect
+                    title={t('merchantItem')}
+                    value={line.materialId}
+                    options={(settings.data?.materials ?? [])
+                      .filter((row) => row.isActive)
+                      .map((row) => ({ id: row.id, name: row.name }))}
+                    disabled={locked || !settings.data}
+                    onChange={(id) => {
+                      const material = settings.data?.materials.find((row) => row.id === id);
+                      if (material)
+                        setLines((current) =>
+                          current.map((item, position) =>
+                            position === index
+                              ? {
+                                  ...item,
+                                  materialId: material.id,
+                                  name: material.name,
+                                  unitPrice: material.prices[currency] ?? '',
+                                }
+                              : item,
+                          ),
+                        );
+                    }}
+                  />
+                  {(['quantity', 'unitPrice'] as const).map((key) => (
                     <MerchantField
                       key={key}
-                      title={t(
-                        key === 'name' ? 'merchantItem' : key === 'quantity' ? 'merchantQuantity' : 'merchantPrice',
-                      )}
+                      title={t(key === 'quantity' ? 'merchantQuantity' : 'merchantPrice')}
                       value={line[key]}
                       disabled={locked}
-                      decimal={key !== 'name'}
+                      decimal
                       onChange={(value) =>
                         setLines((current) =>
                           current.map((item, position) => (position === index ? { ...item, [key]: value } : item)),
@@ -255,34 +350,19 @@ export function MerchantCommandForm({
               <MerchantButton
                 title={t('merchantAddLine')}
                 disabled={locked || lines.length >= 100}
-                onPress={() => setLines((current) => [...current, { name: '', quantity: '1', unitPrice: '' }])}
+                onPress={() =>
+                  setLines((current) => [...current, { materialId: '', name: '', quantity: '1', unitPrice: '' }])
+                }
               />
               <Text style={{ color: colors.primary }}>
                 {t('merchantTotal')}: {total ? formatExactMoney(total, currency, language) : '—'}
               </Text>
-              {field(t('merchantPaid'), paid, setPaid, true)}
             </>
           ) : action !== 'reverse' ? (
             field(t('amount'), amount, setAmount, action !== 'opening')
           ) : null}
           {action === 'payment' || action === 'purchase' ? (
-            <View style={{ gap: 8 }}>
-              <MerchantButton
-                title={t('merchantCash')}
-                selected={source === 'cash'}
-                disabled={locked}
-                onPress={() => setSource('cash')}
-              />
-              <MerchantButton
-                title={t('merchantExternal')}
-                selected={source === 'external'}
-                disabled={locked}
-                onPress={() => setSource('external')}
-              />
-              {source === 'external' ? (
-                <Text style={{ color: colors.mutedForeground }}>{t('merchantNoncash')}</Text>
-              ) : null}
-            </View>
+            <MerchantDateField value={operationDate} onChange={setOperationDate} disabled={locked} />
           ) : null}
           <MerchantField
             title={t(action === 'reverse' ? 'merchantReason' : 'merchantNotes')}
@@ -302,6 +382,7 @@ export function MerchantCommandForm({
         testID="merchant-confirm"
         title={t(error === 'uncertain' ? 'merchantRetrySame' : 'confirm')}
         selected
+        tone={action === 'payment' ? 'payment' : 'primary'}
         disabled={busy || !canWriteBusiness}
         onPress={submit}
       />

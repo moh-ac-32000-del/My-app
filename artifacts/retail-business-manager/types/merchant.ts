@@ -34,6 +34,9 @@ export interface MerchantOperation {
   balanceAfterExact: string;
   cashDeltaExact: string;
   note: string;
+  operationDate?: string;
+  paymentMethodId?: string;
+  paymentMethodName?: string;
   createdAt: string;
   createdByUserId: string;
   amountExact?: string;
@@ -77,8 +80,9 @@ export type MerchantDraftCommand = { operationId: string; merchantId: string } &
       lines: Array<{ name: string; quantity: string; unitPrice: string }>;
       paidExact: string;
       source: 'cash' | 'external';
+      operationDate?: string;
     })
-  | (Financial & { action: 'payment'; amountExact: string; source: 'cash' | 'external' })
+  | (Financial & { action: 'payment'; amountExact: string; source: 'cash' | 'external'; operationDate?: string; paymentMethodId?: string; paymentMethodName?: string })
   | (Financial & { action: 'directPayment'; amountExact: string; customerId: string })
   | { action: 'reverse'; currency: CurrencyCode; targetOperationId: string; reason: string }
 );

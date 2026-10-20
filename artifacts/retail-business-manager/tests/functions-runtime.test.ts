@@ -5,6 +5,10 @@ import workflow from '../../../.github/workflows/retail-business-manager-ci.yml?
 import entrypoint from '../functions/src/index.ts?raw';
 
 describe('supported Functions runtime configuration', () => {
+  it('registers bounded authenticated merchant reference settings', () => {
+    expect(entrypoint).toContain("import { merchantSettingsCommandHandler } from './merchantSettingsCommand.js'");
+    expect(entrypoint).toMatch(/export const merchantSettingsCommand = onCall\(\{ invoker: 'public', minInstances: 0, maxInstances: 2, timeoutSeconds: 60 \}/);
+  });
   it('registers the trusted merchant callable with zero idle instances and a bounded scale cap', () => {
     expect(entrypoint).toContain("import { merchantCommandHandler } from './merchantCommand.js'");
     expect(entrypoint).toMatch(/export const merchantCommand = onCall\(\{ invoker: 'public', minInstances: 0, maxInstances: 2, timeoutSeconds: 60 \}/);

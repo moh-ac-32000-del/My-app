@@ -14,6 +14,9 @@ export interface DailyJournalEvent {
   customerId?: string;
   customerName?: string;
   note?: string;
+  operationDate?: string;
+  paymentMethodId?: string;
+  paymentMethodName?: string;
   occurredAt: string;
   sourceId: string;
   merchantId?: string;

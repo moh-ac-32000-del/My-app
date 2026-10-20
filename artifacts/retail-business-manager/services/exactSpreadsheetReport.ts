@@ -266,6 +266,8 @@ export function exactSpreadsheetReports(snapshot: SpreadsheetExportSnapshot, lan
       ]);
       for (const item of op.lines ?? [])
         merchants.add([text(item.name), text(item.quantity), text(item.unitPrice), exactExportCell(item.totalExact)]);
+      if (op.operationDate) merchants.add([text(t('merchantOperationDate')), time(op.operationDate)]);
+      if (op.paymentMethodName) merchants.add([text(t('merchantPaymentMethod')), text(op.paymentMethodName)]);
     }
     merchants.add([]);
   }

@@ -818,6 +818,20 @@ try {
       { uid: 'merchant-viewer', role: 'viewer' }, { uid: 'merchant-legacy', role: 'manager' },
     ]);
     const merchantCollections = ['merchants', 'merchantBalances', 'merchantOperations', 'customerCredits'];
+    await testEnvironment.withSecurityRulesDisabled(context => setDoc(doc(context.firestore(),'spaces','merchant-read-space','merchantSettings','config'),{revision:1,materials:[],paymentMethods:[]}));
+    for (const role of ['owner','editor','viewer','legacy']) {
+      const context = testEnvironment.authenticatedContext(`merchant-${role}`);
+      const reference = doc(context.firestore(),'spaces','merchant-read-space','merchantSettings','config');
+      try {
+        await runCase(`Merchant settings — ${role} reads config`,()=>getDocFromServer(reference),role==='legacy'?'DENY':'ALLOW');
+        await runCase(`Merchant settings — ${role} cannot directly create`,()=>setDoc(doc(context.firestore(),'spaces','merchant-read-space','merchantSettings','forged'),{}),'DENY');
+        await runCase(`Merchant settings — ${role} cannot directly update`,()=>updateDoc(reference,{revision:999}),'DENY');
+        await runCase(`Merchant settings — ${role} cannot directly delete`,()=>deleteDoc(reference),'DENY');
+        await runCase(`Merchant settings — ${role} cannot read other documents`,()=>getDocFromServer(doc(context.firestore(),'spaces','merchant-read-space','merchantSettings','forged')),'DENY');
+      } finally { await context.cleanup(); }
+    }
+    await runCase('Merchant settings — nonmember cannot read',()=>getDocFromServer(doc(userA.firestore(),'spaces','merchant-read-space','merchantSettings','config')),'DENY');
+    await runCase('Merchant settings — anonymous cannot read',()=>getDocFromServer(doc(anonymous.firestore(),'spaces','merchant-read-space','merchantSettings','config')),'DENY');
     await testEnvironment.withSecurityRulesDisabled(async context => {
       for (const name of merchantCollections) await setDoc(doc(context.firestore(), 'spaces', 'merchant-read-space', name, 'history'),
         { id: 'history', workspaceId: 'merchant-read-space', createdByUserId: 'merchant-editor', balanceExact: '-300.00' });
@@ -842,6 +856,7 @@ try {
     await testEnvironment.withSecurityRulesDisabled(context => deleteDoc(doc(context.firestore(), 'spaces', 'merchant-read-space', 'members', 'merchant-editor')));
     const removedMerchantEditor = testEnvironment.authenticatedContext('merchant-editor');
     try {
+      await runCase('Merchant settings — removed member cannot read',()=>getDocFromServer(doc(removedMerchantEditor.firestore(),'spaces','merchant-read-space','merchantSettings','config')),'DENY');
       for (const name of merchantCollections) await runCase(`Merchant rules — removed member cannot read ${name}`,
         () => getDocFromServer(doc(removedMerchantEditor.firestore(), 'spaces', 'merchant-read-space', name, 'history')), 'DENY');
     } finally { await removedMerchantEditor.cleanup(); }

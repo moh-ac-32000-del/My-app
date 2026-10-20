@@ -45,6 +45,8 @@ export function merchantJournalEvent(operation: MerchantOperation): DailyJournal
     occurredAt: operation.createdAt,
     sourceId: operation.id,
     ...(operation.note ? { note: operation.note } : {}),
+    ...(operation.operationDate ? { operationDate: operation.operationDate } : {}),
+    ...(operation.paymentMethodId ? { paymentMethodId: operation.paymentMethodId, paymentMethodName: operation.paymentMethodName } : {}),
     ...(operation.customerId ? { customerId: operation.customerId } : {}),
     ...(operation.customerName ? { customerName: operation.customerName } : {}),
     ...(operation.lines ? { lines: operation.lines.map((line) => ({ ...line })) } : {}),

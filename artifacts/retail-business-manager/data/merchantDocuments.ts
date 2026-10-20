@@ -1,5 +1,6 @@
 import { isCurrencyCode } from '../constants/currencies';
 import { canonicalCredit } from './customerCreditAccounting';
+import { merchantOperationDate } from './merchantSettings';
 import type { Merchant, MerchantBalance, MerchantOperation, CustomerCredit } from '@/types/merchant';
 
 function invalid(): never {
@@ -126,9 +127,13 @@ export function merchantOperationFromDocument(
     'transactionId',
     'paymentId',
     'debtId',
+    'paymentMethodId',
+    'paymentMethodName',
   ] as const) {
     if (record[key] !== undefined) result[key] = text(record[key], key !== 'customerName');
   }
+  if ((record.paymentMethodId === undefined) !== (record.paymentMethodName === undefined)) invalid();
+  if (record.operationDate !== undefined) result.operationDate = merchantOperationDate(record.operationDate);
   if (record.reversedAction !== undefined) {
     if (!['opening', 'purchase', 'payment', 'directPayment'].includes(String(record.reversedAction))) invalid();
     result.reversedAction = record.reversedAction as MerchantOperation['reversedAction'];

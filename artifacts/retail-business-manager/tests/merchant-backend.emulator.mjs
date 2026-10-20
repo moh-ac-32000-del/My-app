@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { merchantCommandHandler } from '../functions/lib/functions/src/merchantCommand.js';
+import { merchantSettingsCommandHandler } from '../functions/lib/functions/src/merchantSettingsCommand.js';
 import { settleCustomerDebtHandler } from '../functions/lib/functions/src/settleCustomerDebt.js';
 import { trustedDebtCommandHandler } from '../functions/lib/functions/src/trustedDebtCommand.js';
 import { dailyArchiveCommandHandler } from '../functions/lib/functions/src/dailyArchiveCommand.js';
@@ -89,6 +90,20 @@ async function fixture(suffix) {
   };
 }
 try {
+  const catalog = await fixture('shared-catalog');
+  const catalogInput = {spaceId:catalog.space.id,storeId:catalog.base.storeId,operationId:'catalog-a',settings:{revision:0,materials:[{id:'goods',name:'Shared goods',prices:{TRY:'100.0000'},isActive:true}],paymentMethods:[{id:'bank-label',name:'Bank label only',isActive:true}]}};
+  const saves = await Promise.allSettled(['catalog-a','catalog-b'].map(operationId=>merchantSettingsCommandHandler(request({...catalogInput,operationId}),runtime)));
+  assert.equal(saves.filter(row=>row.status==='fulfilled').length,1);
+  assert.equal(saves.find(row=>row.status==='rejected').reason.code,'aborted');
+  assert.equal((await catalog.space.collection('merchantSettings').doc('config').get()).data().revision,1);
+  console.log('Merchant settings emulator — concurrent reference-list saves cannot overwrite the winning revision: PASS');
+  await catalog.merchant('payment','labeled-payment',{amountExact:'50.00',source:'cash',operationDate:'2026-01-01',paymentMethodId:'bank-label',paymentMethodName:'Bank label only'});
+  const labeled = (await catalog.space.collection('merchantOperations').doc('labeled-payment').get()).data();
+  assert.equal(labeled.operationDate,'2026-01-01');
+  assert.notEqual(labeled.createdAt.slice(0,10),'2026-01-01');
+  assert.equal(labeled.cashDeltaExact,'-50.00');
+  assert.equal((await catalog.space.collection('transactions').get()).docs[0].data().amount,50);
+  console.log('Merchant settings emulator — descriptive payment method never changes cash effect or accounting date: PASS');
   const parallel = await fixture('parallel');
   await Promise.all([
     parallel.merchant('directPayment', 'direct', { customerId: parallel.base.customerId, amountExact: '130.00' }),

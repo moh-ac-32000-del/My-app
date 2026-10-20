@@ -12,6 +12,7 @@ const state = vi.hoisted(() => ({
   limited: false,
 }));
 vi.mock('react-native', () => ({
+  Platform: { OS: 'web' },
   View: ({ children, testID }: any) => React.createElement('div', { 'data-testid': testID }, children),
   Text: ({ children }: any) => React.createElement('span', null, children),
   Pressable: ({ children, disabled, testID }: any) =>
@@ -24,6 +25,19 @@ vi.mock('react-native', () => ({
       'aria-label': accessibilityLabel,
     }),
   ActivityIndicator: () => React.createElement('div', { 'data-testid': 'loading' }),
+}));
+vi.mock('@react-native-community/datetimepicker', () => ({ default: () => null }));
+vi.mock('@/hooks/useMerchantSettings', () => ({
+  useMerchantSettings: () => ({
+    data: {
+      revision: 0,
+      materials: [{ id: 'item', name: 'Shared material', prices: { TRY: '12.5000' }, isActive: true }],
+      paymentMethods: [{ id: 'cash-label', name: 'Method A', isActive: true }],
+    },
+    error: false,
+    retry: vi.fn(),
+    save: vi.fn(),
+  }),
 }));
 vi.mock('expo-router', () => ({
   useRouter: () => ({ push: vi.fn() }),
@@ -91,6 +105,15 @@ vi.mock('@/hooks/useMerchantAccounts', () => ({
 import MerchantsScreen from '@/app/merchants';
 import MerchantScreen from '@/app/merchant/[id]';
 import { MerchantCommandForm } from '@/components/MerchantCommandForm';
+import { MerchantOperationCard } from '@/components/MerchantOperationCard';
+import { MerchantDateField } from '@/components/MerchantDateField';
+import { useMerchantAccounts } from '@/hooks/useMerchantAccounts';
+import MerchantSettingsScreen from '@/app/merchant-settings';
+function card() {
+  return renderToStaticMarkup(
+    React.createElement(MerchantOperationCard, { operation: useMerchantAccounts().operations[0] }),
+  );
+}
 
 beforeEach(() => {
   state.role = 'owner';
@@ -133,20 +156,26 @@ describe('merchant screens (server-rendered, not device acceptance)', () => {
     state.role = 'viewer';
     expect(renderToStaticMarkup(React.createElement(MerchantsScreen))).not.toContain('merchant-add');
     const markup = renderToStaticMarkup(React.createElement(MerchantScreen));
-    expect(markup).toContain('Goods description');
+    expect(card()).toContain('Goods description');
     expect(markup).not.toContain('merchant-action-');
     expect(markup).not.toContain(translate('merchantReverse', 'ar'));
   });
   it('shows the direct payment as noncash and retains its customer and notes', () => {
-    const markup = renderToStaticMarkup(React.createElement(MerchantScreen));
+    const markup = card();
     expect(markup).toContain(translate('merchantNoncash', 'ar'));
     expect(markup).toContain('Customer');
     expect(markup).toContain('Goods description');
-    expect(markup).toContain('merchant-action-purchase');
+    const page = renderToStaticMarkup(React.createElement(MerchantScreen));
+    expect(page).toContain('merchant-action-purchase');
+    expect(page).toContain('merchant-tab-purchases');
+    expect(page).toContain('merchant-tab-payments');
+    expect(page).not.toContain('merchant-action-save');
+    expect(page).not.toContain('merchant-action-opening');
+    expect(page).toContain('merchant-settings-gear');
   });
   it('does not show a second reversal action after an operation has been corrected', () => {
     state.reversed = true;
-    const markup = renderToStaticMarkup(React.createElement(MerchantScreen));
+    const markup = card();
     expect(markup).toContain(translate('merchantReversed', 'ar'));
     expect(markup).not.toContain(translate('merchantReverse', 'ar'));
   });
@@ -157,7 +186,7 @@ describe('merchant screens (server-rendered, not device acceptance)', () => {
     expect(markup).not.toContain('Merchant A');
     expect(markup).not.toContain(translate('merchantEmpty', 'ar'));
   });
-  it.each(['purchase', 'directPayment', 'opening', 'reverse'] as const)(
+  it.each(['purchase', 'payment', 'directPayment', 'opening', 'reverse'] as const)(
     'renders the %s form with explicit financial meaning',
     (action) => {
       const markup = renderToStaticMarkup(
@@ -174,6 +203,39 @@ describe('merchant screens (server-rendered, not device acceptance)', () => {
       if (action === 'opening') expect(markup).toContain(translate('merchantOpeningHint', 'ar'));
       if (action === 'reverse') expect(markup).toContain(translate('merchantCorrectionHint', 'ar'));
       if (action === 'purchase') expect(markup).toContain(translate('merchantQuantity', 'ar'));
+      if (action === 'purchase') {
+        expect(markup).not.toContain(translate('merchantExternal', 'ar'));
+        expect(markup).toContain('merchant-operation-date');
+      }
+      if (action === 'payment') {
+        expect(markup).toContain('merchant-payment-method');
+        expect(markup).toContain(translate('merchantPaymentHint', 'ar'));
+        expect(markup.indexOf('merchant-payment-method')).toBeLessThan(
+          markup.indexOf(`aria-label="${translate('amount', 'ar')}"`),
+        );
+      }
     },
   );
+  it.each(['ar', 'en', 'tr'] as const)(
+    'provides an editable browser calendar and explicit accounting-day explanation in %s',
+    (language) => {
+      state.language = language;
+      const markup = renderToStaticMarkup(
+        React.createElement(MerchantDateField, { value: '2026-10-20', onChange: vi.fn(), disabled: false }),
+      );
+      expect(markup).toContain('type="date"');
+      expect(markup).toContain('value="2026-10-20"');
+      expect(markup).toContain(translate('merchantDateHint', language));
+    },
+  );
+  it('provides workspace-wide material/method settings but no viewer write controls', () => {
+    const markup = renderToStaticMarkup(React.createElement(MerchantSettingsScreen));
+    expect(markup).toContain('Shared material');
+    expect(markup).toContain('Method A');
+    expect(markup).toContain('merchant-settings-save');
+    state.role = 'viewer';
+    const viewer = renderToStaticMarkup(React.createElement(MerchantSettingsScreen));
+    expect(viewer).toContain('Shared material');
+    expect(viewer).not.toContain('merchant-settings-save');
+  });
 });

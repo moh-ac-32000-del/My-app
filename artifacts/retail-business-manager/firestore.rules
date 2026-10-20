@@ -92,6 +92,10 @@ service cloud.firestore {
     }
 
     // Merchant/credit state is owned by trusted commands, never client writes.
+    match /spaces/{spaceId}/merchantSettings/{documentId} {
+      allow read: if documentId == 'config' && isActiveMember(spaceId);
+      allow create, update, delete: if false;
+    }
     match /spaces/{spaceId}/merchants/{merchantId} {
       allow read: if isActiveMember(spaceId);
       allow create, update, delete: if false;
