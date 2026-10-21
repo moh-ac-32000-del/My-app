@@ -80,7 +80,7 @@ describe('workspace read-only controls (server render, not device testing)', () 
     state.role = role;
     const html = renderToStaticMarkup(React.createElement(CustomersScreen));
     expect(html.includes('add-customer-header')).toBe(role !== 'viewer');
-    expect(html.includes('add-customer-button')).toBe(role !== 'viewer');
+    expect(html.includes('add-customer-button')).toBe(false); // Duplicate lower action removed for every role.
   });
   it.each(['owner', 'editor', 'viewer'])('only exposes manual closing to business writers: %s', (role) => {
     state.role = role;

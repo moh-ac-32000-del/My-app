@@ -14,6 +14,14 @@ Repository: `moh-ac-32000-del/My-app` only. Approved sequence updated 2026-10-19
 
 ## Stop condition
 
+### Verified checkpoint — 2026-10-21
+
+- The owner explicitly approved merging merchant PR #56 and moving to task 4. Merge commit: `d819b086a6dbe36b27a91e94e26dcd06858e420d`. Post-merge main CI [39644327668](https://github.com/moh-ac-32000-del/My-app/actions/runs/39644327668) completed successfully before starting task-4 edits. This is not a new main Hosting publication or Android acceptance.
+- Task-4 audit found ordinary cash/debt/settlement notes and merchant items/notes already projected and displayed. Reuse these paths; do not create another journal or duplicate financial records. Existing linked cash/payment suppression, event-ID archive filtering and currency isolation remain unchanged.
+- The focused task-4 change removes only the lower customer-add button and its unused styles. The upper action, existing form and authoritative save handler stay unchanged. A localized debt-detail hint explicitly states that an on-account debt does not affect the drawer. No change to financial calculations, posting times, closing/archive contents, Firestore Rules, Functions, subscriptions or queries.
+- Regression coverage exercises the upper customer-add/form handlers on simulated web/Android platform values, all three languages, Editor/Viewer visibility, cancel and failed-save behavior. Journal fixtures cover all four ordinary event types, notes/parties/dates/amounts/currencies, noncash display, linked-settlement deduplication and multiple preserved closing snapshots. These are automated component/projection tests, not physical-device acceptance.
+- Task-4 publication, PR and CI status must be reported for its own exact source commit. No APK/EAS build or paid backup activation is included. Archive-calendar and automatic-closing work remain separate later tasks.
+
 Successful CI/build is necessary but not real-device acceptance. Complete the agreed essentials, document known limitations, then freeze basic development; no automatic optional polishing. Merchant accounting is part of this release scope, not an optional omitted feature. Further export presentation polish, inventory management, paid subscription billing and other unrequested additions remain deferred.
 
 ## Task-one rationale and scope

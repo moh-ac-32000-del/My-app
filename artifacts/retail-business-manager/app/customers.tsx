@@ -152,11 +152,6 @@ export default function CustomersScreen() {
         />
       )}
 
-      {canWriteBusiness ? <Pressable testID="add-customer-button" onPress={() => setIsFormVisible(true)} style={({ pressed }) => [styles.addButton, { backgroundColor: colors.primary, flexDirection: isRTL ? 'row-reverse' : 'row' }, pressed && styles.pressed]}>
-        <Ionicons name="person-add-outline" size={19} color={colors.primaryForeground} />
-        <Text style={[styles.addButtonText, { color: colors.primaryForeground }]}>{t('addCustomer')}</Text>
-      </Pressable> : null}
-
       <CustomerFormModal visible={isFormVisible} onClose={() => setIsFormVisible(false)} onSave={(draft) => void addCustomer(draft)} />
     </AppShell>
   );
@@ -178,7 +173,5 @@ const styles = StyleSheet.create({
   customerName: { fontSize: 15, fontFamily: 'Inter_700Bold' },
   customerPhone: { fontSize: 12, fontFamily: 'Inter_400Regular' },
   listContent: { paddingBottom: 4 },
-  addButton: { minHeight: 52, borderRadius: 17, alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 7, marginBottom: 8 },
-  addButtonText: { fontSize: 14, fontFamily: 'Inter_700Bold' },
   pressed: { opacity: 0.72, transform: [{ scale: 0.985 }] },
 });
