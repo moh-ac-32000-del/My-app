@@ -64,6 +64,7 @@ vi.mock('react-native', () => ({
     );
   },
   ActivityIndicator: ({ testID }: any) => React.createElement('i', { 'data-testid': testID }),
+  Modal: ({ visible, children }: any) => (visible ? React.createElement('aside', null, children) : null),
   Share: { share: state.share },
   Alert: { alert: vi.fn() },
 }));
@@ -96,7 +97,7 @@ vi.mock('@/hooks/useI18n', () => ({
 }));
 vi.mock('@/components/AppShell', () => ({
   AppShell: ({ children }: any) => React.createElement('main', null, children),
-  PageHeader: ({ title }: any) => React.createElement('header', null, title),
+  PageHeader: ({ title, subtitle, action }: any) => React.createElement('header', null, title, subtitle, action),
   SectionTitle: ({ title }: any) => React.createElement('h2', null, title),
   EmptyState: ({ title, hint }: any) => React.createElement('p', null, title, hint),
   GlassCard: ({ children, testID }: any) => React.createElement('section', { 'data-testid': testID }, children),
@@ -167,47 +168,49 @@ beforeEach(() => {
 
 describe('archive calendar controls', () => {
   it.each(['ar', 'en', 'tr'] as const)(
-    'uses the current %s dictionary and moves one day without a network call',
+    'shows only a small icon until opened, then a localized %s month grid without network reads',
     (language) => {
       state.language = language;
       const change = vi.fn();
       const html = render(React.createElement(ArchiveDayPicker, { value: day, onChange: change }));
       expect(html).toContain(translate('archiveChooseDate', language));
-      expect(html).toContain(translate('archivePreviousDay', language));
-      state.buttons['archive-previous-day']();
-      state.buttons['archive-next-day']();
-      expect(change.mock.calls).toEqual([['2026-10-20'], ['2026-10-22']]);
+      expect(html).not.toContain('archive-calendar-date-');
+      state.buttons['archive-calendar-button']();
+      const opened = render(React.createElement(ArchiveDayPicker, { value: day, onChange: change }));
+      expect(opened).toContain(translate('archivePreviousMonth', language));
+      expect(opened).toContain('archive-calendar-date-2026-10-21');
+      state.buttons['archive-previous-month']();
+      render(React.createElement(ArchiveDayPicker, { value: day, onChange: change }));
+      expect(state.buttons['archive-calendar-date-2026-09-20']).toBeTypeOf('function');
+      expect(change).not.toHaveBeenCalled();
       expect(state.load).not.toHaveBeenCalled();
     },
   );
-  it('opens the web date field and ignores empty/invalid intermediate input', () => {
+  it('chooses a date from the actual grid and closes the calendar', () => {
     const change = vi.fn();
     const element = React.createElement(ArchiveDayPicker, { value: day, onChange: change });
     render(element);
     state.buttons['archive-calendar-button']();
     render(element);
-    expect(state.web.value).toBe(day);
-    state.web.onChange('');
-    state.web.onChange('2026-02-30');
-    state.web.onChange('2024-02-29');
-    expect(change.mock.calls).toEqual([['2024-02-29']]);
+    state.buttons['archive-calendar-date-2026-10-18']();
+    expect(change.mock.calls).toEqual([['2026-10-18']]);
+    expect(render(element)).not.toContain('archive-calendar-dialog');
   });
-  it('uses the native calendar on Android and does not change the date when dismissed', () => {
-    state.platform = 'android';
+  it('cancels month browsing without changing the date; reopening resets to the selected month', () => {
     const change = vi.fn();
     const element = React.createElement(ArchiveDayPicker, { value: day, onChange: change });
     render(element);
     state.buttons['archive-calendar-button']();
     render(element);
-    expect(state.web).toBeNull();
-    expect(state.picker.mode).toBe('date');
-    state.picker.onChange({ type: 'dismissed' }, new Date(2026, 9, 20));
+    state.buttons['archive-previous-month']();
+    render(element);
+    state.buttons['archive-calendar-cancel']();
     expect(change).not.toHaveBeenCalled();
     render(element);
     state.buttons['archive-calendar-button']();
     render(element);
-    state.picker.onChange({ type: 'set' }, new Date(2026, 9, 20));
-    expect(change).toHaveBeenCalledWith('2026-10-20');
+    expect(state.buttons['archive-calendar-date-2026-10-21']).toBeTypeOf('function');
+    expect(state.buttons['archive-calendar-date-2026-09-21']).toBeUndefined();
   });
 });
 

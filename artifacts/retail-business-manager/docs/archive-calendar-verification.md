@@ -4,6 +4,12 @@ Repository: `moh-ac-32000-del/My-app` only. Base main: `509b42a2cc236e7f29a0ee2c
 
 ## Scope and compatibility
 
+### Owner visual correction after review — 2026-10-21
+
+The owner requested an icon-only calendar, not a large archive-day selector. Replace the inline day toolbar with a 44px calendar icon in the archive header. It opens a real month-grid dialog, shared by Web and Android, with month navigation, selected-day highlight, Today and Cancel. Browsing months does not query Firebase; only selecting a day changes the existing scoped reader. Same-day closings use compact numbered/time chips, not large dated cards. This supersedes the initial inline/native-picker presentation described below; no new backend deployment or financial change is needed.
+
+The supplied screenshot showed October 21 and October 18 archives together and no new calendar control, unlike the already deployed day-scoped source. HTTP inspection confirmed the current server bundle was `entry-437fcde6935fb2fe6fe406c98542fc29.js`; an already-open old page is a likely explanation, not a proven browser-cache diagnosis. Provide a versioned review link after publishing the correction and request a full page reload, without clearing financial data or signing out automatically.
+
 - The existing archive stores immutable snapshots, one record per closing, with multiple closings per day. Reuse these records, the existing event/detail rendering and selected-snapshot sharing.
 - Add a calendar control, previous/next day and Today. Start at the device's current calendar day, consistently with the existing manual closing date; do not introduce a store-timezone or automatic-closing policy in this task. Web uses the existing browser date input; Android uses the existing native date-picker dependency. Labels use the AR/TR/EN dictionaries and RTL-aware directions.
 - The existing trusted `dailyArchiveCommand` list action accepts an optional validated real calendar date and applies both store and date filters in Firestore. Return all closings for that day, ordered by closing number. The storeId/date index already exists. No new index or Rules change.

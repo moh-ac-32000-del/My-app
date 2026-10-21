@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, Share, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { AppShell, EmptyState, GlassCard, PageHeader, SectionTitle } from '@/components/AppShell';
-import { formatLocalizedDate, formatLocalizedDateTime } from '@/constants/i18n';
+import { formatLocalizedDate, formatLocalizedDateTime, formatLocalizedTime } from '@/constants/i18n';
 import { useStore } from '@/context/StoreContext';
 import { useColors } from '@/hooks/useColors';
 import { useI18n } from '@/hooks/useI18n';
@@ -61,8 +61,8 @@ export default function ArchiveScreen() {
 
   return (
     <AppShell>
-      <PageHeader title={t('archive')} subtitle={t('archiveSelectHint')} />
-      <ArchiveDayPicker value={date} onChange={(next) => { setSelectedArchiveId(null); setDate(next); }} />
+      <PageHeader title={t('archive')} subtitle={formatLocalizedDate(archiveDateForDisplay(date), language)}
+        action={<ArchiveDayPicker value={date} onChange={(next) => { setSelectedArchiveId(null); setDate(next); }} />} />
 
       {archiveError ? (
         <>
@@ -89,6 +89,8 @@ export default function ArchiveScreen() {
                   key={archive.id}
                   testID={`archive-day-${archive.date}-${archive.closingNumber}`}
                   accessibilityRole="button"
+                  accessibilityState={{ selected }}
+                  accessibilityLabel={`${t('close')} #${archive.closingNumber} — ${formatLocalizedDateTime(new Date(archive.closedAt), language)}`}
                   onPress={() => setSelectedArchiveId(archive.id)}
                   style={({ pressed }) => [
                     styles.archiveDay,
@@ -100,18 +102,12 @@ export default function ArchiveScreen() {
                     pressed && styles.pressed,
                   ]}
                 >
-                  <View style={[styles.archiveIcon, { backgroundColor: colors.accent }]}>
-                    <Ionicons name="calendar-outline" size={19} color={colors.primary} />
-                  </View>
-                  <View style={[styles.archiveDayCopy, { alignItems: isRTL ? 'flex-end' : 'flex-start' }]}>
                     <Text style={[styles.archiveDate, { color: colors.foreground }]}>
-                      {formatLocalizedDate(archiveDateForDisplay(archive.date), language)} — {t('close')} #{archive.closingNumber}
+                      {t('close')} #{archive.closingNumber}
                     </Text>
                     <Text style={[styles.archiveClosedAt, { color: colors.mutedForeground }]}>
-                      {t('archiveClosedAt')}: {formatLocalizedDateTime(new Date(archive.closedAt), language)}
+                      {formatLocalizedTime(new Date(archive.closedAt), language)}
                     </Text>
-                  </View>
-                  <Ionicons name={isRTL ? 'chevron-back' : 'chevron-forward'} size={17} color={colors.mutedForeground} />
                 </Pressable>
               );
             })}
@@ -180,11 +176,9 @@ export default function ArchiveScreen() {
 }
 
 const styles = StyleSheet.create({
-  archiveList: { gap: 9, marginBottom: 22 },
-  archiveDay: { minHeight: 66, borderWidth: 1, borderRadius: 20, alignItems: 'center', gap: 11, paddingHorizontal: 13 },
-  archiveIcon: { width: 39, height: 39, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
-  archiveDayCopy: { flex: 1, gap: 4 },
-  archiveDate: { fontSize: 14, fontFamily: 'Inter_700Bold' },
+  archiveList: { gap: 8, marginBottom: 18, flexDirection: 'row', flexWrap: 'wrap' },
+  archiveDay: { minHeight: 44, borderWidth: 1, borderRadius: 14, alignItems: 'center', gap: 8, paddingHorizontal: 12 },
+  archiveDate: { fontSize: 12, fontFamily: 'Inter_700Bold' },
   archiveClosedAt: { fontSize: 10, fontFamily: 'Inter_400Regular' },
   eventList: { gap: 9, marginBottom: 18 },
   eventCard: { padding: 13 },
