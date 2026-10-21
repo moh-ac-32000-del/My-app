@@ -2,10 +2,12 @@ import { createHash, randomBytes } from 'node:crypto';
 import type { Firestore } from 'firebase-admin/firestore';
 import { HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
 import { assertWorkspaceAccess } from './workspaceAccess.js';
+import { canonicalTimeZone, closingSettings } from '../../data/workspaceClosing.js';
 
 type Role = 'editor' | 'viewer';
 type Input = {
-  action: 'quota' | 'create' | 'rename' | 'overview' | 'invite' | 'revoke' | 'accept' | 'role' | 'remove';
+  action: 'quota' | 'create' | 'rename' | 'overview' | 'invite' | 'revoke' | 'accept' | 'role' | 'remove' | 'closingSettings';
+  closingSettings?: { timeZone: string; executionTime: string; expectedRevision: number };
   spaceId?: string;
   name?: string;
   mode?: 'private' | 'shared';
@@ -45,7 +47,7 @@ export async function workspaceCommandHandler(
   const input = request.data;
   if (
     !input ||
-    !['quota', 'create', 'rename', 'overview', 'invite', 'revoke', 'accept', 'role', 'remove'].includes(input.action)
+    !['quota', 'create', 'rename', 'overview', 'invite', 'revoke', 'accept', 'role', 'remove', 'closingSettings'].includes(input.action)
   )
     fail('invalid-argument', 'Invalid workspace action');
   if (
@@ -64,6 +66,18 @@ export async function workspaceCommandHandler(
     fail('invalid-argument', 'Invalid invitation token');
   if (!['quota', 'create', 'accept'].includes(input.action) && !id(input.spaceId))
     fail('invalid-argument', 'Invalid workspace');
+  let prepared: { timeZone: string; executionTime: string; expectedRevision: number } | undefined;
+  if (input.action === 'closingSettings') {
+    const settings = input.closingSettings;
+    if (!settings || typeof settings !== 'object' || Array.isArray(settings)
+      || Object.keys(settings).some((key) => !['timeZone', 'executionTime', 'expectedRevision'].includes(key))
+      || !Number.isSafeInteger(settings.expectedRevision) || settings.expectedRevision < 0
+      || typeof settings.executionTime !== 'string' || !/^([01]\d|2[0-3]):[0-5]\d$/.test(settings.executionTime)) {
+      fail('invalid-argument', 'Invalid closing settings');
+    }
+    try { prepared = { timeZone: canonicalTimeZone(settings.timeZone), executionTime: settings.executionTime, expectedRevision: settings.expectedRevision }; }
+    catch { fail('invalid-argument', 'Invalid workspace time zone'); }
+  }
   const db = runtime.firestore;
   const actorRef = db.collection('users').doc(uid);
   // Generated once per call, outside the retry callback. Tokens are returned only to the owner, never stored.
@@ -201,6 +215,24 @@ export async function workspaceCommandHandler(
     const space = spaceSnap.data();
     if (!space || space.status !== 'active') fail('failed-precondition', 'Workspace unavailable');
     assertWorkspaceAccess(memberSnap.data(), input.action === 'overview' ? 'read' : 'owner', space, uid);
+    if (input.action === 'closingSettings') {
+      let previous;
+      try { previous = closingSettings(space.closingSettings); }
+      catch { fail('failed-precondition', 'Stored closing settings require review'); }
+      const same = previous.timeZone === prepared!.timeZone && previous.executionTime === prepared!.executionTime;
+      // Canonical owner authorization above is checked even for a replay.
+      if (previous.revision > 0 && same && previous.updatedByUserId === uid
+        && [previous.revision, previous.revision - 1].includes(prepared!.expectedRevision)) {
+        return { spaceId: input.spaceId, closingSettings: previous };
+      }
+      if (previous.revision !== prepared!.expectedRevision) fail('failed-precondition', 'Closing settings changed; refresh before saving');
+      if (previous.revision >= Number.MAX_SAFE_INTEGER - 1) fail('failed-precondition', 'Closing settings revision requires review');
+      const next = { timeZone: prepared!.timeZone, executionTime: prepared!.executionTime,
+        revision: previous.revision + 1, status: 'prepared' as const, updatedAt: now, updatedByUserId: uid };
+      // One metadata write; no timer, financial collection, archive or historical date is changed.
+      tx.update(spaceRef, { closingSettings: next, updatedAt: now });
+      return { spaceId: input.spaceId, closingSettings: next };
+    }
     if (input.action === 'overview') {
       // Only owners receive membership/invitation management metadata or account quota configuration.
       if (memberSnap.data()?.role !== 'owner') return { space, role: memberSnap.data()?.role };

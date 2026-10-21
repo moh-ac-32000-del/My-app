@@ -798,6 +798,11 @@ try {
       }
       await runCase('Roles — editor cannot change role directly',()=>updateDoc(memberReference(roleEditor,'role-space','role-editor'),{role:'owner'}),'DENY');
       await runCase('Roles — editor cannot change ownership directly',()=>updateDoc(multiSpaceReference(roleEditor,'role-space'),{ownerUserId:'role-editor'}),'DENY');
+      for (const [name, context] of [['owner', roleOwner], ['editor', roleEditor], ['viewer', roleViewer]]) {
+        await runCase(`Closing settings — ${name} cannot directly change workspace timing`, () => updateDoc(multiSpaceReference(context, 'role-space'), {
+          closingSettings: { timeZone: 'UTC', executionTime: '00:00', status: 'enabled' }, nextClosingAt: '2026-10-21T00:00:00Z',
+        }), 'DENY');
+      }
       await runCase('Roles — legacy manager is not silently promoted',()=>getDocFromServer(customerReference(roleLegacy,'role-space','base')),'DENY');
       // Discovery deliberately stays editor; authorization must read the canonical membership again.
       await testEnvironment.withSecurityRulesDisabled(context=>updateDoc(memberReference(context,'role-space','role-editor'),{role:'viewer'}));

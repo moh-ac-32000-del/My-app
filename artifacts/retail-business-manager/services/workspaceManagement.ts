@@ -12,7 +12,8 @@ export interface WorkspaceOverview {
   used?: { private: number; shared: number };
 }
 export type WorkspaceRequest = {
-  action: 'quota' | 'create' | 'rename' | 'overview' | 'invite' | 'revoke' | 'accept' | 'role' | 'remove';
+  action: 'quota' | 'create' | 'rename' | 'overview' | 'invite' | 'revoke' | 'accept' | 'role' | 'remove' | 'closingSettings';
+  closingSettings?: { timeZone: string; executionTime: string; expectedRevision: number };
   spaceId?: string;
   name?: string;
   mode?: 'private' | 'shared';

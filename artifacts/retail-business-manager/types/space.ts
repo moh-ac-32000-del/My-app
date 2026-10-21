@@ -32,6 +32,8 @@ export interface Space {
   ownerUserId: string;
   createdAt: string;
   updatedAt: string;
+  /** Prepared only; automatic closing activation is a separate reviewed transition. */
+  closingSettings?: import('../data/workspaceClosing').WorkspaceClosingSettings;
 }
 
 /**
