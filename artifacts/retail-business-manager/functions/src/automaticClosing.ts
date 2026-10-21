@@ -13,6 +13,8 @@ import { projectArchiveSnapshot, type ArchiveRecord } from './dailyArchiveComman
 const LIMIT = 500;
 const MAX_SPACES = 3;
 const pausedUntil = '9999-12-31T00:00:00.000Z';
+const canonicalPostingDate = (value: unknown): value is string =>
+  typeof value === 'string' && Number.isFinite(Date.parse(value)) && new Date(value).toISOString() === value;
 const bounded = (snap: QuerySnapshot) => {
   if (snap.docs.length > LIMIT)
     throw new HttpsError('resource-exhausted', 'Closing period exceeds reviewed record limit');
@@ -54,14 +56,13 @@ export async function prepareAutomaticClosing(
     archives,
   );
   for (const event of events) {
-    if (!Number.isFinite(Date.parse(event.occurredAt)) || event.occurredAt > now) {
+    if (!canonicalPostingDate(event.occurredAt) || event.occurredAt > now) {
       throw new HttpsError('failed-precondition', 'Legacy posting dates require review before activation');
     }
   }
   for (const doc of cash.docs) {
     if (
-      typeof doc.data().createdAt !== 'string' ||
-      !Number.isFinite(Date.parse(doc.data().createdAt)) ||
+      !canonicalPostingDate(doc.data().createdAt) ||
       doc.data().createdAt > now
     ) {
       throw new HttpsError('failed-precondition', 'Legacy cash dates require review before activation');

@@ -1,5 +1,5 @@
-import { canonicalTimeZone, workspaceDateKey, workspaceDayBounds } from './workspaceClosing.js';
-import { isCurrencyCode } from '../constants/currencies.js';
+import { canonicalTimeZone, workspaceDateKey, workspaceDayBounds } from './workspaceClosing';
+import { isCurrencyCode } from '../constants/currencies';
 
 export interface ClosingTransition {
   from: string;

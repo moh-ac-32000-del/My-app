@@ -42,6 +42,13 @@ function setup(role = 'owner') {
 }
 
 describe('trusted automatic closing, never a new cash movement', () => {
+  it('rejects noncanonical legacy posting dates rather than excluding them from UTC range queries', async () => {
+    const f = setup();
+    f.cash('offset-date', 10, '2026-10-20T23:30:00+03:00');
+    await expect(f.enable()).rejects.toMatchObject({ code: 'failed-precondition' });
+    expect(f.writes).toEqual([]);
+    expect(f.docs['spaces/s'].automaticClosing).toBeUndefined();
+  });
   it.each(['editor', 'viewer', 'manager'])('blocks %s activation and honors deployment readiness', async (role) => {
     const f = setup(role);
     await expect(f.enable()).rejects.toMatchObject({ code: 'permission-denied' });
