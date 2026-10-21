@@ -159,6 +159,7 @@ export function DebtForm({
       setValidation(
         error instanceof Error && error.message === 'dueDateInvalid'
           ? t('debtDueDateInvalid')
+          : error instanceof Error && error.message === 'financialOutcomeUnconfirmed' ? t('merchantFailed')
           : t('debtSaveError'),
       );
     } finally {

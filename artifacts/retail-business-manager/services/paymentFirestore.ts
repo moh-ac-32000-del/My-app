@@ -1,4 +1,5 @@
 import { observeForLocalExport } from './localExportObservation';
+import { legacyAmountExact } from '@/data/customerCreditAccounting';
 import {
   collection,
   getDocs,
@@ -139,6 +140,17 @@ export function normalizePaymentDocument(
     updatedAt: value.updatedAt as string,
   };
 
+  try {
+    if (value.amountExact !== undefined) payment.amountExact = legacyAmountExact(payment.amount.amount, value.amountExact);
+    if (value.source !== undefined) {
+      if (value.source !== 'customer-to-merchant' || typeof value.merchantId !== 'string' || !value.merchantId
+        || typeof value.merchantOperationId !== 'string' || !value.merchantOperationId) return null;
+      payment.source = value.source;
+      payment.merchantId = value.merchantId;
+      payment.merchantOperationId = value.merchantOperationId;
+      if (typeof value.merchantName === 'string') payment.merchantName = value.merchantName;
+    }
+  } catch { return null; }
   return validatePaymentInput(payment) === null ? payment : null;
 }
 

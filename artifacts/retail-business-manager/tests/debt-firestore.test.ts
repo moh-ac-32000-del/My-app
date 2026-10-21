@@ -115,6 +115,15 @@ function configureTransaction(customerData: Record<string, unknown> | undefined 
 }
 
 describe('Debt Firestore service', () => {
+  it('preserves exact remaining fractions and correction metadata when reading the cloud', () => {
+    expect(normalizeDebtDocument('debt-A', { ...debt, amount: 1, amountExact: '1.0000000000000000001',
+      creditAppliedExact: '20.00', note: 'Correction reason', correctionOfMerchantOperationId: 'original', merchantOperationId: 'correction' }, 'space-A'))
+      .toMatchObject({ amountExact: '1.0000000000000000001', creditAppliedExact: '20.00', note: 'Correction reason',
+        correctionOfMerchantOperationId: 'original', merchantOperationId: 'correction' });
+  });
+  it('rejects an exact amount which disagrees with its numeric compatibility mirror', () => {
+    expect(normalizeDebtDocument('debt-A', { ...debt, amount: 1, amountExact: '2.00' }, 'space-A')).toBeNull();
+  });
   beforeEach(() => {
     vi.clearAllMocks();
     trustedDebtMocks.createTrustedDebt.mockResolvedValue(undefined);

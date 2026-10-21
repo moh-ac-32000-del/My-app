@@ -227,8 +227,8 @@ function CashTransactionSheet({
         note: note.trim() || undefined,
       });
       onClose();
-    } catch {
-      setValidation(t('transactionSaveError'));
+    } catch (error) {
+      setValidation(t(error instanceof Error && error.message === 'financialOutcomeUnconfirmed' ? 'merchantFailed' : 'transactionSaveError'));
     } finally {
       setIsSaving(false);
     }
@@ -523,6 +523,7 @@ function CustomerSettlementSheet({ onClose }: { onClose: () => void }) {
       setValidation(
         error instanceof Error && error.message === 'settlementExceedsDebt'
           ? t('settlementExceedsDebt')
+          : error instanceof Error && error.message === 'financialOutcomeUnconfirmed' ? t('merchantFailed')
           : t('settlementSaveError'),
       );
     } finally {

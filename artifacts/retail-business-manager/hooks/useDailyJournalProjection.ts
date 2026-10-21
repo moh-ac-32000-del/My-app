@@ -6,6 +6,7 @@ import { useStore } from '@/context/StoreContext';
 import { isFirebaseConfigured } from '@/services/firebase';
 import { type DailyJournalEvent } from '@/services/storage';
 import { projectCloudDailyJournalEvents } from '@/services/dailyJournalProjection';
+import { useMerchantJournal } from './useMerchantJournal';
 
 interface DailyJournalProjection {
   events: DailyJournalEvent[];
@@ -25,7 +26,12 @@ export function useDailyJournalProjection(refreshToken = 0): DailyJournalProject
     transactions,
     transactionsLoading,
     transactionsError,
+    sessionKey,
+    workspaceRole,
   } = useStore();
+  const merchant = useMerchantJournal(refreshToken);
+  const sourceKey = JSON.stringify([sessionKey, activeSpaceId, workspaceRole, profile.id, merchant.key]);
+  const [resultKey, setResultKey] = useState('');
   const customers = useCustomers();
   const debts = useDebts();
   const payments = usePayments();
@@ -35,6 +41,7 @@ export function useDailyJournalProjection(refreshToken = 0): DailyJournalProject
 
   useEffect(() => {
     let active = true;
+    setResultKey(sourceKey);
 
     if (!isReady) {
       setEvents([]);
@@ -88,9 +95,10 @@ export function useDailyJournalProjection(refreshToken = 0): DailyJournalProject
       && customers.canonicalSpaceId === activeSpaceId
       && debts.canonicalSpaceId === activeSpaceId
       && payments.canonicalSpaceId === activeSpaceId,
+      // Merchant links must be complete before combining independent provider observations.
     );
 
-    if (!allSourcesReady) {
+    if (!allSourcesReady || merchant.loading) {
       setEvents([]);
       setIsLoading(true);
       setError(null);
@@ -101,23 +109,31 @@ export function useDailyJournalProjection(refreshToken = 0): DailyJournalProject
 
     setIsLoading(true);
     setError(null);
+    if (merchant.error) {
+      setEvents([]); setIsLoading(false); setError(merchant.error); setResultKey(sourceKey);
+      return () => { active = false; };
+    }
     if (!activeSpaceId) throw new Error('journalWorkspaceUnavailable');
     void projectCloudDailyJournalEvents(activeSpaceId, profile.id, {
       transactions,
       debts: debts.debts,
       payments: payments.payments,
       customers: customers.customers,
+      merchantOperations: merchant.operations,
+      spaceId: activeSpaceId,
     }).then((cloudEvents) => {
       if (!active) {
         return;
       }
       setEvents(cloudEvents);
+      setResultKey(sourceKey);
       setIsLoading(false);
     }).catch((projectionError) => {
       if (!active) {
         return;
       }
       setEvents([]);
+      setResultKey(sourceKey);
       setIsLoading(false);
       setError(projectionError instanceof Error ? projectionError.message : 'journalLoadFailed');
     });
@@ -149,7 +165,17 @@ export function useDailyJournalProjection(refreshToken = 0): DailyJournalProject
     transactions,
     transactionsError,
     transactionsLoading,
+    merchant.operations,
+    merchant.loading,
+    merchant.error,
+    sourceKey,
   ]);
 
+  const visibleError = initializationError ?? activeSpaceError ?? transactionsError ?? customers.error ?? debts.error ?? payments.error ?? merchant.error;
+  if (visibleError) return { events: [], isLoading: false, error: visibleError };
+  if (!isReady || !isAuthenticated || activeSpaceLoading || transactionsLoading || customers.isLoading || debts.isLoading
+    || payments.isLoading || merchant.loading || customers.canonicalSpaceId !== activeSpaceId
+    || debts.canonicalSpaceId !== activeSpaceId || payments.canonicalSpaceId !== activeSpaceId
+    || resultKey !== sourceKey) return { events: [], isLoading: true, error: null };
   return { events, isLoading, error };
 }

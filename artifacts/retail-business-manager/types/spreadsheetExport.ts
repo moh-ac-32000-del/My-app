@@ -1,4 +1,16 @@
-export const EXPORT_VERSION = 1;
+import type { Debt, Payment, Transaction, DailyArchive } from './business';
+import type { Merchant, MerchantBalance, MerchantOperation, CustomerCredit } from './merchant';
+export const EXPORT_VERSION = 2;
+export interface ExportAccountData {
+  merchants: Merchant[];
+  balances: MerchantBalance[];
+  operations: MerchantOperation[];
+  credits: CustomerCredit[];
+  debts: Debt[];
+  payments: Payment[];
+  transactions: Transaction[];
+  archives: DailyArchive[];
+}
 export type ExportValue = string | number | boolean | null;
 export const EXPORT_COLUMNS = {
   customers: ['id', 'name', 'phone', 'address', 'notes', 'isActive', 'createdAt', 'updatedAt'],
@@ -12,7 +24,7 @@ export const EXPORT_COLUMNS = {
 export type ExportTableName = keyof typeof EXPORT_COLUMNS;
 export type ExportTables = { [K in ExportTableName]: ExportValue[][] };
 export interface SpreadsheetExportSnapshot {
-  version: 1;
+  version: 1 | 2;
   spaceId: string;
   storeId: string;
   storeName: string;
@@ -20,4 +32,6 @@ export interface SpreadsheetExportSnapshot {
   /** Different local capture times, not a single atomic/current cloud snapshot. */
   capturedAt: Record<'customers' | 'debts' | 'payments' | 'transactions' | 'dailyArchives', string>;
   tables: ExportTables;
+  /** Version 2 exact scoped data, validated before workbook creation. Version 1 fixtures remain readable. */
+  accountData?: ExportAccountData;
 }

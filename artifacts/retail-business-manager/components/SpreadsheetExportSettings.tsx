@@ -6,18 +6,20 @@ import { useColors } from '@/hooks/useColors';
 import { useI18n } from '@/hooks/useI18n';
 import { useStore } from '@/context/StoreContext';
 import { getFirebaseAuth, isFirebaseConfigured } from '@/services/firebase';
-import { localExportStatus, readLocalExportData, subscribeLocalExportCache } from '@/services/localExportCache';
+import { LOCAL_EXPORT_COLLECTIONS, localExportEpoch, localExportStatus, readLocalExportData, subscribeLocalExportCache } from '@/services/localExportCache';
 import { projectLocalExportSnapshot } from '@/services/localExportProjection';
 import { exportLabels } from '@/constants/exportLabels';
 import { exportFileName, spreadsheetBytes } from '@/services/spreadsheetWorkbook';
 import { saveSpreadsheet } from '@/services/saveSpreadsheet';
+import { merchantExportLabels } from '@/constants/merchantExportLabels';
 
 type Message = 'exportSaved' | 'exportShared' | 'exportDownloadRequested' | 'exportFailed';
 export function SpreadsheetExportSettings() {
   const { language } = useI18n();
-  const { activeSpaceId, profile, isAuthenticated } = useStore();
+  const { activeSpaceId, profile, isAuthenticated, sessionKey, workspaceRole } = useStore();
+  const epoch = localExportEpoch();
   const uid = isFirebaseConfigured && isAuthenticated ? getFirebaseAuth().currentUser?.uid : null;
-  const key = uid && activeSpaceId && profile.id ? `${uid}/${activeSpaceId}/${profile.id}` : '';
+  const key = uid && activeSpaceId && profile.id ? `${uid}/${activeSpaceId}/${profile.id}/${sessionKey}/${workspaceRole}/${epoch}` : '';
   const current = useRef(key); current.current = key;
   const lock = useRef(false);
   const [confirmKey, setConfirmKey] = useState<string | null>(null);
@@ -32,7 +34,7 @@ export function SpreadsheetExportSettings() {
   const run = async () => {
     if (!uid || !activeSpaceId || !key || !ready || confirmKey !== key || lock.current) return;
     lock.current = true; setBusy(true); setMessage(null); setConfirmKey(null);
-    const isCurrent = () => current.current === key && getFirebaseAuth().currentUser?.uid === uid;
+    const isCurrent = () => current.current === key && localExportEpoch() === epoch && getFirebaseAuth().currentUser?.uid === uid;
     try {
       const local = readLocalExportData(scope);
       const snapshot = projectLocalExportSnapshot(scope, profile.name, local.records, local.capturedAt, new Date().toISOString());
@@ -45,7 +47,7 @@ export function SpreadsheetExportSettings() {
     finally { lock.current = false; setBusy(false); }
   };
   return <SpreadsheetExportCard available={ready} count={status.length - missing.length}
-    missingNames={missing.map((entry) => exportLabels[language][entry.collection])}
+    missingNames={missing.map((entry) => ({ ...exportLabels[language], ...merchantExportLabels[language] })[entry.collection])}
     confirming={confirmKey === key && ready} busy={busy} message={message?.key === key ? message.kind : null}
     onStart={() => { setMessage(null); setConfirmKey(key); }} onConfirm={() => void run()} onCancel={() => setConfirmKey(null)} />;
 }
@@ -56,7 +58,7 @@ export function SpreadsheetExportCard({ available, count, missingNames, confirmi
   onStart: () => void; onConfirm: () => void; onCancel: () => void;
 }) {
   const colors = useColors();
-  const { t, isRTL } = useI18n();
+  const { t, isRTL, language } = useI18n();
   const align = { textAlign: isRTL ? 'right' as const : 'left' as const };
   const row = { flexDirection: isRTL ? 'row-reverse' as const : 'row' as const };
   return <GlassCard testID="spreadsheet-export-section" style={styles.card}>
@@ -68,7 +70,8 @@ export function SpreadsheetExportCard({ available, count, missingNames, confirmi
       </View>
     </View>
     <Text style={[styles.hint, align, { color: colors.mutedForeground }]}>{t('exportScopeHint')}</Text>
-    <Text testID="local-export-coverage" style={[styles.hint, align, { color: available ? colors.success : colors.mutedForeground }]}>{t('exportLocalCoverage')} {count}/5{missingNames.length ? ' — ' + missingNames.join('، ') : ''}</Text>
+    <Text testID="local-export-coverage" style={[styles.hint, align, { color: available ? colors.success : colors.mutedForeground }]}>{t('exportLocalCoverage')} {count}/{LOCAL_EXPORT_COLLECTIONS.length}{missingNames.length ? ' — ' + missingNames.join('، ') : ''}</Text>
+    {!available ? <Text style={[styles.hint, align, { color: colors.mutedForeground }]}>{merchantExportLabels[language].incompleteHint}</Text> : null}
     <View style={[styles.warning, { backgroundColor: `${colors.destructive}12` }]}>
       <Text style={[styles.hint, align, { color: colors.destructive }]}>{t('exportPrivacyWarning')}</Text>
     </View>

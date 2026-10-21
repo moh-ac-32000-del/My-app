@@ -52,6 +52,17 @@ const transaction: Transaction = {
 };
 
 describe('Transaction Firestore service', () => {
+  it('preserves trusted merchant cash links and exact mirrors for journal deduplication', () => {
+    expect(normalizeTransactionDocument(transaction.id, { ...transaction, workspaceId: 'space-A', merchantId: 'm',
+      merchantOperationId: 'op', amountExact: '125.00' }, 'space-A')).toMatchObject({
+      workspaceId: 'space-A', merchantId: 'm', merchantOperationId: 'op', amountExact: '125.00',
+    });
+  });
+  it.each([{ workspaceId: 'other' }, { merchantOperationId: 'bad/id' }, { amountExact: '126.00' }])
+    ('rejects invalid merchant-linked cash metadata %j', (extra) => {
+      expect(normalizeTransactionDocument(transaction.id, { ...transaction, workspaceId: 'space-A', merchantId: 'm',
+        merchantOperationId: 'op', amountExact: '125.00', ...extra }, 'space-A')).toBeNull();
+    });
   beforeEach(() => {
     vi.clearAllMocks();
     firestoreMocks.nextSnapshot = null;

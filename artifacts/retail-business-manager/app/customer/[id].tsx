@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Linking, Modal, Pressable, Share, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
@@ -17,7 +17,12 @@ import { useStore } from '@/context/StoreContext';
 import { useDebts } from '@/context/DebtContext';
 import { usePayments } from '@/context/PaymentContext';
 import { createCloudReminder, loadCloudReminders } from '@/services/cloudReminders';
-import { calculateDebtTotals, createReminder, filterDebtsByCustomer, filterPaymentsByCustomer, parseLocalizedAmountInput } from '@/services/storage';
+import { createReminder, filterDebtsByCustomer, filterPaymentsByCustomer, parseLocalizedAmountInput } from '@/services/storage';
+import { projectCustomerAccounts } from '@/data/customerAccountProjection';
+import { legacyAmountExact } from '@/data/customerCreditAccounting';
+import { formatExactMoney } from '@/data/exactMoneyPresentation';
+import { createOperationId } from '@/services/operationId';
+import type { SettlementDraft } from '@/services/storage';
 import { loadNotificationTime } from '@/services/preferences';
 import { buildCustomerStatement } from '@/services/customerSharing';
 import type { Customer, Debt, Payment, Reminder } from '@/types/business';
@@ -39,13 +44,19 @@ function DetailRow({ icon, label, value }: { icon: React.ComponentProps<typeof I
 }
 
 export default function CustomerDetailsScreen() {
+  const params = useLocalSearchParams<{ id: string }>();
+  const id = typeof params.id === 'string' ? params.id : '';
+  return <CustomerDetails key={id} customerId={id} />;
+}
+
+function CustomerDetails({ customerId }: { customerId: string }) {
   const colors = useColors();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { id } = useLocalSearchParams<{ id: string }>();
   const { profile, isReady, activeSpaceId, addCustomerDebt, settleCustomerDebt, canWriteBusiness } = useStore();
   const {
     debts: workspaceDebts,
+    credits: workspaceCredits = [],
     isLoading: areDebtsLoading,
     error: debtError,
     retryDebts,
@@ -65,16 +76,15 @@ export default function CustomerDetailsScreen() {
     retryPayments,
   } = usePayments();
   const { t, language, isRTL } = useI18n();
-  const customerId = typeof id === 'string' ? id : '';
   const customer = customers.find((item) => item.id === customerId) ?? null;
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isEditVisible, setIsEditVisible] = useState<boolean>(false);
   const [isDeleteDialogVisible, setIsDeleteDialogVisible] = useState<boolean>(false);
   const [isDeleting, setIsDeleting] = useState<boolean>(false);
-  const [debts, setDebts] = useState<Debt[]>([]);
+  const debts = useMemo(() => filterDebtsByCustomer(workspaceDebts, customerId), [workspaceDebts, customerId]);
   const [isDebtVisible, setIsDebtVisible] = useState<boolean>(false);
   const [isSavingDebt, setIsSavingDebt] = useState<boolean>(false);
-  const [payments, setPayments] = useState<Payment[]>([]);
+  const payments = useMemo(() => filterPaymentsByCustomer(workspacePayments, customerId), [workspacePayments, customerId]);
   const [isSettlementVisible, setIsSettlementVisible] = useState<boolean>(false);
   const [isSavingSettlement, setIsSavingSettlement] = useState<boolean>(false);
   const [settlementAmount, setSettlementAmount] = useState<string>('');
@@ -84,11 +94,20 @@ export default function CustomerDetailsScreen() {
   const [reminderDebt, setReminderDebt] = useState<Debt | null>(null);
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const settlementInFlightRef = useRef<boolean>(false);
+  const settlementIntentRef = useRef<SettlementDraft | null>(null);
+  const [settlementUncertain, setSettlementUncertain] = useState(false);
+  const [settlementErrorMessage, setSettlementErrorMessage] = useState<string | null>(null);
+  const alive = useRef(true);
+  useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
 
-  const debtTotals = useMemo(() => calculateDebtTotals(debts), [debts]);
+  const accountBalances = useMemo(() => {
+    if (!activeSpaceId) return null;
+    try { return projectCustomerAccounts(workspaceDebts, workspaceCredits, activeSpaceId, profile.id).accounts
+      .filter(account => account.customerId === customerId); } catch { return null; }
+  }, [workspaceDebts, workspaceCredits, activeSpaceId, profile.id, customerId]);
   const debtCurrencies = useMemo(
-    () => CURRENCY_OPTIONS.filter(({ code }) => debtTotals[code] > 0),
-    [debtTotals],
+    () => CURRENCY_OPTIONS.filter(({ code }) => accountBalances?.some(balance => balance.currency === code && balance.balanceExact !== '0.00' && !balance.balanceExact.startsWith('-'))),
+    [accountBalances],
   );
   useFocusEffect(
     useCallback(() => {
@@ -105,8 +124,6 @@ export default function CustomerDetailsScreen() {
         if (!activeSpaceId) throw new Error('cloudSpaceUnavailable');
         const storedReminders = await loadCloudReminders(activeSpaceId, profile.id, await loadNotificationTime());
         if (active) {
-          setDebts(filterDebtsByCustomer(workspaceDebts, customerId));
-          setPayments(filterPaymentsByCustomer(workspacePayments, customerId));
           const customerDebtIds = new Set(workspaceDebts.filter((debt) => debt.customerId === customerId).map((debt) => debt.id));
           setReminders(storedReminders.filter((reminder) => customerDebtIds.has(reminder.debtId)));
           setIsLoading(false);
@@ -209,40 +226,49 @@ export default function CustomerDetailsScreen() {
       return;
     }
     if (!settlementAmount.trim()) {
+      setSettlementErrorMessage(t('settlementAmountRequired'));
       Alert.alert(t('settlement'), t('settlementAmountRequired'));
       return;
     }
 
     const parsedAmount = parseLocalizedAmountInput(settlementAmount, language);
     if (parsedAmount === null) {
+      setSettlementErrorMessage(t('settlementAmountInvalid'));
       Alert.alert(t('settlement'), t('settlementAmountInvalid'));
       return;
     }
-    if (parsedAmount > debtTotals[settlementCurrency]) {
-      Alert.alert(t('settlement'), t('settlementExceedsDebt'));
-      return;
-    }
 
+    try {
+      if (!settlementIntentRef.current) settlementIntentRef.current = {
+        amount: parsedAmount, currency: settlementCurrency, intentId: createOperationId(),
+      };
+    } catch { setSettlementErrorMessage(t('settlementSaveError')); return; }
     settlementInFlightRef.current = true;
     setIsSavingSettlement(true);
     try {
-      const result = await settleCustomerDebt(customerId, {
-        amount: parsedAmount,
-        currency: settlementCurrency,
-      });
+      await settleCustomerDebt(customerId, settlementIntentRef.current);
+      if (!alive.current) return;
+      settlementIntentRef.current = null;
+      setSettlementUncertain(false);
+      setSettlementErrorMessage(null);
       // Debt/payment providers refresh from their existing Firestore subscriptions.
       // Avoid triggering extra full-collection reads just to refresh this screen.
       setSettlementAmount('');
       setIsSettlementVisible(false);
       Alert.alert(t('settlementSaved'));
     } catch (error) {
-      const message = error instanceof Error && error.message === 'settlementExceedsDebt'
-        ? t('settlementExceedsDebt')
-        : t('settlementSaveError');
+      if (!alive.current) return;
+      const code = error && typeof error === 'object' && 'code' in error ? String(error.code) : '';
+      const definite = ['functions/invalid-argument', 'functions/permission-denied', 'functions/failed-precondition',
+        'functions/not-found', 'functions/resource-exhausted'].includes(code);
+      if (definite) settlementIntentRef.current = null;
+      setSettlementUncertain(!definite);
+      const message = definite ? t('settlementSaveError') : t('merchantFailed');
+      setSettlementErrorMessage(message);
       Alert.alert(t('somethingWentWrong'), message);
     } finally {
       settlementInFlightRef.current = false;
-      setIsSavingSettlement(false);
+      if (alive.current) setIsSavingSettlement(false);
     }
   };
 
@@ -265,11 +291,12 @@ export default function CustomerDetailsScreen() {
   };
 
   const shareCustomerStatement = async () => {
-    if (!customer) {
+    if (!customer || !accountBalances) {
       return;
     }
 
-    const message = buildCustomerStatement(customer, debts, language, t, profile.name);
+    const message = buildCustomerStatement(customer, debts, language, t, profile.name, new Date(),
+      accountBalances.map(account => ({ currency: account.currency, amount: account.balanceExact })));
     try {
       await Linking.openURL(`whatsapp://send?text=${encodeURIComponent(message)}`);
     } catch {
@@ -308,7 +335,7 @@ export default function CustomerDetailsScreen() {
     );
   }
 
-  if (debtError) {
+  if (debtError || accountBalances === null) {
     return (
       <AppShell>
         <PageHeader title={t('customerDetails')} showBack />
@@ -378,11 +405,13 @@ export default function CustomerDetailsScreen() {
         <Text style={[styles.shareText, { color: colors.primaryForeground }]}>{t('shareCustomerStatement')}</Text>
       </Pressable>
 
-      {canWriteBusiness && debtCurrencies.length > 0 ? (
+      {canWriteBusiness ? (
         <Pressable
           testID="add-settlement-button"
           accessibilityRole="button"
           onPress={() => {
+            if (settlementIntentRef.current) { setIsSettlementVisible(true); return; }
+            setSettlementErrorMessage(null);
             setSettlementCurrency(debtCurrencies[0]?.code ?? profile.currency);
             setSettlementAmount('');
             setIsSettlementVisible(true);
@@ -407,13 +436,13 @@ export default function CustomerDetailsScreen() {
       </Pressable> : null}
 
       <SectionTitle title={t('debtTotals')} />
-      {debtCurrencies.length > 0 ? (
+      {accountBalances.some(account => account.balanceExact !== '0.00') ? (
         <GlassCard style={styles.debtTotalsCard}>
           <View style={styles.debtTotalsGrid}>
-            {debtCurrencies.map(({ code }) => (
-              <View key={code} style={[styles.debtTotalItem, { backgroundColor: colors.input, borderColor: colors.border }]}>
-                <Text style={[styles.debtCurrencyCode, { color: colors.primary }]}>{code}</Text>
-                <Text style={[styles.debtTotalAmount, { color: colors.foreground }]}>{formatMoney(debtTotals[code], code, language)}</Text>
+            {accountBalances.filter(account => account.balanceExact !== '0.00').map(account => (
+              <View key={account.currency} style={[styles.debtTotalItem, { backgroundColor: colors.input, borderColor: colors.border }]}>
+                <Text style={[styles.debtCurrencyCode, { color: colors.primary }]}>{account.currency} · {t(account.balanceExact.startsWith('-') ? 'customerCreditBalance' : 'remainingDebt')}</Text>
+                <Text style={[styles.debtTotalAmount, { color: account.balanceExact.startsWith('-') ? colors.success : colors.foreground }]}>{formatExactMoney(account.balanceExact.replace(/^-/, ''), account.currency, language)}</Text>
               </View>
             ))}
           </View>
@@ -432,15 +461,19 @@ export default function CustomerDetailsScreen() {
               </View>
               <View style={[styles.debtHistoryCopy, { alignItems: isRTL ? 'flex-end' : 'flex-start' }]}>
                 <Text style={[styles.debtHistoryAmount, { color: colors.foreground, textAlign: isRTL ? 'right' : 'left' }]}>
-                  {formatMoney(debt.originalAmount ?? debt.amount, debt.currency, language)}
+                  {formatExactMoney(debt.originalAmount !== undefined ? legacyAmountExact(debt.originalAmount) : legacyAmountExact(debt.amount, debt.amountExact), debt.currency, language)}
                 </Text>
                 {debt.originalAmount !== undefined ? (
                   <Text style={[styles.debtHistoryDate, { color: colors.primary, textAlign: isRTL ? 'right' : 'left' }]}>
-                    {debt.amount === 0
+                    {legacyAmountExact(debt.amount, debt.amountExact) === '0.00'
                       ? t('debtSettled')
-                      : `${t('remainingDebt')}: ${formatMoney(debt.amount, debt.currency, language)}`}
+                      : `${t('remainingDebt')}: ${formatExactMoney(legacyAmountExact(debt.amount, debt.amountExact), debt.currency, language)}`}
                   </Text>
                 ) : null}
+                {debt.creditAppliedExact && debt.creditAppliedExact !== '0.00' ? <Text style={{ color: colors.success }}>
+                  {t('customerCreditUsed')}: {formatExactMoney(debt.creditAppliedExact, debt.currency, language)}
+                </Text> : null}
+                {debt.note ? <Text style={{ color: colors.mutedForeground }}>{debt.note}</Text> : null}
                 <Text style={[styles.debtHistoryDate, { color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' }]}>
                   {formatLocalizedDateTime(new Date(debt.createdAt), language)}
                 </Text>
@@ -514,8 +547,12 @@ export default function CustomerDetailsScreen() {
               </View>
               <View style={[styles.debtHistoryCopy, { alignItems: isRTL ? 'flex-end' : 'flex-start' }]}>
                 <Text style={[styles.debtHistoryAmount, { color: colors.foreground, textAlign: isRTL ? 'right' : 'left' }]}>
-                  {t('payment')} · {formatMoney(payment.amount.amount, payment.amount.currency, language)}
+                  {t('payment')} · {formatExactMoney(legacyAmountExact(payment.amount.amount, payment.amountExact), payment.amount.currency, language)}
                 </Text>
+                {payment.source === 'customer-to-merchant' ? <Text style={{ color: colors.primary }}>
+                  {t('merchantDirect')} · {payment.merchantName ?? ''} · {t('merchantNoncash')}
+                </Text> : null}
+                {payment.note ? <Text style={{ color: colors.mutedForeground }}>{payment.note}</Text> : null}
                 <Text style={[styles.debtHistoryDate, { color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' }]}>
                   {formatLocalizedDateTime(new Date(payment.paidAt), language)}
                 </Text>
@@ -643,7 +680,7 @@ export default function CustomerDetailsScreen() {
         transparent
         animationType="slide"
         onRequestClose={() => {
-          if (!isSavingSettlement) {
+          if (!isSavingSettlement && !settlementUncertain) {
             setIsSettlementVisible(false);
           }
         }}
@@ -658,7 +695,7 @@ export default function CustomerDetailsScreen() {
               <Pressable
                 testID="close-settlement-form"
                 accessibilityLabel={t('close')}
-                disabled={isSavingSettlement}
+                disabled={isSavingSettlement || settlementUncertain}
                 onPress={() => setIsSettlementVisible(false)}
                 style={({ pressed }) => [styles.debtCloseButton, { borderColor: colors.border, backgroundColor: colors.input }, pressed && styles.pressed]}
               >
@@ -670,7 +707,7 @@ export default function CustomerDetailsScreen() {
               <View style={styles.debtField}>
                 <Text style={[styles.debtFieldLabel, { color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' }]}>{t('settlementCurrency')}</Text>
                 <View style={styles.debtCurrencyOptions}>
-                  {debtCurrencies.map((option) => {
+                  {CURRENCY_OPTIONS.map((option) => {
                     const selected = settlementCurrency === option.code;
                     return (
                       <Pressable
@@ -678,6 +715,7 @@ export default function CustomerDetailsScreen() {
                         testID={`settlement-currency-${option.code}`}
                         accessibilityRole="radio"
                         accessibilityState={{ selected }}
+                        disabled={isSavingSettlement || settlementUncertain}
                         onPress={() => setSettlementCurrency(option.code)}
                         style={({ pressed }) => [
                           styles.debtCurrencyOption,
@@ -689,7 +727,7 @@ export default function CustomerDetailsScreen() {
                           {selected ? <Ionicons name="checkmark" size={15} color={colors.primaryForeground} /> : null}
                         </View>
                         <Text style={[styles.debtCurrencyOptionText, { color: colors.foreground, textAlign: isRTL ? 'right' : 'left' }]}>
-                          {option.code} · {t('remainingDebt')} {formatMoney(debtTotals[option.code], option.code, language)}
+                          {option.code} · {t('merchantBalance')} {formatExactMoney(accountBalances.find(account => account.currency === option.code)?.balanceExact ?? '0.00', option.code, language)}
                         </Text>
                       </Pressable>
                     );
@@ -704,6 +742,7 @@ export default function CustomerDetailsScreen() {
                   <TextInput
                     testID="settlement-amount-input"
                     value={settlementAmount}
+                    editable={!isSavingSettlement && !settlementUncertain}
                     onChangeText={setSettlementAmount}
                     placeholder={t('amount')}
                     placeholderTextColor={colors.mutedForeground}
@@ -714,10 +753,11 @@ export default function CustomerDetailsScreen() {
                 </View>
               </View>
 
+              {settlementErrorMessage ? <Text accessibilityRole="alert" style={{ color: colors.warning }}>{settlementErrorMessage}</Text> : null}
               <View style={[styles.debtModalActions, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
                 <Pressable
                   testID="cancel-settlement-form"
-                  disabled={isSavingSettlement}
+                  disabled={isSavingSettlement || settlementUncertain}
                   onPress={() => setIsSettlementVisible(false)}
                   style={({ pressed }) => [styles.debtSecondaryButton, { borderColor: colors.border, backgroundColor: colors.input }, pressed && styles.pressed]}
                 >
@@ -730,7 +770,7 @@ export default function CustomerDetailsScreen() {
                   style={({ pressed }) => [styles.debtPrimaryButton, { backgroundColor: colors.primary }, pressed && styles.pressed]}
                 >
                   {isSavingSettlement ? <ActivityIndicator size="small" color={colors.primaryForeground} /> : <Ionicons name="checkmark-done-circle-outline" size={18} color={colors.primaryForeground} />}
-                  <Text style={[styles.debtPrimaryText, { color: colors.primaryForeground }]}>{t('settlement')}</Text>
+                  <Text style={[styles.debtPrimaryText, { color: colors.primaryForeground }]}>{t(settlementUncertain ? 'merchantRetrySame' : 'settlement')}</Text>
                 </Pressable>
               </View>
             </KeyboardAwareScrollViewCompat>

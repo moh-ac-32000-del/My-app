@@ -63,6 +63,14 @@ const payment: Payment = {
 };
 
 describe('Payment Firestore service', () => {
+  it('preserves noncash customer-to-merchant links, names and exact payment amounts', () => {
+    expect(normalizePaymentDocument('payment-A', { ...payment, method: 'other', amountExact: '125.00',
+      source: 'customer-to-merchant', merchantId: 'merchant', merchantName: 'Readable merchant', merchantOperationId: 'operation' }, 'space-A'))
+      .toMatchObject({ amountExact: '125.00', source: 'customer-to-merchant', merchantName: 'Readable merchant', merchantOperationId: 'operation' });
+  });
+  it('rejects an unlinked claimed direct payment instead of displaying it as trusted noncash', () => {
+    expect(normalizePaymentDocument('payment-A', { ...payment, source: 'customer-to-merchant' }, 'space-A')).toBeNull();
+  });
   beforeEach(() => {
     vi.clearAllMocks();
     firestoreMocks.nextSnapshot = null;

@@ -4,6 +4,7 @@ import { settleCustomerDebtHandler } from '../functions/src/settleCustomerDebt';
 type Data = Record<string, unknown>;
 type FakeQuery = { path: string; query: { collectionPath: string; field: string; value: unknown } };
 type FakeReference = {
+  id: string;
   path: string;
   collection: (name: string) => FakeCollection;
   doc: (id: string) => FakeReference;
@@ -17,6 +18,7 @@ type FakeCollection = {
 
 function fakeReference(path: string): FakeReference {
   return {
+    id: path.split('/').at(-1)!,
     path,
     collection: (name) => fakeCollection(`${path}/${name}`),
     doc: (id) => fakeReference(`${path}/${id}`),
@@ -49,6 +51,7 @@ function createFakeFirestore(seed: Record<string, Data>) {
       get: (reference: FakeReference | FakeQuery) => Promise<unknown>;
       create: (reference: FakeReference, data: Data) => void;
       update: (reference: FakeReference, data: Data) => void;
+      set: (reference: FakeReference, data: Data) => void;
     }) => Promise<T>): Promise<T> {
       const transaction = {
         get: async (reference: FakeReference | FakeQuery): Promise<unknown> => {
@@ -78,6 +81,9 @@ function createFakeFirestore(seed: Record<string, Data>) {
           if (!current) throw new Error(`missing document: ${reference.path}`);
           documents.set(reference.path, { ...current, ...data });
           updated.push({ path: reference.path, data: { ...data } });
+        },
+        set: (reference: FakeReference, data: Data) => {
+          documents.set(reference.path, { ...data });
         },
       };
       return callback(transaction);
@@ -199,17 +205,16 @@ describe('trusted debt settlement command', () => {
     expect(fake.documents.get('spaces/space-A/debts/debt-A')?.amount).toBe(100);
   });
 
-  it('rejects an amount greater than the outstanding debt without writing any records', async () => {
+  it('preserves an overpayment as customer credit and records only the actual cash received', async () => {
     const fake = createFakeFirestore(baseSeed());
 
     await expect(settleCustomerDebtHandler(
       request(151) as never,
       { firestore: fake.firestore as never, now: () => '2026-10-17T12:00:00.000Z' },
-    )).rejects.toMatchObject({ code: 'failed-precondition' });
-
-    expect(fake.created).toHaveLength(0);
-    expect(fake.updated).toHaveLength(0);
-    expect(fake.documents.get('spaces/space-A/debts/debt-A')?.amount).toBe(150);
+    )).resolves.toMatchObject({ outcome: 'completed' });
+    expect(fake.documents.get('spaces/space-A/debts/debt-A')?.amount).toBe(0);
+    expect(fake.documents.get('spaces/space-A/transactions/transaction-A')?.amount).toBe(151);
+    expect([...fake.documents.entries()].find(([path]) => path.includes('/customerCredits/'))?.[1]).toMatchObject({ creditExact: '1.00' });
   });
 
   it('replays the same completed operation without applying the settlement twice', async () => {

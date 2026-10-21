@@ -5,6 +5,7 @@ import { formatMoney, getCurrency } from '@/constants/currencies';
 import { useColors } from '@/hooks/useColors';
 import { useI18n } from '@/hooks/useI18n';
 import type { CustomerDebtSummaryState } from '@/services/customerDebtSummary';
+import { formatExactMoney } from '@/data/exactMoneyPresentation';
 
 export function CustomerDebtSummary({ state, onRetry }: { state: CustomerDebtSummaryState; onRetry: () => void }) {
   const colors = useColors();
@@ -30,11 +31,19 @@ export function CustomerDebtSummary({ state, onRetry }: { state: CustomerDebtSum
           {state.balances.map(({ currency, amount }) => (
             <View key={currency} testID={`customer-debt-total-${currency}`} style={[styles.balance, { backgroundColor: colors.accent }]}>
               <Text style={[styles.hint, align, { color: colors.mutedForeground }]}>{t(getCurrency(currency).nameKey)} ({currency})</Text>
-              <Text style={[styles.amount, align, { color: colors.foreground }]}>{formatMoney(amount, currency, language)}</Text>
+              <Text style={[styles.amount, align, { color: colors.foreground }]}>{typeof amount === 'string' ? formatExactMoney(amount, currency, language) : formatMoney(amount, currency, language)}</Text>
             </View>
           ))}
         </View>
       )}
+      {state.status === 'ready' && state.customerCredits?.length ? <View style={{ gap: 10 }}>
+        <Text style={[styles.title, align, { color: colors.success }]}>{t('customerCreditSummary')}</Text>
+        {state.customerCredits.map(({ currency, amount }) => <View key={currency} testID={`customer-credit-total-${currency}`} style={[styles.balance, { backgroundColor: colors.accent }]}>
+          <Text style={[styles.hint, align, { color: colors.mutedForeground }]}>{currency} · {t('customerCreditBalance')}</Text>
+          <Text style={[styles.amount, align, { color: colors.success }]}>{formatExactMoney(amount, currency, language)}</Text>
+        </View>)}
+        <Text style={[styles.hint, align, { color: colors.mutedForeground }]}>{t('customerCreditHint')}</Text>
+      </View> : null}
     </GlassCard>
   );
 }

@@ -15,6 +15,7 @@ import { useI18n } from '@/hooks/useI18n';
 import { calculateVisibleCurrencyBalances } from '@/services/storage';
 import { useDailyJournalProjection } from '@/hooks/useDailyJournalProjection';
 import type { DailyJournalEvent } from '@/services/storage';
+import { journalEventTitle, journalEventMoney, journalEventDetails } from '@/services/journalPresentation';
 
 export default function DashboardScreen() {
   const colors = useColors();
@@ -44,6 +45,7 @@ export default function DashboardScreen() {
   }, [isReady,isAuthenticated,activeSpaceLoading,activeSpaceId,router]);
 
   const getJournalTitle = (event: DailyJournalEvent): string => {
+    if (event.type === 'merchant') return journalEventTitle(event, t);
     if (event.type === 'cash_in') return t('cashIn');
     if (event.type === 'cash_out') return t('cashOut');
     const customerName = event.customerName ?? t('unknownCustomer');
@@ -156,8 +158,11 @@ export default function DashboardScreen() {
                   />
                   <View style={styles.activityContent}>
                     <Text style={[styles.activityTitle, { color: colors.foreground, textAlign: isRTL ? 'right' : 'left' }]}>
-                      {getJournalTitle(event)} — {formatMoney(event.amount, event.currency, language)}
+                      {getJournalTitle(event)} — {journalEventMoney(event, language)}
                     </Text>
+                    {journalEventDetails(event, language, t).map((detail, index) => (
+                      <Text key={`${event.id}:${index}`} style={[styles.activityDate, { color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' }]}>{detail}</Text>
+                    ))}
                     <Text style={[styles.activityDate, { color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' }]}>
                       {formatLocalizedDateTime(new Date(event.occurredAt), language)}
                     </Text>

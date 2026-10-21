@@ -15,6 +15,7 @@ type IconName = React.ComponentProps<typeof Ionicons>['name'];
 const primaryNav: Array<{ path: string; label: TranslationKey; icon: IconName }> = [
   { path: '/', label: 'dashboard', icon: 'grid-outline' },
   { path: '/customers', label: 'customers', icon: 'people-outline' },
+  { path: '/merchants', label: 'merchants', icon: 'storefront-outline' },
   { path: '/archive', label: 'archive', icon: 'archive-outline' },
   { path: '/settings', label: 'settings', icon: 'settings-outline' },
 ];
@@ -79,7 +80,8 @@ export function AppShell({ children, scroll = true }: { children: ReactNode; scr
         <BlurView intensity={55} tint="dark" style={[StyleSheet.absoluteFill, styles.blurNav]} />
         <View style={[styles.nav, { backgroundColor: colors.glassStrong, borderColor: colors.border, flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
           {primaryNav.map((item) => {
-            const active = item.path === '/' ? pathname === '/' : pathname.startsWith(item.path);
+            const active = item.path === '/' ? pathname === '/' : item.path === '/merchants'
+              ? pathname.startsWith('/merchant') : pathname.startsWith(item.path);
             return (
               <Pressable
                 key={item.path}
@@ -90,7 +92,7 @@ export function AppShell({ children, scroll = true }: { children: ReactNode; scr
                 <View style={[styles.navIcon, active && { backgroundColor: colors.accent }]}>
                   <Ionicons name={item.icon} size={19} color={active ? colors.primary : colors.mutedForeground} />
                 </View>
-                <Text style={[styles.navLabel, { color: active ? colors.foreground : colors.mutedForeground }]}>
+                <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75} style={[styles.navLabel, { color: active ? colors.foreground : colors.mutedForeground }]}>
                   {t(item.label)}
                 </Text>
               </Pressable>

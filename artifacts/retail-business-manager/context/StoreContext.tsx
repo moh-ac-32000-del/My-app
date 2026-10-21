@@ -9,6 +9,8 @@ import { signOutFromFirebase, subscribeToFirebaseAuth } from '@/services/firebas
 import { discoverUserSpaces, validateUserSpaceMembership, loadWorkspaceSession, observeWorkspaceSession } from '@/services/firestore';
 import { workspaceCandidates, workspaceSessionKey } from '@/data/workspaceSelection';
 import { clearLocalExportCache } from '@/services/localExportCache';
+import { financialCommandIntent } from '@/data/financialCommandIntent';
+import { createOperationId } from '@/services/operationId';
 import { createDebtDocument } from '@/services/debtFirestore';
 import { subscribeToTransactions } from '@/services/transactionFirestore';
 import { createTrustedCashTransaction } from '@/services/trustedTransactionFirestore';
@@ -140,6 +142,9 @@ export async function resolveActiveSpaceForUser(uid: string, preferred?: string 
 }
 
 export function StoreProvider({ children }: { children: ReactNode }) {
+  const cashIntent = useRef(financialCommandIntent<Transaction, Transaction>());
+  const debtIntent = useRef(financialCommandIntent<Debt, Debt>());
+  const settlementIntent = useRef(financialCommandIntent<{ customerId: string; draft: SettlementDraft }, SettlementResult>());
   const [profile, setProfile] = useState<StoreProfile>(defaultProfile);
   const [preferredLanguage, setPreferredLanguage] = useState<Language | null>(null);
   const languagePreferenceVersion = useRef(0);
@@ -386,6 +391,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const isReady = isFirebaseReady;
   const isAuthenticated = isFirebaseConfigured && isFirebaseSessionAuthenticated(firebaseUser);
   const renderSessionKey = workspaceSessionKey(firebaseUser?.uid, activeSpaceId, workspaceRole, authTransitionRef.current);
+  useEffect(() => {
+    cashIntent.current.reset(); debtIntent.current.reset(); settlementIntent.current.reset();
+    return () => { cashIntent.current.reset(); debtIntent.current.reset(); settlementIntent.current.reset(); };
+  }, [renderSessionKey]);
 
   useEffect(() => {
     let isActive = true;
@@ -553,9 +562,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     if (!activeSpaceId) {
       throw new Error('transactionWorkspaceUnavailable');
     }
-    const transaction = createCashTransaction(profileRef.current.id, draft);
-    await createTrustedCashTransaction(activeSpaceId, transaction);
-    return transaction;
+    return cashIntent.current.run(renderSessionKey, JSON.stringify([draft.type, draft.amount, draft.currency, draft.note?.trim() ?? '']),
+      () => createCashTransaction(profileRef.current.id, draft), async (transaction) => {
+        assertBusinessAccess(activeSpaceId, renderSessionKey);
+        await createTrustedCashTransaction(activeSpaceId, transaction);
+        assertBusinessAccess(activeSpaceId, renderSessionKey);
+        return transaction;
+      });
   };
 
   const addCustomerDebt = async (
@@ -570,9 +583,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     if (!activeSpaceId) {
       throw new Error('debtWorkspaceUnavailable');
     }
-    const debt = createDebt(profileRef.current.id, customerId, draft);
-    await createDebtDocument(activeSpaceId, debt);
-    return debt;
+    return debtIntent.current.run(renderSessionKey, JSON.stringify([customerId, draft.amount, draft.currency, draft.dueDate?.trim() ?? '']),
+      () => createDebt(profileRef.current.id, customerId, draft), async (debt) => {
+        assertBusinessAccess(activeSpaceId, renderSessionKey);
+        await createDebtDocument(activeSpaceId, debt);
+        assertBusinessAccess(activeSpaceId, renderSessionKey);
+        return debt;
+      });
   };
 
   const settleCustomerDebt = async (customerId: string, draft: SettlementDraft): Promise<SettlementResult> => {
@@ -588,13 +605,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     if (!activeSpaceId) {
       throw new Error('debtWorkspaceUnavailable');
     }
-    const result = await settleCustomerDebtInCloud(
-      activeSpaceId,
-      profileRef.current.id,
-      customerId,
-      draft,
-    );
-    return result;
+    return settlementIntent.current.run(renderSessionKey, JSON.stringify([customerId, draft.amount, draft.currency]),
+      () => ({ customerId, draft: { ...draft, intentId: draft.intentId ?? createOperationId() } }), async (sealed) => {
+        assertBusinessAccess(activeSpaceId, renderSessionKey);
+        const result = await settleCustomerDebtInCloud(activeSpaceId, profileRef.current.id, sealed.customerId, sealed.draft);
+        assertBusinessAccess(activeSpaceId, renderSessionKey);
+        return result;
+      });
   };
 
   const signOut = async () => {
