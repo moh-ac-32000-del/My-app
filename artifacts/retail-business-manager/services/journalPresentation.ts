@@ -33,6 +33,7 @@ export function journalEventMoney(event: DailyJournalEvent, language: Language):
 }
 export function journalEventDetails(event: DailyJournalEvent, language: Language, t: Translate): string[] {
   return [
+    ...(event.type === 'debt' ? [t('merchantNoncash')] : []),
     ...(event.operationDate ? [`${t('merchantOperationDate')}: ${event.operationDate}`] : []),
     ...(event.paymentMethodName ? [`${t('merchantPaymentMethod')}: ${event.paymentMethodName}`] : []),
     ...(event.note ? [event.note] : []),
