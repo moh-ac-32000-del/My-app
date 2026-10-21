@@ -16,18 +16,6 @@ let debtSequence = 0;
 let paymentSequence = 0;
 let reminderSequence = 0;
 
-
-
-
-
-
-
-
-
-
-
-
-
 export function createTransactionId(): string {
   transactionSequence += 1;
   return `transaction_${Date.now().toString(36)}_${transactionSequence.toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
@@ -92,9 +80,10 @@ export function calculateUsedCurrencyBalances(
   const totals = calculateCurrencyNetTotals(transactions);
   const usedCurrencies = new Set(transactions.map((transaction) => transaction.currency));
 
-  return CURRENCY_OPTIONS
-    .filter(({ code }) => usedCurrencies.has(code))
-    .map(({ code }) => ({ currency: code, amount: totals[code] }));
+  return CURRENCY_OPTIONS.filter(({ code }) => usedCurrencies.has(code)).map(({ code }) => ({
+    currency: code,
+    amount: totals[code],
+  }));
 }
 
 export function calculateVisibleCurrencyBalances(
@@ -106,8 +95,6 @@ export function calculateVisibleCurrencyBalances(
     .filter((currency, index, currencies) => isCurrencyCode(currency) && currencies.indexOf(currency) === index)
     .map((currency) => ({ currency, amount: totals[currency] }));
 }
-
-
 
 export function createDebtId(): string {
   debtSequence += 1;
@@ -138,21 +125,29 @@ export function buildDailyJournalEvents(
   payments: Payment[],
   customers: Customer[],
   now: Date = new Date(),
+  window?: { startAt: string; endAt: string },
 ): DailyJournalEvent[] {
+  const inDay = (value: string) =>
+    window ? value >= window.startAt && value < window.endAt : isSameLocalDay(value, now);
   const settlementTransactionIds = new Set(
     payments
-      .filter((payment) => payment.storeId === storeId && payment.direction === 'in' && payment.customerId && payment.transactionId)
+      .filter(
+        (payment) =>
+          payment.storeId === storeId && payment.direction === 'in' && payment.customerId && payment.transactionId,
+      )
       .map((payment) => payment.transactionId as string),
   );
   const customerNames = new Map(
-    customers
-      .filter((customer) => customer.storeId === storeId)
-      .map((customer) => [customer.id, customer.name]),
+    customers.filter((customer) => customer.storeId === storeId).map((customer) => [customer.id, customer.name]),
   );
   const events: DailyJournalEvent[] = [];
 
   for (const transaction of transactions) {
-    if (transaction.storeId !== storeId || settlementTransactionIds.has(transaction.id) || !isSameLocalDay(transaction.createdAt, now)) {
+    if (
+      transaction.storeId !== storeId ||
+      settlementTransactionIds.has(transaction.id) ||
+      !inDay(transaction.createdAt)
+    ) {
       continue;
     }
     events.push({
@@ -168,7 +163,7 @@ export function buildDailyJournalEvents(
   }
 
   for (const debt of debts) {
-    if (debt.storeId !== storeId || !isSameLocalDay(debt.createdAt, now)) {
+    if (debt.storeId !== storeId || !inDay(debt.createdAt)) {
       continue;
     }
     events.push({
@@ -186,12 +181,7 @@ export function buildDailyJournalEvents(
   }
 
   for (const payment of payments) {
-    if (
-      payment.storeId !== storeId
-      || payment.direction !== 'in'
-      || !payment.customerId
-      || !isSameLocalDay(payment.paidAt, now)
-    ) {
+    if (payment.storeId !== storeId || payment.direction !== 'in' || !payment.customerId || !inDay(payment.paidAt)) {
       continue;
     }
     events.push({
@@ -211,23 +201,12 @@ export function buildDailyJournalEvents(
   return events.sort((first, second) => Date.parse(second.occurredAt) - Date.parse(first.occurredAt));
 }
 
-
-
 export function getLocalDateKey(date: Date = new Date()): string {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');
   const day = String(date.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
 }
-
-
-
-
-
-
-
-
-
 
 export function parseLocalizedAmountInput(value: string, language: Language): number | null {
   const input = value.trim().replace(/[\s\u00A0\u202F]/g, '');
@@ -287,30 +266,33 @@ export function validateDebtInput(input: {
   if (typeof input.customerId !== 'string' || input.customerId.trim().length === 0) {
     return 'customerIdRequired';
   }
-  const hasSettlementMetadata = input.amount === 0
-    && typeof input.originalAmount === 'number'
-    && Number.isFinite(input.originalAmount)
-    && input.originalAmount > 0
-    && isValidDateString(input.settledAt);
-  if (typeof input.amount !== 'number' || !Number.isFinite(input.amount) || input.amount < 0 || (input.amount === 0 && !hasSettlementMetadata)) {
+  const hasSettlementMetadata =
+    input.amount === 0 &&
+    typeof input.originalAmount === 'number' &&
+    Number.isFinite(input.originalAmount) &&
+    input.originalAmount > 0 &&
+    isValidDateString(input.settledAt);
+  if (
+    typeof input.amount !== 'number' ||
+    !Number.isFinite(input.amount) ||
+    input.amount < 0 ||
+    (input.amount === 0 && !hasSettlementMetadata)
+  ) {
     return 'amountInvalid';
   }
   if (
-    input.originalAmount !== undefined
-    && (typeof input.originalAmount !== 'number'
-      || !Number.isFinite(input.originalAmount)
-      || input.originalAmount <= 0
-      || input.originalAmount < input.amount)
+    input.originalAmount !== undefined &&
+    (typeof input.originalAmount !== 'number' ||
+      !Number.isFinite(input.originalAmount) ||
+      input.originalAmount <= 0 ||
+      input.originalAmount < input.amount)
   ) {
     return 'originalAmountInvalid';
   }
   if (input.settledAt !== undefined && !isValidDateString(input.settledAt)) {
     return 'settledAtInvalid';
   }
-  if (
-    input.dueDate !== undefined
-    && (typeof input.dueDate !== 'string' || !isValidDateOnly(input.dueDate))
-  ) {
+  if (input.dueDate !== undefined && (typeof input.dueDate !== 'string' || !isValidDateOnly(input.dueDate))) {
     return 'dueDateInvalid';
   }
   if (!isCurrencyCode(input.currency)) {
@@ -357,8 +339,6 @@ export function calculateDebtTotals(debts: Debt[]): Record<CurrencyCode, number>
 export function filterDebtsByCustomer(debts: Debt[], customerId: string): Debt[] {
   return debts.filter((debt) => debt.customerId === customerId);
 }
-
-
 
 export function createReminderId(): string {
   reminderSequence += 1;
@@ -438,11 +418,6 @@ export function filterRemindersByDebt(reminders: Reminder[], debtId: string): Re
   return reminders.filter((reminder) => reminder.debtId === debtId);
 }
 
-
-
-
-
-
 export function createPaymentId(): string {
   paymentSequence += 1;
   return `payment_${Date.now().toString(36)}_${paymentSequence.toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
@@ -470,23 +445,34 @@ export function validatePaymentInput(input: {
     return 'amountInvalid';
   }
   if (
-    typeof input.amount.amount !== 'number'
-    || !Number.isFinite(input.amount.amount)
-    || input.amount.amount <= 0
-    || !isCurrencyCode(input.amount.currency)
+    typeof input.amount.amount !== 'number' ||
+    !Number.isFinite(input.amount.amount) ||
+    input.amount.amount <= 0 ||
+    !isCurrencyCode(input.amount.currency)
   ) {
     return 'amountInvalid';
   }
   if (input.direction !== 'in' && input.direction !== 'out') {
     return 'paymentDirectionInvalid';
   }
-  if (input.method !== 'cash' && input.method !== 'card' && input.method !== 'bank-transfer' && input.method !== 'other') {
+  if (
+    input.method !== 'cash' &&
+    input.method !== 'card' &&
+    input.method !== 'bank-transfer' &&
+    input.method !== 'other'
+  ) {
     return 'paymentMethodInvalid';
   }
-  if (input.customerId !== undefined && (typeof input.customerId !== 'string' || input.customerId.trim().length === 0)) {
+  if (
+    input.customerId !== undefined &&
+    (typeof input.customerId !== 'string' || input.customerId.trim().length === 0)
+  ) {
     return 'customerIdInvalid';
   }
-  if (input.transactionId !== undefined && (typeof input.transactionId !== 'string' || input.transactionId.trim().length === 0)) {
+  if (
+    input.transactionId !== undefined &&
+    (typeof input.transactionId !== 'string' || input.transactionId.trim().length === 0)
+  ) {
     return 'transactionIdInvalid';
   }
   if (!isValidDateString(input.paidAt) || !isValidDateString(input.createdAt) || !isValidDateString(input.updatedAt)) {
@@ -524,15 +510,9 @@ export function filterPaymentsByCustomer(payments: Payment[], customerId: string
   return payments.filter((payment) => payment.customerId === customerId);
 }
 
-
-
-
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
-
-
 
 function isValidDateOnly(value: unknown): value is string {
   if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
@@ -555,56 +535,26 @@ function isValidIsoTimestamp(value: unknown): value is string {
     const [year, month, day] = datePart.split('-').map(Number);
     const [hours, minutes, seconds] = timePart.split(':').map(Number);
     const parsed = new Date(year, month - 1, day, hours, minutes, seconds, 0);
-    return parsed.getFullYear() === year
-      && parsed.getMonth() === month - 1
-      && parsed.getDate() === day
-      && parsed.getHours() === hours
-      && parsed.getMinutes() === minutes
-      && parsed.getSeconds() === seconds;
+    return (
+      parsed.getFullYear() === year &&
+      parsed.getMonth() === month - 1 &&
+      parsed.getDate() === day &&
+      parsed.getHours() === hours &&
+      parsed.getMinutes() === minutes &&
+      parsed.getSeconds() === seconds
+    );
   }
 
-  return isValidDateString(value)
-    && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value)
-    && new Date(value).toISOString() === value;
+  return (
+    isValidDateString(value) &&
+    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value) &&
+    new Date(value).toISOString() === value
+  );
 }
 
 function isSameLocalDay(value: string, now: Date): boolean {
   const date = new Date(value);
-  return date.getFullYear() === now.getFullYear()
-    && date.getMonth() === now.getMonth()
-    && date.getDate() === now.getDate();
+  return (
+    date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth() && date.getDate() === now.getDate()
+  );
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

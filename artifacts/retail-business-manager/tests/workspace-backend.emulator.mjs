@@ -75,3 +75,4 @@ try {
 // Reuse this demo emulator invocation rather than starting another service/CI job.
 await import('./merchant-backend.emulator.mjs');
 await import('./archive-calendar.emulator.mjs');
+await import('./automatic-closing.emulator.mjs');

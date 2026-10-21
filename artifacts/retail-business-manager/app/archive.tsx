@@ -12,12 +12,14 @@ import { journalEventTitle, journalEventMoney, journalEventDetails } from '@/ser
 import { ArchiveDayPicker } from '@/components/ArchiveDayPicker';
 import { useArchiveDay } from '@/hooks/useArchiveDay';
 import { archiveDateForDisplay } from '@/data/archiveCalendar';
+import { useFinancialWindow } from '@/hooks/useFinancialWindow';
 
 export default function ArchiveScreen() {
   const colors = useColors();
   const { profile } = useStore();
+  const clock = useFinancialWindow();
   const { t, language, isRTL } = useI18n();
-  const [date, setDate] = useState(() => getLocalDateKey(new Date()));
+  const [date, setDate] = useState(() => clock.window?.date ?? getLocalDateKey(new Date()));
   const { archives, isLoading, error: archiveError, retry } = useArchiveDay(date);
   const [selectedArchiveId, setSelectedArchiveId] = useState<string | null>(null);
   const [isSharing, setIsSharing] = useState(false);
@@ -61,13 +63,30 @@ export default function ArchiveScreen() {
 
   return (
     <AppShell>
-      <PageHeader title={t('archive')} subtitle={formatLocalizedDate(archiveDateForDisplay(date), language)}
-        action={<ArchiveDayPicker value={date} onChange={(next) => { setSelectedArchiveId(null); setDate(next); }} />} />
+      <PageHeader
+        title={t('archive')}
+        subtitle={formatLocalizedDate(archiveDateForDisplay(date), language)}
+        action={
+          <ArchiveDayPicker
+            value={date}
+            today={clock.window?.date}
+            onChange={(next) => {
+              setSelectedArchiveId(null);
+              setDate(next);
+            }}
+          />
+        }
+      />
 
       {archiveError ? (
         <>
           <EmptyState icon="alert-circle-outline" title={t('somethingWentWrong')} hint={t('reloadToContinue')} />
-          <Pressable testID="archive-retry" accessibilityRole="button" onPress={retry} style={[styles.shareButton, { backgroundColor: colors.accent }]}>
+          <Pressable
+            testID="archive-retry"
+            accessibilityRole="button"
+            onPress={retry}
+            style={[styles.shareButton, { backgroundColor: colors.accent }]}
+          >
             <Text style={{ color: colors.primary }}>{t('tryAgain')}</Text>
           </Pressable>
         </>
@@ -102,12 +121,12 @@ export default function ArchiveScreen() {
                     pressed && styles.pressed,
                   ]}
                 >
-                    <Text style={[styles.archiveDate, { color: colors.foreground }]}>
-                      {t('close')} #{archive.closingNumber}
-                    </Text>
-                    <Text style={[styles.archiveClosedAt, { color: colors.mutedForeground }]}>
-                      {formatLocalizedTime(new Date(archive.closedAt), language)}
-                    </Text>
+                  <Text style={[styles.archiveDate, { color: colors.foreground }]}>
+                    {t('close')} #{archive.closingNumber}
+                  </Text>
+                  <Text style={[styles.archiveClosedAt, { color: colors.mutedForeground }]}>
+                    {formatLocalizedTime(new Date(archive.closedAt), language, archive.timeZone)}
+                  </Text>
                 </Pressable>
               );
             })}
@@ -116,6 +135,10 @@ export default function ArchiveScreen() {
           {selectedArchive ? (
             <>
               <SectionTitle title={t('archiveEvents')} />
+              <Text style={{ color: colors.mutedForeground, marginBottom: 10, textAlign: isRTL ? 'right' : 'left' }}>
+                {t(selectedArchive.closingMode === 'automatic' ? 'automaticClosingActive' : 'manualClosing')}
+                {selectedArchive.timeZone ? ` · ${selectedArchive.timeZone}` : ''}
+              </Text>
               <Pressable
                 testID="share-archive-button"
                 accessibilityRole="button"
@@ -127,9 +150,11 @@ export default function ArchiveScreen() {
                   pressed && styles.pressed,
                 ]}
               >
-                {isSharing
-                  ? <ActivityIndicator size="small" color={colors.primaryForeground} />
-                  : <Ionicons name="share-social-outline" size={17} color={colors.primaryForeground} />}
+                {isSharing ? (
+                  <ActivityIndicator size="small" color={colors.primaryForeground} />
+                ) : (
+                  <Ionicons name="share-social-outline" size={17} color={colors.primaryForeground} />
+                )}
                 <Text style={[styles.shareButtonText, { color: colors.primaryForeground }]}>{t('shareArchive')}</Text>
               </Pressable>
               {selectedArchive.snapshot.length === 0 ? (
@@ -149,16 +174,32 @@ export default function ArchiveScreen() {
                             />
                           </View>
                           <View style={[styles.eventCopy, { alignItems: isRTL ? 'flex-end' : 'flex-start' }]}>
-                            <Text style={[styles.eventTitle, { color: colors.foreground, textAlign: isRTL ? 'right' : 'left' }]}>
+                            <Text
+                              style={[
+                                styles.eventTitle,
+                                { color: colors.foreground, textAlign: isRTL ? 'right' : 'left' },
+                              ]}
+                            >
                               {getEventTitle(event)} — {journalEventMoney(event, language)}
                             </Text>
                             {journalEventDetails(event, language, t).map((detail, index) => (
-                              <Text key={`${event.id}:${index}`} style={[styles.eventNote, { color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' }]}>
+                              <Text
+                                key={`${event.id}:${index}`}
+                                style={[
+                                  styles.eventNote,
+                                  { color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' },
+                                ]}
+                              >
                                 {detail}
                               </Text>
                             ))}
-                            <Text style={[styles.eventTime, { color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' }]}>
-                              {formatLocalizedDateTime(new Date(event.occurredAt), language)}
+                            <Text
+                              style={[
+                                styles.eventTime,
+                                { color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' },
+                              ]}
+                            >
+                              {formatLocalizedDateTime(new Date(event.occurredAt), language, selectedArchive.timeZone)}
                             </Text>
                           </View>
                         </View>
@@ -189,6 +230,13 @@ const styles = StyleSheet.create({
   eventNote: { fontSize: 11, fontFamily: 'Inter_400Regular' },
   eventTime: { fontSize: 10, fontFamily: 'Inter_400Regular' },
   pressed: { opacity: 0.72 },
-  shareButton: { minHeight: 44, borderRadius: 15, alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 11 },
+  shareButton: {
+    minHeight: 44,
+    borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginBottom: 11,
+  },
   shareButtonText: { fontSize: 13, fontFamily: 'Inter_700Bold' },
 });

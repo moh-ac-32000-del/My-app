@@ -1,6 +1,7 @@
 import type { Firestore } from 'firebase-admin/firestore';
 import { HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
 import { assertWorkspaceAccess } from './workspaceAccess.js';
+import { automaticClosingPolicy, financialPostingTime, financialWindow } from '../../data/automaticClosing.js';
 
 const SUPPORTED_CURRENCIES = new Set(['TRY', 'USD', 'EUR', 'GBP', 'SAR', 'AED', 'SYP']);
 const PAYMENT_METHODS = new Set(['cash', 'card', 'bank-transfer', 'other']);
@@ -52,16 +53,22 @@ export async function createPaymentHandler(
       }
       assertWorkspaceAccess(memberSnap.data(), 'write');
       if (!profileSnap.exists || profileSnap.data()?.storeId !== input.storeId) {
-        throw new HttpsError('permission-denied', 'Store profile does not match workspace', { code: 'STORE_SCOPE_MISMATCH' });
+        throw new HttpsError('permission-denied', 'Store profile does not match workspace', {
+          code: 'STORE_SCOPE_MISMATCH',
+        });
       }
 
       if (receiptSnap.exists) {
         const receipt = receiptSnap.data() ?? {};
         const result = receipt.result as Record<string, unknown> | undefined;
         const payload = receipt.payload as Record<string, unknown> | undefined;
-        if (receipt.command !== 'createPayment' || receipt.actorUserId !== uid
-          || receipt.spaceId !== input.spaceId || result?.paymentId !== input.paymentId
-          || !samePayload(payload, input)) {
+        if (
+          receipt.command !== 'createPayment' ||
+          receipt.actorUserId !== uid ||
+          receipt.spaceId !== input.spaceId ||
+          result?.paymentId !== input.paymentId ||
+          !samePayload(payload, input)
+        ) {
           throw new HttpsError('already-exists', 'Operation ID was already used', { code: 'IDEMPOTENCY_CONFLICT' });
         }
         return { outcome: 'replayed', paymentId: input.paymentId, processedAt: String(receipt.processedAt ?? '') };
@@ -75,25 +82,48 @@ export async function createPaymentHandler(
       }
       if (customerRef) {
         const customer = customerSnap?.data();
-        if (!customerSnap?.exists || customer?.id !== input.customerId || customer?.isActive !== true
-          || customer?.storeId !== input.storeId
-          || (typeof customer?.workspaceId === 'string' && customer.workspaceId !== input.spaceId)) {
+        if (
+          !customerSnap?.exists ||
+          customer?.id !== input.customerId ||
+          customer?.isActive !== true ||
+          customer?.storeId !== input.storeId ||
+          (typeof customer?.workspaceId === 'string' && customer.workspaceId !== input.spaceId)
+        ) {
           throw new HttpsError('not-found', 'Active customer was not found', { code: 'CUSTOMER_NOT_FOUND' });
         }
       }
       if (transactionRef) {
         const transaction = transactionSnap?.data();
-        if (!transactionSnap?.exists || transaction?.id !== input.transactionId
-          || transaction?.storeId !== input.storeId
-          || transaction?.workspaceId !== input.spaceId
-          || transaction?.type !== (input.direction === 'in' ? 'cash_in' : 'cash_out')
-          || transaction?.amount !== input.amount.amount
-          || transaction?.currency !== input.amount.currency) {
-          throw new HttpsError('failed-precondition', 'Linked cash transaction does not match this payment', { code: 'TRANSACTION_SCOPE_MISMATCH' });
+        if (
+          !transactionSnap?.exists ||
+          transaction?.id !== input.transactionId ||
+          transaction?.storeId !== input.storeId ||
+          transaction?.workspaceId !== input.spaceId ||
+          transaction?.type !== (input.direction === 'in' ? 'cash_in' : 'cash_out') ||
+          transaction?.amount !== input.amount.amount ||
+          transaction?.currency !== input.amount.currency
+        ) {
+          throw new HttpsError('failed-precondition', 'Linked cash transaction does not match this payment', {
+            code: 'TRANSACTION_SCOPE_MISMATCH',
+          });
         }
       }
 
-      const now = runtime.now();
+      const now = financialPostingTime(spaceSnap.data()!, runtime.now());
+      if (spaceSnap.data()?.automaticClosing && transactionRef) {
+        const policy = automaticClosingPolicy(spaceSnap.data()!.automaticClosing);
+        const window = financialWindow(policy, new Date(now));
+        const createdAt = transactionSnap?.data()?.createdAt;
+        if (
+          typeof createdAt !== 'string' ||
+          createdAt < policy.activatedAt ||
+          createdAt < policy.closedThrough ||
+          createdAt < window.startAt ||
+          createdAt >= window.endAt
+        ) {
+          throw new HttpsError('failed-precondition', 'A legacy/closed cash entry cannot be linked to a new payment');
+        }
+      }
       tx.create(paymentRef, {
         id: input.paymentId,
         storeId: input.storeId,
@@ -104,7 +134,8 @@ export async function createPaymentHandler(
         method: input.method,
         ...(input.customerId ? { customerId: input.customerId } : {}),
         ...(input.transactionId ? { transactionId: input.transactionId } : {}),
-        paidAt: input.paidAt,
+        paidAt: spaceSnap.data()?.automaticClosing ? now : input.paidAt,
+        ...(spaceSnap.data()?.automaticClosing ? { documentaryPaidAt: input.paidAt } : {}),
         ...(input.note ? { note: input.note } : {}),
         createdAt: now,
         updatedAt: now,
@@ -133,16 +164,22 @@ export function createTrustedPaymentRuntime(firestore: Firestore): TrustedPaymen
 }
 
 function validateRequest(value: unknown): CreatePaymentRequest {
-  if (!isRecord(value)) throw new HttpsError('invalid-argument', 'Payment request is invalid', { code: 'INVALID_ARGUMENT' });
+  if (!isRecord(value))
+    throw new HttpsError('invalid-argument', 'Payment request is invalid', { code: 'INVALID_ARGUMENT' });
   for (const field of ['spaceId', 'storeId', 'paymentId', 'operationId'] as const) {
     const candidate = value[field];
     if (typeof candidate !== 'string' || !candidate.trim() || candidate.includes('/')) {
       throw new HttpsError('invalid-argument', `${field} is invalid`, { code: 'INVALID_ARGUMENT' });
     }
   }
-  if (!isRecord(value.amount) || typeof value.amount.amount !== 'number'
-    || !Number.isFinite(value.amount.amount) || value.amount.amount <= 0
-    || typeof value.amount.currency !== 'string' || !SUPPORTED_CURRENCIES.has(value.amount.currency)) {
+  if (
+    !isRecord(value.amount) ||
+    typeof value.amount.amount !== 'number' ||
+    !Number.isFinite(value.amount.amount) ||
+    value.amount.amount <= 0 ||
+    typeof value.amount.currency !== 'string' ||
+    !SUPPORTED_CURRENCIES.has(value.amount.currency)
+  ) {
     throw new HttpsError('invalid-argument', 'Payment amount or currency is invalid', { code: 'INVALID_ARGUMENT' });
   }
   if (value.direction !== 'in' && value.direction !== 'out') {
@@ -196,18 +233,20 @@ function payloadForReceipt(input: CreatePaymentRequest): Record<string, unknown>
 function samePayload(receiptPayload: Record<string, unknown> | undefined, input: CreatePaymentRequest): boolean {
   if (!receiptPayload) return false;
   const amount = receiptPayload.amount;
-  return receiptPayload.spaceId === input.spaceId
-    && receiptPayload.storeId === input.storeId
-    && receiptPayload.paymentId === input.paymentId
-    && isRecord(amount)
-    && amount.amount === input.amount.amount
-    && amount.currency === input.amount.currency
-    && receiptPayload.direction === input.direction
-    && receiptPayload.method === input.method
-    && receiptPayload.customerId === (input.customerId ?? null)
-    && receiptPayload.transactionId === (input.transactionId ?? null)
-    && receiptPayload.paidAt === input.paidAt
-    && receiptPayload.note === (input.note ?? null);
+  return (
+    receiptPayload.spaceId === input.spaceId &&
+    receiptPayload.storeId === input.storeId &&
+    receiptPayload.paymentId === input.paymentId &&
+    isRecord(amount) &&
+    amount.amount === input.amount.amount &&
+    amount.currency === input.amount.currency &&
+    receiptPayload.direction === input.direction &&
+    receiptPayload.method === input.method &&
+    receiptPayload.customerId === (input.customerId ?? null) &&
+    receiptPayload.transactionId === (input.transactionId ?? null) &&
+    receiptPayload.paidAt === input.paidAt &&
+    receiptPayload.note === (input.note ?? null)
+  );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

@@ -8,7 +8,15 @@ import { useI18n } from '@/hooks/useI18n';
 import { useColors } from '@/hooks/useColors';
 
 /** Icon-only entry point; month browsing is UI-only and never queries archive history. */
-export function ArchiveDayPicker({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+export function ArchiveDayPicker({
+  value,
+  today,
+  onChange,
+}: {
+  value: string;
+  today?: string;
+  onChange: (value: string) => void;
+}) {
   const [open, setOpen] = useState(false);
   const [month, setMonth] = useState(value.slice(0, 7));
   const { t, language, isRTL } = useI18n();
@@ -121,7 +129,7 @@ export function ArchiveDayPicker({ value, onChange }: { value: string; onChange:
             <Pressable
               testID="archive-today"
               accessibilityRole="button"
-              onPress={() => select(getLocalDateKey(new Date()))}
+              onPress={() => select(today ?? getLocalDateKey(new Date()))}
               style={[styles.today, { backgroundColor: colors.accent }]}
             >
               <Text style={{ color: colors.primary }}>{t('today')}</Text>

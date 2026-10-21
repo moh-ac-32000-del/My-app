@@ -34,6 +34,8 @@ export interface Space {
   updatedAt: string;
   /** Prepared only; automatic closing activation is a separate reviewed transition. */
   closingSettings?: import('../data/workspaceClosing').WorkspaceClosingSettings;
+  automaticClosing?: import('../data/automaticClosing').AutomaticClosingPolicy;
+  autoClosingNextAt?: string;
 }
 
 /**
@@ -98,7 +100,6 @@ export interface OperationReceipt<TResult = unknown> {
   result?: TResult;
   errorCode?: string;
 }
-
 
 /**
  * The discovery result is built from the user's membership discovery index.

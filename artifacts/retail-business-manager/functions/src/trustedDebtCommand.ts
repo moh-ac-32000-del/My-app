@@ -1,6 +1,7 @@
 import { FieldValue, type Firestore } from 'firebase-admin/firestore';
 import { HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
 import { assertWorkspaceAccess } from './workspaceAccess.js';
+import { financialPostingTime } from '../../data/automaticClosing.js';
 import { readCustomerCredit, writeCustomerCredit } from './customerCreditState.js';
 import { legacyAmountExact, planCustomerCharge } from '../../data/customerCreditAccounting.js';
 
@@ -56,12 +57,18 @@ export async function trustedDebtCommandHandler(
       }
       assertWorkspaceAccess(memberSnap.data(), 'write');
       if (!profileSnap.exists || profileSnap.data()?.storeId !== input.storeId) {
-        throw new HttpsError('permission-denied', 'Store profile does not match workspace', { code: 'STORE_SCOPE_MISMATCH' });
+        throw new HttpsError('permission-denied', 'Store profile does not match workspace', {
+          code: 'STORE_SCOPE_MISMATCH',
+        });
       }
       const customer = customerSnap.data();
-      if (!customerSnap.exists || customer?.id !== input.customerId || customer?.isActive !== true
-        || customer?.storeId !== input.storeId
-        || (typeof customer?.workspaceId === 'string' && customer.workspaceId !== input.spaceId)) {
+      if (
+        !customerSnap.exists ||
+        customer?.id !== input.customerId ||
+        customer?.isActive !== true ||
+        customer?.storeId !== input.storeId ||
+        (typeof customer?.workspaceId === 'string' && customer.workspaceId !== input.spaceId)
+      ) {
         throw new HttpsError('not-found', 'Active customer was not found', { code: 'CUSTOMER_NOT_FOUND' });
       }
 
@@ -72,9 +79,14 @@ export async function trustedDebtCommandHandler(
         const receiptMatches = payload
           ? samePayload(payload, input)
           : sameLegacyDebtWrite(receipt, debtSnap.data() ?? {}, input);
-        if (receipt.command !== 'trustedDebtCommand' || receipt.actorUserId !== uid
-          || receipt.spaceId !== input.spaceId || result?.debtId !== input.debtId
-          || receipt.action !== input.action || !receiptMatches) {
+        if (
+          receipt.command !== 'trustedDebtCommand' ||
+          receipt.actorUserId !== uid ||
+          receipt.spaceId !== input.spaceId ||
+          result?.debtId !== input.debtId ||
+          receipt.action !== input.action ||
+          !receiptMatches
+        ) {
           throw new HttpsError('already-exists', 'Operation ID was already used', { code: 'IDEMPOTENCY_CONFLICT' });
         }
         return { outcome: 'replayed', debtId: input.debtId, processedAt: String(receipt.processedAt ?? '') };
@@ -88,23 +100,27 @@ export async function trustedDebtCommandHandler(
       }
       if (input.action === 'update') {
         const current = debtSnap.data() ?? {};
-        if (current.workspaceId !== input.spaceId || current.storeId !== input.storeId
-          || current.customerId !== input.customerId) {
+        if (
+          current.workspaceId !== input.spaceId ||
+          current.storeId !== input.storeId ||
+          current.customerId !== input.customerId
+        ) {
           throw new HttpsError('failed-precondition', 'Debt scope cannot be changed', { code: 'DEBT_SCOPE_MISMATCH' });
         }
       }
 
-      const now = runtime.now();
+      const now = financialPostingTime(spaceSnap.data()!, runtime.now());
       const credit = await readCustomerCredit(tx, spaceRef, input.storeId, input.customerId, input.currency);
       const previousCurrency = input.action === 'update' ? debtSnap.data()?.currency : input.currency;
       if (typeof previousCurrency !== 'string' || !SUPPORTED_CURRENCIES.has(previousCurrency)) {
         throw new HttpsError('data-loss', 'Stored debt currency is invalid');
       }
-      const previousCredit = previousCurrency !== input.currency
-        ? await readCustomerCredit(tx, spaceRef, input.storeId, input.customerId, previousCurrency)
-        : null;
-      const charge = input.action === 'create'
-        ? planCustomerCharge(legacyAmountExact(input.amount), credit.amount) : null;
+      const previousCredit =
+        previousCurrency !== input.currency
+          ? await readCustomerCredit(tx, spaceRef, input.storeId, input.customerId, previousCurrency)
+          : null;
+      const charge =
+        input.action === 'create' ? planCustomerCharge(legacyAmountExact(input.amount), credit.amount) : null;
       if (input.action === 'create') {
         tx.create(debtRef, {
           id: input.debtId,
@@ -119,12 +135,15 @@ export async function trustedDebtCommandHandler(
           ...(input.dueDate ? { dueDate: input.dueDate } : {}),
           ...(typeof input.originalAmount === 'number' ? { originalAmount: input.originalAmount } : {}),
           ...(input.settledAt ? { settledAt: input.settledAt } : {}),
-          ...(charge!.creditAppliedExact !== '0.00' ? {
-            originalAmount: input.originalAmount ?? input.amount,
-            creditAppliedExact: charge!.creditAppliedExact,
-            ...(charge!.amountExact === '0.00' ? { settledAt: now } : {}),
-          } : {}),
-          createdAt: input.createdAt ?? now,
+          ...(charge!.creditAppliedExact !== '0.00'
+            ? {
+                originalAmount: input.originalAmount ?? input.amount,
+                creditAppliedExact: charge!.creditAppliedExact,
+                ...(charge!.amountExact === '0.00' ? { settledAt: now } : {}),
+              }
+            : {}),
+          createdAt: spaceSnap.data()?.automaticClosing ? now : (input.createdAt ?? now),
+          ...(spaceSnap.data()?.automaticClosing && input.createdAt ? { documentaryCreatedAt: input.createdAt } : {}),
           updatedAt: input.updatedAt ?? now,
         });
       } else {
@@ -133,8 +152,10 @@ export async function trustedDebtCommandHandler(
           currency: input.currency,
           amount: input.amount,
           // A date-only edit from an older client must not truncate exact remaining precision.
-          amountExact: input.amount === debtSnap.data()?.amount && input.currency === debtSnap.data()?.currency
-            ? legacyAmountExact(input.amount, debtSnap.data()?.amountExact) : legacyAmountExact(input.amount),
+          amountExact:
+            input.amount === debtSnap.data()?.amount && input.currency === debtSnap.data()?.currency
+              ? legacyAmountExact(input.amount, debtSnap.data()?.amountExact)
+              : legacyAmountExact(input.amount),
           dueDate: input.dueDate ?? FieldValue.delete(),
           updatedAt: input.updatedAt ?? now,
         });
@@ -185,16 +206,26 @@ function validateRequest(value: unknown): TrustedDebtCommandRequest {
   if (typeof value.amount !== 'number' || !Number.isFinite(value.amount) || value.amount <= 0) {
     throw new HttpsError('invalid-argument', 'Debt amount must be positive');
   }
-  if (value.dueDate !== undefined && (typeof value.dueDate !== 'string' || !Number.isFinite(Date.parse(value.dueDate)))) {
+  if (
+    value.dueDate !== undefined &&
+    (typeof value.dueDate !== 'string' || !Number.isFinite(Date.parse(value.dueDate)))
+  ) {
     throw new HttpsError('invalid-argument', 'Due date is invalid');
   }
   for (const field of ['createdAt', 'updatedAt', 'settledAt'] as const) {
-    if (value[field] !== undefined && (typeof value[field] !== 'string' || !Number.isFinite(Date.parse(value[field] as string)))) {
+    if (
+      value[field] !== undefined &&
+      (typeof value[field] !== 'string' || !Number.isFinite(Date.parse(value[field] as string)))
+    ) {
       throw new HttpsError('invalid-argument', `${field} is invalid`);
     }
   }
-  if (value.originalAmount !== undefined && (typeof value.originalAmount !== 'number'
-    || !Number.isFinite(value.originalAmount) || value.originalAmount < value.amount)) {
+  if (
+    value.originalAmount !== undefined &&
+    (typeof value.originalAmount !== 'number' ||
+      !Number.isFinite(value.originalAmount) ||
+      value.originalAmount < value.amount)
+  ) {
     throw new HttpsError('invalid-argument', 'Original amount is invalid');
   }
   return {
@@ -232,18 +263,20 @@ function payloadForReceipt(input: TrustedDebtCommandRequest): Record<string, unk
 }
 
 function samePayload(receiptPayload: Record<string, unknown>, input: TrustedDebtCommandRequest): boolean {
-  return receiptPayload.action === input.action
-    && receiptPayload.spaceId === input.spaceId
-    && receiptPayload.storeId === input.storeId
-    && receiptPayload.customerId === input.customerId
-    && receiptPayload.debtId === input.debtId
-    && receiptPayload.currency === input.currency
-    && receiptPayload.amount === input.amount
-    && receiptPayload.dueDate === (input.dueDate ?? null)
-    && receiptPayload.updatedAt === (input.updatedAt ?? null)
-    && receiptPayload.createdAt === (input.createdAt ?? null)
-    && receiptPayload.originalAmount === (input.originalAmount ?? null)
-    && receiptPayload.settledAt === (input.settledAt ?? null);
+  return (
+    receiptPayload.action === input.action &&
+    receiptPayload.spaceId === input.spaceId &&
+    receiptPayload.storeId === input.storeId &&
+    receiptPayload.customerId === input.customerId &&
+    receiptPayload.debtId === input.debtId &&
+    receiptPayload.currency === input.currency &&
+    receiptPayload.amount === input.amount &&
+    receiptPayload.dueDate === (input.dueDate ?? null) &&
+    receiptPayload.updatedAt === (input.updatedAt ?? null) &&
+    receiptPayload.createdAt === (input.createdAt ?? null) &&
+    receiptPayload.originalAmount === (input.originalAmount ?? null) &&
+    receiptPayload.settledAt === (input.settledAt ?? null)
+  );
 }
 
 function sameLegacyDebtWrite(
@@ -251,18 +284,25 @@ function sameLegacyDebtWrite(
   debt: Record<string, unknown>,
   input: TrustedDebtCommandRequest,
 ): boolean {
-  if (debt.workspaceId !== input.spaceId || debt.storeId !== input.storeId
-    || debt.customerId !== input.customerId || debt.currency !== input.currency
-    || debt.amount !== input.amount || debt.dueDate !== input.dueDate) {
+  if (
+    debt.workspaceId !== input.spaceId ||
+    debt.storeId !== input.storeId ||
+    debt.customerId !== input.customerId ||
+    debt.currency !== input.currency ||
+    debt.amount !== input.amount ||
+    debt.dueDate !== input.dueDate
+  ) {
     return false;
   }
   if (input.action === 'update') {
     return debt.updatedAt === (input.updatedAt ?? receipt.processedAt);
   }
-  return debt.originalAmount === input.originalAmount
-    && debt.settledAt === input.settledAt
-    && debt.createdAt === (input.createdAt ?? receipt.processedAt)
-    && debt.updatedAt === (input.updatedAt ?? receipt.processedAt);
+  return (
+    debt.originalAmount === input.originalAmount &&
+    debt.settledAt === input.settledAt &&
+    debt.createdAt === (input.createdAt ?? receipt.processedAt) &&
+    debt.updatedAt === (input.updatedAt ?? receipt.processedAt)
+  );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

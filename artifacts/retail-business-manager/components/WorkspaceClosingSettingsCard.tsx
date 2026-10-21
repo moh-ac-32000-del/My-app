@@ -5,22 +5,39 @@ import { WorkspaceButton, WorkspaceInput } from './WorkspaceControls';
 import { canonicalTimeZone, type WorkspaceClosingSettings } from '@/data/workspaceClosing';
 import { useColors } from '@/hooks/useColors';
 import { useI18n } from '@/hooks/useI18n';
+import type { AutomaticClosingPolicy } from '@/data/automaticClosing';
 
 export function WorkspaceClosingSettingsCard({
   settings,
   canEdit,
   busy,
   onSave,
+  automatic,
+  ready = false,
+  onEnable,
+  onRetry,
 }: {
   settings: WorkspaceClosingSettings;
   canEdit: boolean;
   busy: boolean;
   onSave: (settings: { timeZone: string; executionTime: string; expectedRevision: number }) => void;
+  automatic?: AutomaticClosingPolicy;
+  ready?: boolean;
+  onEnable?: (legacyTimeZone: string) => void;
+  onRetry?: () => void;
 }) {
   const { t, isRTL } = useI18n();
   const colors = useColors();
   const [zone, setZone] = useState(settings.timeZone);
   const [time, setTime] = useState(settings.executionTime);
+  const [confirmActivation, setConfirmActivation] = useState(false);
+  const [legacyZone, setLegacyZone] = useState('Europe/Istanbul');
+  let validLegacyZone = '';
+  try {
+    validLegacyZone = canonicalTimeZone(legacyZone);
+  } catch {
+    /* Explicit confirmation required. */
+  }
   let validZone = '';
   try {
     validZone = canonicalTimeZone(zone);
@@ -33,7 +50,9 @@ export function WorkspaceClosingSettingsCard({
   return (
     <GlassCard testID="workspace-closing-settings" style={{ gap: 12, marginBottom: 18 }}>
       <Text style={[text, { fontSize: 16, fontFamily: 'Inter_700Bold' }]}>{t('workspaceClosingSettings')}</Text>
-      <Text style={[text, { color: colors.mutedForeground }]}>{t('workspaceClosingPrepared')}</Text>
+      <Text style={[text, { color: colors.mutedForeground }]}>
+        {t(automatic ? 'automaticClosingActive' : 'workspaceClosingPrepared')}
+      </Text>
       {canEdit ? (
         <>
           <WorkspaceInput
@@ -81,7 +100,49 @@ export function WorkspaceClosingSettingsCard({
           </Text>
         </View>
       )}
-      <Text style={[text, { color: colors.mutedForeground }]}>{t('workspaceClosingSettingsHint')}</Text>
+      <Text style={[text, { color: colors.mutedForeground }]}>
+        {t(automatic ? 'automaticClosingTransitionHint' : 'workspaceClosingSettingsHint')}
+      </Text>
+      {canEdit && ready && !automatic && onEnable ? (
+        <>
+          {!confirmActivation ? (
+            <WorkspaceButton
+              testID="prepare-automatic-closing"
+              label={t('automaticClosingEnable')}
+              disabled={busy || changed}
+              onPress={() => setConfirmActivation(true)}
+            />
+          ) : (
+            <>
+              <Text style={text}>{t('automaticClosingEnableConfirm')}</Text>
+              <WorkspaceInput
+                label={t('automaticClosingLegacyZone')}
+                value={legacyZone}
+                onChangeText={setLegacyZone}
+                disabled={busy}
+                maxLength={100}
+              />
+              <WorkspaceButton
+                testID="confirm-automatic-closing"
+                label={t('confirm')}
+                disabled={busy || !validLegacyZone}
+                onPress={() => {
+                  if (validLegacyZone) onEnable(validLegacyZone);
+                }}
+              />
+              <WorkspaceButton label={t('cancel')} disabled={busy} onPress={() => setConfirmActivation(false)} />
+            </>
+          )}
+        </>
+      ) : null}
+      {automatic?.failures ? (
+        <>
+          <Text style={[text, { color: colors.destructive }]}>{t('automaticClosingFailed')}</Text>
+          {canEdit && ready && onRetry ? (
+            <WorkspaceButton label={t('tryAgain')} disabled={busy} onPress={onRetry} />
+          ) : null}
+        </>
+      ) : null}
     </GlassCard>
   );
 }

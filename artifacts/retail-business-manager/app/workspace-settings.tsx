@@ -87,7 +87,11 @@ export default function WorkspaceSettingsScreen() {
   const text = { color: colors.foreground, lineHeight: 23, ...align };
   let preparedSettings: ReturnType<typeof closingSettings> | null = null;
   if (overview?.space.spaceId === activeSpaceId) {
-    try { preparedSettings = closingSettings(overview.space.closingSettings); } catch { /* Keep unverified metadata out of the form. */ }
+    try {
+      preparedSettings = closingSettings(overview.space.closingSettings);
+    } catch {
+      /* Keep unverified metadata out of the form. */
+    }
   }
   return (
     <AppShell>
@@ -129,11 +133,25 @@ export default function WorkspaceSettingsScreen() {
               </>
             ) : null}
           </GlassCard>
-          {preparedSettings ? <WorkspaceClosingSettingsCard
-            key={`${sessionKey}:${refresh}:${overview.space.closingSettings?.revision ?? 0}`}
-            settings={preparedSettings} canEdit={canManageSpace} busy={busy}
-            onSave={(settings) => void run({ action: 'closingSettings', spaceId: activeSpaceId!, closingSettings: settings })}
-          /> : overview.space.spaceId === activeSpaceId ? <Text style={[text, { color: colors.destructive }]}>{t('workspaceOperationFailed')}</Text> : null}
+          {preparedSettings ? (
+            <WorkspaceClosingSettingsCard
+              key={`${sessionKey}:${refresh}:${overview.space.closingSettings?.revision ?? 0}`}
+              settings={preparedSettings}
+              canEdit={canManageSpace}
+              busy={busy}
+              automatic={overview.space.automaticClosing}
+              ready={overview.automaticClosingReady === true}
+              onEnable={(legacyTimeZone) =>
+                void run({ action: 'enableClosing', spaceId: activeSpaceId!, legacyTimeZone })
+              }
+              onRetry={() => void run({ action: 'retryClosing', spaceId: activeSpaceId! })}
+              onSave={(settings) =>
+                void run({ action: 'closingSettings', spaceId: activeSpaceId!, closingSettings: settings })
+              }
+            />
+          ) : overview.space.spaceId === activeSpaceId ? (
+            <Text style={[text, { color: colors.destructive }]}>{t('workspaceOperationFailed')}</Text>
+          ) : null}
           {canManageSpace && overview.limits && overview.used ? (
             <>
               <SectionTitle title={t('workspaceQuota')} />

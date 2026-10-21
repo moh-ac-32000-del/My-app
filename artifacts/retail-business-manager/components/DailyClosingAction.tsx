@@ -5,6 +5,7 @@ import { useColors } from '@/hooks/useColors';
 import { useI18n } from '@/hooks/useI18n';
 import { runDailyClosing } from '@/services/dailyClosing';
 import { useStore } from '@/context/StoreContext';
+import { AutomaticClosingNotice } from './AutomaticClosingNotice';
 
 type ClosingStatus = 'created' | 'error' | null;
 
@@ -22,7 +23,7 @@ export function DailyClosingAction({
   onClosed?: () => void;
 }) {
   const colors = useColors();
-  const { canWriteBusiness } = useStore();
+  const { canWriteBusiness, cloudSpace } = useStore();
   const { t, isRTL } = useI18n();
   const [isConfirmationVisible, setIsConfirmationVisible] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
@@ -47,10 +48,9 @@ export function DailyClosingAction({
   };
 
   const statusTitle = status === 'error' ? t('somethingWentWrong') : t('closeDay');
-  const statusMessage = status === 'created'
-    ? t('archiveCreated')
-    : t('archiveSaveError');
+  const statusMessage = status === 'created' ? t('archiveCreated') : t('archiveSaveError');
 
+  if (cloudSpace?.automaticClosing) return <AutomaticClosingNotice compact={compact} />;
   if (!canWriteBusiness) return null;
   return (
     <>
@@ -69,9 +69,11 @@ export function DailyClosingAction({
           pressed && styles.pressed,
         ]}
       >
-        {isClosing
-          ? <ActivityIndicator size="small" color={colors.primaryForeground} />
-          : <Ionicons name="lock-closed-outline" size={compact ? 16 : 17} color={colors.primaryForeground} />}
+        {isClosing ? (
+          <ActivityIndicator size="small" color={colors.primaryForeground} />
+        ) : (
+          <Ionicons name="lock-closed-outline" size={compact ? 16 : 17} color={colors.primaryForeground} />
+        )}
         <Text
           style={[
             styles.buttonText,
@@ -94,7 +96,9 @@ export function DailyClosingAction({
             <Text style={[styles.dialogTitle, { color: colors.foreground, textAlign: isRTL ? 'right' : 'left' }]}>
               {t('closeDay')}
             </Text>
-            <Text style={[styles.dialogMessage, { color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' }]}>
+            <Text
+              style={[styles.dialogMessage, { color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' }]}
+            >
               {t('closeDayConfirm')}
             </Text>
             <View style={[styles.actions, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
@@ -127,18 +131,15 @@ export function DailyClosingAction({
         </View>
       </Modal>
 
-      <Modal
-        visible={status !== null}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setStatus(null)}
-      >
+      <Modal visible={status !== null} transparent animationType="fade" onRequestClose={() => setStatus(null)}>
         <View style={[styles.backdrop, { backgroundColor: colors.overlay }]}>
           <View style={[styles.dialog, { backgroundColor: colors.glassStrong, borderColor: colors.border }]}>
             <Text style={[styles.dialogTitle, { color: colors.foreground, textAlign: isRTL ? 'right' : 'left' }]}>
               {statusTitle}
             </Text>
-            <Text style={[styles.dialogMessage, { color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' }]}>
+            <Text
+              style={[styles.dialogMessage, { color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' }]}
+            >
               {statusMessage}
             </Text>
             <Pressable
@@ -151,7 +152,12 @@ export function DailyClosingAction({
                 pressed && styles.pressed,
               ]}
             >
-              <Text style={[styles.actionText, { color: status === 'error' ? colors.destructiveForeground : colors.primaryForeground }]}>
+              <Text
+                style={[
+                  styles.actionText,
+                  { color: status === 'error' ? colors.destructiveForeground : colors.primaryForeground },
+                ]}
+              >
                 {t('close')}
               </Text>
             </Pressable>
@@ -174,7 +180,14 @@ const styles = StyleSheet.create({
   dialogTitle: { fontSize: 19, fontFamily: 'Inter_700Bold' },
   dialogMessage: { fontSize: 13, lineHeight: 21, fontFamily: 'Inter_400Regular', marginTop: 8 },
   actions: { gap: 10, marginTop: 20 },
-  secondaryAction: { flex: 1, minHeight: 46, borderWidth: 1, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  secondaryAction: {
+    flex: 1,
+    minHeight: 46,
+    borderWidth: 1,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   primaryAction: { flex: 1, minHeight: 46, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   statusAction: { minHeight: 46, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginTop: 20 },
   actionText: { fontSize: 13, fontFamily: 'Inter_700Bold' },

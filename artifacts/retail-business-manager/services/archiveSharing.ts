@@ -20,9 +20,7 @@ function eventLabel(event: DailyJournalEvent, t: Translate): string {
     return t('cashOut');
   }
   const customerName = event.customerName ?? t('unknownCustomer');
-  return event.type === 'debt'
-    ? `${t('archiveDebt')} — ${customerName}`
-    : `${t('settlementFrom')} ${customerName}`;
+  return event.type === 'debt' ? `${t('archiveDebt')} — ${customerName}` : `${t('settlementFrom')} ${customerName}`;
 }
 
 function eventIcon(event: DailyJournalEvent): string {
@@ -41,7 +39,8 @@ export function buildArchiveShareMessage(
     storeName.trim() ? `🏪 ${storeName.trim()}` : null,
     `📅 ${t('archiveDate')}: ${formatLocalizedDate(parseArchiveDate(archive.date), language)}`,
     `🔒 ${t('closeDay')} #${archive.closingNumber}`,
-    `🕒 ${t('archiveClosedAt')}: ${formatLocalizedDateTime(new Date(archive.closedAt), language)}`,
+    ...(archive.closingMode === 'automatic' ? [`⏱️ ${t('automaticClosingActive')} · ${archive.timeZone ?? ''}`] : []),
+    `🕒 ${t('archiveClosedAt')}: ${formatLocalizedDateTime(new Date(archive.closedAt), language, archive.timeZone)}`,
     `ℹ️ ${t('shareSelectedClosingOnly')}`,
     '',
     `💰 ${t('cashBalanceAtClosing')}:`,
@@ -49,7 +48,9 @@ export function buildArchiveShareMessage(
       ? [`   ${t('closingBalanceUnavailable')}`]
       : archive.closingCashBalances.length === 0
         ? [`   ${t('closingNoCashMovements')}`]
-        : archive.closingCashBalances.map(({ amount, currency }) => `   • ${formatMoney(amount, currency, language)} (${currency})`)),
+        : archive.closingCashBalances.map(
+            ({ amount, currency }) => `   • ${formatMoney(amount, currency, language)} (${currency})`,
+          )),
     '',
     `🧾 ${t('archiveEvents')}:`,
   ];
@@ -58,9 +59,12 @@ export function buildArchiveShareMessage(
     lines.push(
       `${index + 1}. ${eventIcon(event)} ${eventLabel(event, t)}`,
       `   💵 ${journalEventMoney(event, language)} (${event.currency})`,
-      `   🕒 ${formatLocalizedDateTime(new Date(event.occurredAt), language)}`,
-      ...(event.type === 'merchant' ? journalEventDetails(event, language, t).map((line) => `   • ${line}`)
-        : event.note ? [`   🗒️ ${t('optionalNote')}: ${event.note}`] : []),
+      `   🕒 ${formatLocalizedDateTime(new Date(event.occurredAt), language, archive.timeZone)}`,
+      ...(event.type === 'merchant'
+        ? journalEventDetails(event, language, t).map((line) => `   • ${line}`)
+        : event.note
+          ? [`   🗒️ ${t('optionalNote')}: ${event.note}`]
+          : []),
       '',
     );
   });

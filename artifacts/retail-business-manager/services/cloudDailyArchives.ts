@@ -4,6 +4,7 @@ import { getFirebaseApp, isFirebaseConfigured } from '@/services/firebase';
 import type { DailyArchive } from '@/types/business';
 import { isCurrencyCode } from '@/constants/currencies';
 import { isArchiveDate } from '@/data/archiveCalendar';
+import { canonicalTimeZone } from '@/data/workspaceClosing';
 
 interface DailyArchiveCommandResponse {
   archives: Array<DailyArchive & { workspaceId: string }>;
@@ -22,7 +23,11 @@ export async function loadCloudDailyArchives(spaceId: string, storeId: string): 
 }
 
 /** A partial day must never replace the complete archive observation used by local export. */
-export async function loadCloudDailyArchivesForDate(spaceId: string, storeId: string, date: string): Promise<DailyArchive[]> {
+export async function loadCloudDailyArchivesForDate(
+  spaceId: string,
+  storeId: string,
+  date: string,
+): Promise<DailyArchive[]> {
   if (!isArchiveDate(date)) throw new Error('archiveDateInvalid');
   const data = await send({ action: 'list', spaceId, storeId, date });
   // Fail closed on old servers that ignore the filter, even when their result happens to be empty.
@@ -76,31 +81,59 @@ async function send(input: {
   );
   const result = await callable({ ...input, spaceId, storeId });
   const data = result.data;
-  if (!data || !Array.isArray(data.archives)
-    || typeof data.processedAt !== 'string'
-    || !Number.isFinite(Date.parse(data.processedAt))
-    || !data.archives.every((archive) => isValidArchive(archive, spaceId, storeId))
-    || (data.created !== undefined && !isValidArchive(data.created, spaceId, storeId))) {
+  if (
+    !data ||
+    !Array.isArray(data.archives) ||
+    typeof data.processedAt !== 'string' ||
+    !Number.isFinite(Date.parse(data.processedAt)) ||
+    !data.archives.every((archive) => isValidArchive(archive, spaceId, storeId)) ||
+    (data.created !== undefined && !isValidArchive(data.created, spaceId, storeId))
+  ) {
     throw new Error('invalidCloudDailyArchiveResponse');
   }
   return data;
 }
 
-function isValidArchive(value: unknown, spaceId: string, storeId: string): value is DailyArchive & { workspaceId: string } {
+function isValidArchive(
+  value: unknown,
+  spaceId: string,
+  storeId: string,
+): value is DailyArchive & { workspaceId: string } {
   if (typeof value !== 'object' || value === null) return false;
   const archive = value as Record<string, unknown>;
-  return typeof archive.id === 'string'
-    && archive.storeId === storeId
-    && archive.workspaceId === spaceId
-    && typeof archive.date === 'string'
-    && /^\d{4}-\d{2}-\d{2}$/.test(archive.date)
-    && typeof archive.closedAt === 'string'
-    && Number.isFinite(Date.parse(archive.closedAt))
-    && typeof archive.closingNumber === 'number'
-    && Number.isInteger(archive.closingNumber)
-    && validClosingBalances(archive.closingCashBalances)
-    && Array.isArray(archive.snapshot)
-    && archive.snapshot.every((event) => typeof event === 'object' && event !== null);
+  return (
+    typeof archive.id === 'string' &&
+    archive.storeId === storeId &&
+    archive.workspaceId === spaceId &&
+    typeof archive.date === 'string' &&
+    /^\d{4}-\d{2}-\d{2}$/.test(archive.date) &&
+    typeof archive.closedAt === 'string' &&
+    Number.isFinite(Date.parse(archive.closedAt)) &&
+    typeof archive.closingNumber === 'number' &&
+    Number.isInteger(archive.closingNumber) &&
+    validClosingBalances(archive.closingCashBalances) &&
+    validAutomaticMetadata(archive) &&
+    Array.isArray(archive.snapshot) &&
+    archive.snapshot.every((event) => typeof event === 'object' && event !== null)
+  );
+}
+
+function validAutomaticMetadata(archive: Record<string, unknown>): boolean {
+  if (archive.closingMode === undefined) return true;
+  if (
+    archive.closingMode !== 'automatic' ||
+    typeof archive.periodStartAt !== 'string' ||
+    typeof archive.periodEndAt !== 'string' ||
+    !Number.isFinite(Date.parse(archive.periodStartAt)) ||
+    !Number.isFinite(Date.parse(archive.periodEndAt)) ||
+    archive.periodStartAt >= archive.periodEndAt
+  )
+    return false;
+  try {
+    return canonicalTimeZone(archive.timeZone) === archive.timeZone;
+  } catch {
+    return false;
+  }
 }
 
 function validClosingBalances(value: unknown): boolean {
@@ -108,8 +141,15 @@ function validClosingBalances(value: unknown): boolean {
   if (!Array.isArray(value)) return false;
   const seen = new Set<string>();
   return value.every((entry) => {
-    if (typeof entry !== 'object' || entry === null || !isCurrencyCode(entry.currency)
-      || typeof entry.amount !== 'number' || !Number.isFinite(entry.amount) || seen.has(entry.currency)) return false;
+    if (
+      typeof entry !== 'object' ||
+      entry === null ||
+      !isCurrencyCode(entry.currency) ||
+      typeof entry.amount !== 'number' ||
+      !Number.isFinite(entry.amount) ||
+      seen.has(entry.currency)
+    )
+      return false;
     seen.add(entry.currency);
     return true;
   });

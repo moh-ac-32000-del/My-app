@@ -5,6 +5,14 @@ import workflow from '../../../.github/workflows/retail-business-manager-ci.yml?
 import entrypoint from '../functions/src/index.ts?raw';
 
 describe('supported Functions runtime configuration', () => {
+  it('gates one bounded shared five-minute closing schedule off by default', () => {
+    expect(entrypoint).toContain("defineBoolean('AUTOMATIC_CLOSING_READY', { default: false })");
+    const schedule = entrypoint.slice(entrypoint.indexOf('export const automaticDailyClosing'), entrypoint.indexOf('export const pushDeviceCommand'));
+    expect(schedule).toContain("schedule: '*/5 * * * *'");
+    expect(schedule).toContain('maxInstances: 1');
+    expect(schedule).toContain('minInstances: 0');
+    expect(schedule).toContain('if (!automaticClosingReady.value()) return;');
+  });
   it('registers bounded authenticated merchant reference settings', () => {
     expect(entrypoint).toContain("import { merchantSettingsCommandHandler } from './merchantSettingsCommand.js'");
     expect(entrypoint).toMatch(/export const merchantSettingsCommand = onCall\(\{ invoker: 'public', minInstances: 0, maxInstances: 2, timeoutSeconds: 60 \}/);

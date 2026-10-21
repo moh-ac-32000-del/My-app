@@ -65,6 +65,26 @@ function render(props: React.ComponentProps<typeof WorkspaceClosingSettingsCard>
   return renderToStaticMarkup(React.createElement(WorkspaceClosingSettingsCard, props));
 }
 describe('prepared closing settings (simulated handlers, not activated scheduling)', () => {
+  it('requires the backend readiness gate, saved settings and explicit legacy-zone confirmation to activate', () => {
+    const enable = vi.fn();
+    const settings = { ...closingSettings(), revision: 1 };
+    const props = { settings, canEdit: true, busy: false, onSave: vi.fn(), onEnable: enable };
+    render(props);
+    expect(state.buttons['prepare-automatic-closing']).toBeUndefined();
+    render({ ...props, ready: true });
+    expect(enable).not.toHaveBeenCalled();
+    state.buttons['prepare-automatic-closing'].press();
+    render({ ...props, ready: true });
+    state.inputs[translate('automaticClosingLegacyZone', 'ar')]('Bad/Zone');
+    render({ ...props, ready: true });
+    expect(state.buttons['confirm-automatic-closing'].disabled).toBe(true);
+    state.inputs[translate('automaticClosingLegacyZone', 'ar')]('Europe/Istanbul');
+    render({ ...props, ready: true });
+    state.buttons['confirm-automatic-closing'].press();
+    expect(enable).toHaveBeenCalledWith('Europe/Istanbul');
+    render({ ...props, ready: true, canEdit: false });
+    expect(state.buttons['confirm-automatic-closing']).toBeUndefined();
+  });
   it.each(['ar', 'en', 'tr'] as const)(
     'clearly labels preparation/manual closing in %s without inventing an enabled state',
     (language) => {

@@ -26,3 +26,24 @@ Audit findings: the current journal/merchant subscriptions/manual close use devi
 ## Acceptance gate
 
 Owner role and concurrency checks, cross-space isolation, day/timezone/DST boundaries, source/linked-event deduplication, immutable old/manual closings, historical period-end cash, simultaneous posting/closing and retries/backlog must pass. CI/build success is distinct from scheduler deployment and physical-device testing. Paid backup/PITR and one combined APK remain later tasks.
+
+## Second increment — opt-in engine (source implementation; deployment separately gated)
+
+- `automaticDailyClosing` uses one shared five-minute UTC schedule. `AUTOMATIC_CLOSING_READY` defaults to false; while false it performs no due-space query and owner activation is rejected. Existing spaces are never auto-enrolled.
+- Activation requires the canonical owner, saved settings, an explicit confirmed legacy timezone and the readiness gate. It inventories existing data once without rewriting it. The current owner's legacy zone was confirmed as Europe/Istanbul; it must not be assumed for other owners.
+- A due query selects at most three spaces; each dispatch closes at most one independent period per selected space. Each source query uses a 501-record lookahead and rejects more than 500 records rather than silently truncating. Activation also bounds each historical collection to 500 records. Larger histories/periods require a reviewed follow-up, not partial archives.
+- Automatic snapshots reuse the existing archive projection and cash summation. A derived cash checkpoint carries period-end balances; it is not a drawer transaction. Prior manual snapshots and existing event-ID deduplication remain intact. Empty periods advance only the checkpoint and do not manufacture an archive.
+- Financial writers read the canonical Space in their transactions; the worker updates that same document with its checkpoint. Conflicting posting/closing transactions retry. New postings in opted-in spaces use server time; original submitted dates are retained as documentary metadata. Legacy spaces keep the existing date behavior. Old clients cannot manually close an activated space.
+- Three failures pause dispatch for that space and expose an owner retry action. A failed transaction never advances the checkpoint or saves a partial snapshot. No live balances or source records are changed by closing.
+- Setting changes apply at the next midnight in the current workspace zone. UTC intervals stay continuous, including a short transition period when changing zones. DST repeated execution minutes choose the earlier occurrence; a missing execution minute advances to the first valid local minute after the gap.
+- Activated spaces use the workspace financial interval for the journal and merchant subscriptions and Today in the archive calendar. Archives record automatic/manual mode, historical zone and UTC interval. Manual-close controls are replaced only when the canonical Space contains an activated policy, not merely saved settings.
+- Unit/handler tests are separate from the real Firestore emulator suite. The latter covers simultaneous worker retries, posting/closing races, linked cash deduplication, prior manual archive immutability and independent backlog days. Neither constitutes live scheduler/device acceptance.
+
+### Rollout order (requires scoped approval)
+
+1. Pass CI, emulator/build checks and review the diff. Deploy the financial writers, workspace/archive functions, schedule and due-space index with readiness false.
+2. Verify all deployed writer revisions and that the index is ready, then enable readiness for the workspace endpoint and schedule. Existing spaces still remain inactive.
+3. Activate only a new isolated test space, verify an actual scheduled archive and period-end balance, then publish the review web build. Do not activate the owner's existing space without separate confirmation.
+4. Keep the PR/deployment/device acceptance statuses distinct. No data wipe, APK build, paid backups or PITR is part of this increment.
+
+Scheduler reference: https://firebase.google.com/docs/functions/schedule-functions . A shared schedule limits job count; usage is not a guarantee of zero cost.
