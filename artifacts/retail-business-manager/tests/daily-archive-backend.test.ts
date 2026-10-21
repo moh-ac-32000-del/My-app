@@ -14,6 +14,7 @@ function fakeFirestore() {
   };
   const reads: string[] = [];
   const writes: string[] = [];
+  const queries: Filter[][] = [];
   let retry = false;
   let onRetry = () => {};
   function ref(path: string, filters?: Filter[]): any {
@@ -22,7 +23,7 @@ function fakeFirestore() {
       collection: (name: string) => ref(`${path}/${name}`, []),
       doc: (id: string) => ref(`${path}/${id}`),
       where: (field: string, op: string, value: any) => ref(path, [...(filters ?? []), [field, op, value]]),
-      get: async () => snapshot(path, filters),
+      get: async () => { if (filters) queries.push(filters); return snapshot(path, filters); },
     };
   }
   function snapshot(path: string, filters?: Filter[]): any {
@@ -33,7 +34,7 @@ function fakeFirestore() {
       .map(([key, data]) => ({ id: key.split('/').at(-1), exists: true, data: () => data })) };
   }
   return {
-    documents, reads, writes,
+    documents, reads, writes, queries,
     simulateRetry(callback: () => void) { retry = true; onRetry = callback; },
     collection: (name: string) => ref(name, []),
     async runTransaction(callback: (tx: any) => Promise<any>) {
@@ -123,6 +124,64 @@ describe('daily archive trusted balance capture', () => {
     const result = await close(db, { action: 'list' });
     expect(result.archives).toEqual([legacy]);
     expect(result.archives[0].closingCashBalances).toBeUndefined();
+    expect(db.writes).toEqual([]);
+  });
+});
+
+describe('read-only calendar-day archive listing', () => {
+  function seed() {
+    const db = fakeFirestore();
+    for (const [id, date, storeId, closingNumber] of [
+      ['first', data.date, 'store-a', 1], ['second', data.date, 'store-a', 2],
+      ['previous', '2026-10-17', 'store-a', 1], ['other-store', data.date, 'other', 1],
+    ] as const) db.documents[`spaces/space-a/dailyArchives/${id}`] = {
+      id, date, storeId, workspaceId: 'space-a', closingNumber, closedAt: now,
+      snapshot: [{ id: `debt:${id}`, note: 'Original note', amount: 13.25, currency: 'TRY' }],
+      closingCashBalances: [{ currency: 'TRY', amount: -20 }],
+    };
+    return db;
+  }
+  it.each(['owner', 'editor', 'viewer'])('allows %s to read every selected-day closing only, with server-side filters and no writes', async (role) => {
+    const db = seed();
+    db.documents['spaces/space-a/members/user-a'].role = role;
+    const before = structuredClone(db.documents);
+    const result = await close(db, { action: 'list' });
+    expect(result.date).toBe(data.date);
+    expect(result.archives.map((row) => row.id)).toEqual(['second', 'first']);
+    expect(result.archives[1]).toEqual(before['spaces/space-a/dailyArchives/first']);
+    expect(db.queries).toEqual([[['storeId', '==', 'store-a'], ['date', '==', data.date]]]);
+    expect(db.documents).toEqual(before);
+    expect(db.writes).toEqual([]);
+  });
+  it('preserves the unfiltered list contract for old clients and full exports', async () => {
+    const db = seed();
+    const result = await close(db, { action: 'list', date: undefined });
+    expect(result.date).toBeUndefined();
+    expect(result.archives.map((row) => row.id)).toEqual(['second', 'first', 'previous']);
+    expect(db.queries).toEqual([[['storeId', '==', 'store-a']]]);
+  });
+  it('returns an empty confirmed day without changing the existing snapshots', async () => {
+    const db = seed();
+    const before = structuredClone(db.documents);
+    expect(await close(db, { action: 'list', date: '2024-02-29' })).toMatchObject({ date: '2024-02-29', archives: [] });
+    expect(db.documents).toEqual(before);
+  });
+  it.each(['2026-02-29', '2026-02-30', '2026-13-01', '0000-01-01', '', null, 20261018])('rejects invalid date %s without reading archive history', async (date) => {
+    const db = seed();
+    await expect(close(db, { action: 'list', date })).rejects.toMatchObject({ code: 'invalid-argument' });
+    expect(db.queries).toEqual([]);
+    expect(db.writes).toEqual([]);
+  });
+  it.each(['removed', 'wrong-store', 'inactive-space', 'cross-space', 'unauthenticated'])('blocks %s before listing archives', async (fault) => {
+    const db = seed();
+    if (fault === 'removed') db.documents['spaces/space-a/members/user-a'].status = 'removed';
+    if (fault === 'wrong-store') db.documents['spaces/space-a/storeProfile/profile'].storeId = 'other';
+    if (fault === 'inactive-space') db.documents['spaces/space-a'].status = 'archived';
+    await expect(dailyArchiveCommandHandler({
+      auth: fault === 'unauthenticated' ? undefined : { uid: 'user-a' },
+      data: { ...data, action: 'list', ...(fault === 'cross-space' ? { spaceId: 'other' } : {}) },
+    } as never, { firestore: db as never, now: () => now })).rejects.toBeDefined();
+    expect(db.queries).toEqual([]);
     expect(db.writes).toEqual([]);
   });
 });

@@ -3,11 +3,13 @@ import { getFunctions, httpsCallable, type Functions } from 'firebase/functions'
 import { getFirebaseApp, isFirebaseConfigured } from '@/services/firebase';
 import type { DailyArchive } from '@/types/business';
 import { isCurrencyCode } from '@/constants/currencies';
+import { isArchiveDate } from '@/data/archiveCalendar';
 
 interface DailyArchiveCommandResponse {
   archives: Array<DailyArchive & { workspaceId: string }>;
   created?: DailyArchive & { workspaceId: string };
   processedAt: string;
+  date?: string;
 }
 
 let functions: Functions | null = null;
@@ -16,6 +18,17 @@ export async function loadCloudDailyArchives(spaceId: string, storeId: string): 
   const exportObservation = observeForLocalExport(spaceId, 'dailyArchives');
   const data = await send({ action: 'list', spaceId, storeId });
   exportObservation.archives(data.archives, data.processedAt, storeId);
+  return data.archives;
+}
+
+/** A partial day must never replace the complete archive observation used by local export. */
+export async function loadCloudDailyArchivesForDate(spaceId: string, storeId: string, date: string): Promise<DailyArchive[]> {
+  if (!isArchiveDate(date)) throw new Error('archiveDateInvalid');
+  const data = await send({ action: 'list', spaceId, storeId, date });
+  // Fail closed on old servers that ignore the filter, even when their result happens to be empty.
+  if (data.date !== date || data.archives.some((archive) => archive.date !== date)) {
+    throw new Error('invalidCloudDailyArchiveResponse');
+  }
   return data.archives;
 }
 

@@ -1,67 +1,29 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, Share, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useFocusEffect } from 'expo-router';
 import { AppShell, EmptyState, GlassCard, PageHeader, SectionTitle } from '@/components/AppShell';
-import { formatMoney } from '@/constants/currencies';
 import { formatLocalizedDate, formatLocalizedDateTime } from '@/constants/i18n';
 import { useStore } from '@/context/StoreContext';
 import { useColors } from '@/hooks/useColors';
 import { useI18n } from '@/hooks/useI18n';
-import { type DailyJournalEvent } from '@/services/storage';
-import { loadCloudDailyArchives } from '@/services/cloudDailyArchives';
+import { getLocalDateKey, type DailyJournalEvent } from '@/services/storage';
 import { buildArchiveShareMessage } from '@/services/archiveSharing';
-import type { DailyArchive } from '@/types/business';
 import { journalEventTitle, journalEventMoney, journalEventDetails } from '@/services/journalPresentation';
-
-function parseArchiveDate(value: string): Date {
-  const [year, month, day] = value.split('-').map(Number);
-  return new Date(year, month - 1, day);
-}
+import { ArchiveDayPicker } from '@/components/ArchiveDayPicker';
+import { useArchiveDay } from '@/hooks/useArchiveDay';
+import { archiveDateForDisplay } from '@/data/archiveCalendar';
 
 export default function ArchiveScreen() {
   const colors = useColors();
-  const { profile, isReady, activeSpaceId } = useStore();
+  const { profile } = useStore();
   const { t, language, isRTL } = useI18n();
-  const [archives, setArchives] = useState<DailyArchive[]>([]);
+  const [date, setDate] = useState(() => getLocalDateKey(new Date()));
+  const { archives, isLoading, error: archiveError, retry } = useArchiveDay(date);
   const [selectedArchiveId, setSelectedArchiveId] = useState<string | null>(null);
   const [isSharing, setIsSharing] = useState(false);
-  const [archiveError, setArchiveError] = useState<string | null>(null);
   const selectedArchive = useMemo(
-    () => archives.find((archive) => archive.id === selectedArchiveId) ?? null,
+    () => archives.find((archive) => archive.id === selectedArchiveId) ?? archives[0] ?? null,
     [archives, selectedArchiveId],
-  );
-
-  useFocusEffect(
-    useCallback(() => {
-      if (!isReady) {
-        return undefined;
-      }
-      let active = true;
-      setArchiveError(null);
-      if (!activeSpaceId) {
-        setArchives([]);
-        setArchiveError('archiveWorkspaceUnavailable');
-        return () => { active = false; };
-      }
-      void loadCloudDailyArchives(activeSpaceId, profile.id).then((loadedArchives) => {
-        if (active) {
-          setArchives(loadedArchives);
-          setSelectedArchiveId((current) =>
-            loadedArchives.some((archive) => archive.id === current)
-              ? current
-              : loadedArchives[0]?.id ?? null);
-        }
-      }).catch((error) => {
-        if (active) {
-          setArchives([]);
-          setArchiveError(error instanceof Error ? error.message : 'archiveLoadFailed');
-        }
-      });
-      return () => {
-        active = false;
-      };
-    }, [activeSpaceId, isReady, profile.id]),
   );
 
   const getEventTitle = (event: DailyJournalEvent): string => {
@@ -100,20 +62,28 @@ export default function ArchiveScreen() {
   return (
     <AppShell>
       <PageHeader title={t('archive')} subtitle={t('archiveSelectHint')} />
+      <ArchiveDayPicker value={date} onChange={(next) => { setSelectedArchiveId(null); setDate(next); }} />
 
       {archiveError ? (
-        <EmptyState icon="alert-circle-outline" title={t('somethingWentWrong')} hint={t('reloadToContinue')} />
+        <>
+          <EmptyState icon="alert-circle-outline" title={t('somethingWentWrong')} hint={t('reloadToContinue')} />
+          <Pressable testID="archive-retry" accessibilityRole="button" onPress={retry} style={[styles.shareButton, { backgroundColor: colors.accent }]}>
+            <Text style={{ color: colors.primary }}>{t('tryAgain')}</Text>
+          </Pressable>
+        </>
+      ) : isLoading ? (
+        <ActivityIndicator testID="archive-loading" color={colors.primary} />
       ) : archives.length === 0 ? (
         <EmptyState
           icon="archive-outline"
-          title={t('archiveEmpty')}
-          hint={t('archiveEmptyHint')}
+          title={t('archiveDayEmpty')}
+          hint={formatLocalizedDate(archiveDateForDisplay(date), language)}
         />
       ) : (
         <>
           <View style={styles.archiveList}>
             {archives.map((archive) => {
-              const selected = archive.id === selectedArchiveId;
+              const selected = archive.id === selectedArchive?.id;
               return (
                 <Pressable
                   key={archive.id}
@@ -135,7 +105,7 @@ export default function ArchiveScreen() {
                   </View>
                   <View style={[styles.archiveDayCopy, { alignItems: isRTL ? 'flex-end' : 'flex-start' }]}>
                     <Text style={[styles.archiveDate, { color: colors.foreground }]}>
-                      {formatLocalizedDate(parseArchiveDate(archive.date), language)} — {t('close')} #{archive.closingNumber}
+                      {formatLocalizedDate(archiveDateForDisplay(archive.date), language)} — {t('close')} #{archive.closingNumber}
                     </Text>
                     <Text style={[styles.archiveClosedAt, { color: colors.mutedForeground }]}>
                       {t('archiveClosedAt')}: {formatLocalizedDateTime(new Date(archive.closedAt), language)}

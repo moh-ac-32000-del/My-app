@@ -4,6 +4,7 @@ import { closingCashBalances } from './closingCashBalances.js';
 import { assertWorkspaceAccess } from './workspaceAccess.js';
 import { merchantOperationFromDocument } from '../../data/merchantDocuments.js';
 import { mergeMerchantJournal } from '../../data/merchantJournal.js';
+import { isArchiveDate } from '../../data/archiveCalendar.js';
 
 type JournalEvent = {
   id: string;
@@ -57,7 +58,7 @@ export interface DailyArchiveRuntime {
 export async function dailyArchiveCommandHandler(
   request: CallableRequest<ArchiveRequest>,
   runtime: DailyArchiveRuntime,
-): Promise<{ archives: ArchiveRecord[]; created?: ArchiveRecord; processedAt: string }> {
+): Promise<{ archives: ArchiveRecord[]; created?: ArchiveRecord; processedAt: string; date?: string }> {
   const uid = request.auth?.uid?.trim();
   if (!uid) throw new HttpsError('unauthenticated', 'Firebase Auth is required');
   const input = validateRequest(request.data);
@@ -75,12 +76,13 @@ export async function dailyArchiveCommandHandler(
   if (input.action === 'list') {
     const [space, member, profile] = await Promise.all([spaceRef.get(), memberRef.get(), profileRef.get()]);
     authorize(space.data(), member.data(), profile.data(), 'read');
-    const snapshot = await archivesRef.where('storeId', '==', input.storeId).get();
+    const storeQuery = archivesRef.where('storeId', '==', input.storeId);
+    const snapshot = await (input.date ? storeQuery.where('date', '==', input.date) : storeQuery).get();
     const archives = snapshot.docs
       .map((doc) => normalizeArchive(doc.id, doc.data(), input.spaceId, input.storeId))
       .filter((archive): archive is ArchiveRecord => archive !== null)
       .sort((a, b) => b.date.localeCompare(a.date) || b.closingNumber - a.closingNumber);
-    return { archives, processedAt: runtime.now() };
+    return { archives, processedAt: runtime.now(), ...(input.date ? { date: input.date } : {}) };
   }
 
   const date = input.date!;
@@ -204,6 +206,9 @@ function validateRequest(value: unknown): ArchiveRequest {
     throw new HttpsError('invalid-argument', 'Archive command is invalid');
   }
   const input = value as unknown as ArchiveRequest;
+  if (input.action === 'list' && input.date !== undefined && !isArchiveDate(input.date)) {
+    throw new HttpsError('invalid-argument', 'Archive date is invalid');
+  }
   if (input.action === 'close') {
     if (typeof input.date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(input.date)
       || !validTimestamp(input.startAt) || !validTimestamp(input.endAt)
