@@ -159,6 +159,7 @@ export function buildDailyJournalEvents(
       ...(transaction.note ? { note: transaction.note } : {}),
       occurredAt: transaction.createdAt,
       sourceId: transaction.id,
+        ...(transaction.createdByUserId ? { createdByUserId: transaction.createdByUserId } : {}),
     });
   }
 
@@ -177,6 +178,7 @@ export function buildDailyJournalEvents(
       ...(debt.note ? { note: debt.note } : {}),
       occurredAt: debt.createdAt,
       sourceId: debt.id,
+        ...(debt.createdByUserId ? { createdByUserId: debt.createdByUserId } : {}),
     });
   }
 
@@ -195,6 +197,7 @@ export function buildDailyJournalEvents(
       ...(payment.note ? { note: payment.note } : {}),
       occurredAt: payment.paidAt,
       sourceId: payment.id,
+        ...(payment.createdByUserId ? { createdByUserId: payment.createdByUserId } : {}),
     });
   }
 

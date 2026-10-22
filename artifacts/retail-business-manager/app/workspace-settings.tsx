@@ -6,6 +6,9 @@ import { WorkspaceButton, WorkspaceInput, WorkspaceRolePicker } from '@/componen
 import { WorkspaceClosingSettingsCard } from '@/components/WorkspaceClosingSettingsCard';
 import { closingSettings } from '@/data/workspaceClosing';
 import { useStore } from '@/context/StoreContext';
+import { useMemberNames } from '@/context/MemberNamesContext';
+import { ActorBadge } from '@/components/ActorBadge';
+import { getFirebaseAuth } from '@/services/firebase';
 import { useColors } from '@/hooks/useColors';
 import { useI18n } from '@/hooks/useI18n';
 import {
@@ -19,6 +22,7 @@ export default function WorkspaceSettingsScreen() {
   const { activeSpaceId, cloudSpace, canManageSpace, sessionKey } = useStore();
   const { t, isRTL, language } = useI18n();
   const colors = useColors();
+  const { reload: reloadNames } = useMemberNames();
   const [overview, setOverview] = useState<WorkspaceOverview | null>(null);
   const [name, setName] = useState('');
   const [role, setRole] = useState<'editor' | 'viewer'>('viewer');
@@ -96,6 +100,11 @@ export default function WorkspaceSettingsScreen() {
   return (
     <AppShell>
       <PageHeader title={t('workspaceSettings')} subtitle={cloudSpace?.name} showBack />
+      <GlassCard style={{ gap: 10, marginBottom: 14 }}>
+        <Text style={{ color: colors.foreground, textAlign: isRTL ? 'right' : 'left' }}>{t('memberName')}</Text>
+        <ActorBadge userId={getFirebaseAuth().currentUser?.uid} />
+        <WorkspaceButton label={t('workspaceRefresh')} onPress={reloadNames} />
+      </GlassCard>
       <Text style={[text, { marginBottom: 16, color: colors.mutedForeground }]}>{t('workspaceSettingsHint')}</Text>
       {loading ? <ActivityIndicator color={colors.primary} /> : null}
       {failed ? (

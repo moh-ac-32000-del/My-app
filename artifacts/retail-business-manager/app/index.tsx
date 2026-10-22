@@ -14,6 +14,7 @@ import { useColors } from '@/hooks/useColors';
 import { useI18n } from '@/hooks/useI18n';
 import { calculateVisibleCurrencyBalances } from '@/services/storage';
 import { useDailyJournalProjection } from '@/hooks/useDailyJournalProjection';
+import { ActorBadge } from '@/components/ActorBadge';
 import type { DailyJournalEvent } from '@/services/storage';
 import { journalEventTitle, journalEventMoney, journalEventDetails } from '@/services/journalPresentation';
 import { useFinancialWindow } from '@/hooks/useFinancialWindow';
@@ -216,6 +217,7 @@ export default function DashboardScreen() {
                     >
                       {getJournalTitle(event)} — {journalEventMoney(event, language)}
                     </Text>
+                    <ActorBadge userId={event.createdByUserId} />
                     {journalEventDetails(event, language, t).map((detail, index) => (
                       <Text
                         key={`${event.id}:${index}`}

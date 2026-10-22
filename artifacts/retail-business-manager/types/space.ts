@@ -45,6 +45,8 @@ export interface Space {
 export interface Membership {
   spaceId: string;
   userId: string;
+  displayName?: string;
+  identityVersion?: 1;
   role: MembershipRole;
   status: MembershipStatus;
   createdAt: string;

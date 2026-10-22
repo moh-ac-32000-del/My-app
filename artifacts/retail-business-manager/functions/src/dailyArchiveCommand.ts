@@ -17,10 +17,12 @@ type JournalEvent = {
   note?: string;
   occurredAt: string;
   sourceId: string;
+  createdByUserId?: string;
 };
 
 type CloudPaymentRecord = {
   id: string;
+  createdByUserId?: unknown;
   direction?: unknown;
   transactionId?: unknown;
   customerId?: unknown;
@@ -218,6 +220,7 @@ export async function projectArchiveSnapshot(
       type: value.type, amount: value.amount, currency: value.currency,
       ...(typeof value.note === 'string' && value.note ? { note: value.note } : {}),
       occurredAt: value.createdAt, sourceId: doc.id,
+      ...(typeof value.createdByUserId === 'string' ? { createdByUserId: value.createdByUserId } : {}),
     } as JournalEvent);
   }
   for (const doc of debtSnap.docs) {
@@ -230,6 +233,7 @@ export async function projectArchiveSnapshot(
       customerName: customers.get(value.customerId),
       ...(typeof value.note === 'string' && value.note ? { note: value.note } : {}),
       occurredAt: value.createdAt, sourceId: doc.id,
+      ...(typeof value.createdByUserId === 'string' ? { createdByUserId: value.createdByUserId } : {}),
     } as JournalEvent);
   }
   for (const payment of payments) {
@@ -241,6 +245,7 @@ export async function projectArchiveSnapshot(
       customerId: payment.customerId, customerName: customers.get(payment.customerId),
       ...(typeof payment.note === 'string' && payment.note ? { note: payment.note } : {}),
       occurredAt: payment.paidAt, sourceId: payment.id,
+      ...(typeof payment.createdByUserId === 'string' ? { createdByUserId: payment.createdByUserId } : {}),
     } as JournalEvent);
   }
   let mergedEvents: JournalEvent[];

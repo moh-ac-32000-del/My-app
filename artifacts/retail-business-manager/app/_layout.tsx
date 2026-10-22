@@ -21,17 +21,20 @@ import { CustomerProvider } from '@/context/CustomerContext';
 import { PaymentProvider } from '@/context/PaymentContext';
 import { FloatingQuickActions } from '@/components/FloatingQuickActions';
 import { AndroidPushObserver } from '@/components/AndroidPushObserver';
+import { MemberNamesProvider } from '@/context/MemberNamesContext';
+import { MemberNamePrompt } from '@/components/MemberNamePrompt';
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
 
 function RootLayoutNav() {
   const pathname = usePathname();
-  const { isAuthenticated, isReady, canWriteBusiness } = useStore();
+  const { isAuthenticated, isReady, canWriteBusiness, sessionKey } = useStore();
   const showQuickActions = isReady && isAuthenticated && canWriteBusiness && pathname === '/';
   return (
     <View style={{ flex: 1 }}>
       <AndroidPushObserver />
+      <MemberNamePrompt key={sessionKey} />
       <Stack screenOptions={{ headerShown: false, animation: 'fade' }} />
       {showQuickActions ? <FloatingQuickActions /> : null}
     </View>
@@ -76,7 +79,7 @@ function ScopedBusinessProviders() {
           <QueryClientProvider client={queryClient}>
             <GestureHandlerRootView>
               <KeyboardProvider>
-                <RootLayoutNav />
+                <MemberNamesProvider><RootLayoutNav /></MemberNamesProvider>
               </KeyboardProvider>
             </GestureHandlerRootView>
           </QueryClientProvider>

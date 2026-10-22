@@ -1,4 +1,5 @@
 import React from 'react';
+import { ActorBadge } from './ActorBadge';
 import { Modal, Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MerchantButton } from './MerchantAccountUI';
@@ -79,9 +80,7 @@ export function MerchantOperationDetails({
           <Text style={text}>
             {t('merchantCashEffect')}: {formatExactMoney(operation.cashDeltaExact, operation.currency, language)}
           </Text>
-          <Text selectable style={{ ...text, color: colors.mutedForeground }}>
-            {t('merchantRecordedBy')}: {operation.createdByUserId}
-          </Text>
+          <ActorBadge userId={operation.createdByUserId} />
           {operation.reason ? (
             <Text style={text}>
               {t('merchantReason')}: {operation.reason}
