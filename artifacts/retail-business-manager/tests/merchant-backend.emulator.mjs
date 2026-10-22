@@ -90,6 +90,34 @@ async function fixture(suffix) {
   };
 }
 try {
+  const amend = await fixture('atomic-edit');
+  await amend.space.collection('debts').doc('old-debt').delete();
+  await amend.merchant('directPayment', 'old-direct', { customerId: amend.base.customerId, amountExact: '300.00' });
+  const editInput = { customerId: amend.base.customerId, amountExact: '100.00', replacesOperationId: 'old-direct' };
+  const edited = await Promise.all([
+    amend.merchant('directPayment', 'new-direct', editInput),
+    amend.merchant('directPayment', 'new-direct', editInput),
+  ]);
+  assert.deepEqual(edited.map(row => row.outcome).sort(), ['completed', 'replayed']);
+  assert.equal((await amend.credit()).data().creditExact, '100.00');
+  assert.equal((await amend.credit()).data().revision, 3);
+  assert.equal((await amend.balance()).data().balanceExact, '-100.00');
+  assert.equal((await amend.balance()).data().revision, 3);
+  assert.equal((await amend.space.collection('merchantOperations').get()).size, 3);
+  assert.equal((await amend.space.collection('transactions').get()).size, 0);
+  await assert.rejects(amend.merchant('directPayment', 'new-direct', { ...editInput, amountExact: '101.00' }), { code: 'already-exists' });
+  await assert.rejects(amend.merchant('directPayment', 'other-edit', editInput), { code: 'failed-precondition' });
+  const cancelInput = { targetOperationId: 'new-direct', cancelled: true, reason: 'Operation cancelled' };
+  const cancelled = await Promise.all([
+    amend.merchant('reverse', 'cancel-direct', cancelInput),
+    amend.merchant('reverse', 'cancel-direct', cancelInput),
+  ]);
+  assert.deepEqual(cancelled.map(row => row.outcome).sort(), ['completed', 'replayed']);
+  assert.equal((await amend.credit()).data().creditExact, '0.00');
+  assert.equal((await amend.balance()).data().balanceExact, '0.00');
+  assert.equal((await amend.space.collection('merchantOperations').doc('new-direct').get()).data().cancelled, true);
+  console.log('Merchant edit/cancel emulator — atomic shared-credit preparation, concurrent replay, stale edit rejection and no cash: PASS');
+
   const materials = await fixture('separate-materials');
   const materialInput = { separateLines: true, paidExact: '0.00', source: 'cash', lines: [
     { name: 'Screens', quantity: '2', unitPrice: '100.0050' },

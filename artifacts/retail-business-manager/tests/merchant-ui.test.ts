@@ -136,6 +136,22 @@ beforeEach(() => {
   state.limited = false;
 });
 describe('merchant screens (server-rendered, not device acceptance)', () => {
+  it.each(['ar', 'tr', 'en'] as const)('prefills edit fields and nests cancellation in %s', (language) => {
+    state.language = language;
+    const markup = renderToStaticMarkup(React.createElement(MerchantCommandForm, {
+      action: 'purchase', merchant: useMerchantAccounts().merchants[0] as never,
+      target: { id: 'old', currency: 'TRY', createdAt: '2026-10-19T12:00:00Z',
+        operationDate: '2026-10-12', note: 'Original note', paidExact: '0.00',
+        lines: [{ name: 'Original item', quantity: '2.5', unitPrice: '19.12', totalExact: '47.80' }] } as never,
+      command: vi.fn(), onDone: vi.fn(), onCancel: vi.fn(),
+    }));
+    expect(markup).toContain(translate('operationEdit', language));
+    expect(markup).toContain('merchant-cancel-operation');
+    expect(markup).toContain('Original item');
+    expect(markup).toContain('value="2.5"');
+    expect(markup).toContain('value="2026-10-12"');
+    expect(markup).not.toContain(translate('merchantReverse', language));
+  });
   it('blocks the PDF component itself for Viewer and asks explicit consent to load missing history', () => {
     const props = { merchant: useMerchantAccounts().merchants[0], operations: [], operationsLimited: true,
       historyLoading: false, loadMore: vi.fn(), onClose: vi.fn() };
@@ -205,7 +221,7 @@ describe('merchant screens (server-rendered, not device acceptance)', () => {
   it('does not show a second reversal action after an operation has been corrected', () => {
     state.reversed = true;
     const markup = card();
-    expect(markup).toContain(translate('merchantReversed', 'ar'));
+    expect(markup).toContain(translate('operationCancelled', 'ar'));
     expect(markup).not.toContain(translate('merchantReverse', 'ar'));
   });
   it('does not replace unavailable accounts with an empty or zero-success state', () => {

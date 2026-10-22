@@ -1,6 +1,6 @@
 import type { MerchantOperation } from '../types/merchant';
 import type { DailyJournalEvent } from '../types/journal';
-import { legacyAmountExact } from './customerCreditAccounting';
+import { legacyAmountExact, subtractCustomerExact } from './customerCreditAccounting';
 
 type Source = Record<string, any> & { id: string };
 export interface MerchantJournalSources {
@@ -23,7 +23,7 @@ export function merchantJournalEvent(operation: MerchantOperation): DailyJournal
     operation.action === 'purchase'
       ? operation.totalExact
       : operation.action === 'opening'
-        ? operation.balanceAfterExact
+        ? operation.amountExact ?? subtractCustomerExact(operation.balanceAfterExact, operation.balanceBeforeExact)
         : operation.amountExact,
   );
   if (!Number.isFinite(Number(primary))) invalid();

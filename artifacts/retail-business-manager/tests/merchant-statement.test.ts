@@ -86,7 +86,7 @@ describe('merchant-facing statement: completeness, privacy and exact period acco
     expect(value.rows.map((row) => row.kind)).toEqual(['purchase', 'payment', 'payment']);
     expect(value.rows.at(-1)).toMatchObject({ kind: 'payment', method: 'Transfer', amount: '30.00' });
   });
-  it('retains originals and separate generic corrections without exposing any private provenance', () => {
+  it('hides a cancelled original and its internal offset without exposing private provenance', () => {
     const value = merchantStatement(input());
     expect(value.totals[0]).toMatchObject({
       purchases: '0.00',
@@ -94,11 +94,8 @@ describe('merchant-facing statement: completeness, privacy and exact period acco
       adjustments: '100.00',
       closing: '70.00',
     });
-    expect(value.rows.find((row) => row.kind === 'purchase')?.corrected).toBe(true);
-    expect(value.rows.filter((row) => row.kind.startsWith('correction')).map((row) => row.amount)).toEqual([
-      '-300.00',
-      '-20.00',
-    ]);
+    expect(value.rows.map(row => row.kind)).toEqual(['opening', 'payment']);
+    expect(value.rows.every(row => !row.corrected)).toBe(true);
     expect(JSON.stringify(value)).not.toContain('SECRET');
     expect(JSON.stringify(value)).not.toContain('directPayment');
     expect(JSON.stringify(value)).not.toContain('customer');

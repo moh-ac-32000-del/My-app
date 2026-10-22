@@ -58,7 +58,7 @@ function MerchantDetail({ id }: { id: string }) {
     setForm({ action, target, statusOnly });
   };
   const accountBalances = balances.filter((row) => row.merchantId === id);
-  const shown = operations.filter((row) => row.merchantId === id && (!currency || row.currency === currency));
+  const shown = operations.filter((row) => row.action !== 'reverse' && row.merchantId === id && (!currency || row.currency === currency));
   return (
     <AppShell>
       <PageHeader
@@ -184,7 +184,8 @@ function MerchantDetail({ id }: { id: string }) {
             <MerchantOperationDetails
               operation={selected}
               onClose={() => setSelectedId(null)}
-              onReverse={canWriteBusiness && merchant.isActive && !form ? () => open('reverse', selected) : undefined}
+              onEdit={canWriteBusiness && merchant.isActive && !form && selected.action !== 'reverse'
+                ? () => open(selected.action, selected) : undefined}
             />
           ) : null}
           {statementOpen && canWriteBusiness ? (
