@@ -28,6 +28,8 @@ try {
     name: 'B',
     displayName: 'Ahmet',
   });
+  // Synthetic demo-only profile initialization, matching the normal owner onboarding prerequisite.
+  await db.doc(`spaces/${a.spaceId}/storeProfile/profile`).set({ storeId: 'identity-store' });
   const invitation = await command(owner, { action: 'invite', spaceId: a.spaceId, role: 'viewer' });
   await command(viewer, { action: 'accept', token: invitation.token, displayName: 'Ayşe' });
   const namesA = await command(viewer, { action: 'memberNames', spaceId: a.spaceId });
@@ -74,3 +76,4 @@ try {
   await db.terminate();
   await deleteApp(app);
 }
+
