@@ -87,6 +87,7 @@ describe('Cloud Daily Journal projection', () => {
         customerName: 'Customer A',
         occurredAt: '2026-09-13T11:00:00.000Z',
         sourceId: 'payment-A',
+        createdByUserId: 'user-A',
       },
       {
         id: 'debt:debt-A',
@@ -98,6 +99,7 @@ describe('Cloud Daily Journal projection', () => {
         customerName: 'Customer A',
         occurredAt: '2026-09-13T10:00:00.000Z',
         sourceId: 'debt-A',
+        createdByUserId: 'user-A',
       },
       {
         id: 'transaction:transaction-A',

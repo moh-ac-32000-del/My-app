@@ -15,6 +15,8 @@ export interface WorkspaceOverview {
 export type WorkspaceRequest = {
   action:
     | 'quota'
+    | 'memberNames'
+    | 'setMemberName'
     | 'create'
     | 'rename'
     | 'overview'
@@ -30,6 +32,7 @@ export type WorkspaceRequest = {
   closingSettings?: { timeZone: string; executionTime: string; expectedRevision: number };
   spaceId?: string;
   name?: string;
+  displayName?: string;
   mode?: 'private' | 'shared';
   role?: 'editor' | 'viewer';
   userId?: string;

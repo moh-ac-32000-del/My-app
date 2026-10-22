@@ -1,6 +1,11 @@
 export type Language = 'ar' | 'en' | 'tr';
 
 const ar = {
+  memberName: 'اسمك داخل هذه المساحة',
+  memberNameTitle: 'تأكيد اسمك',
+  memberNameHint: 'يظهر اسمك بجانب عملياتك في هذه المساحة فقط. راجعه قبل التأكيد؛ لا يمكن تغييره من هذه الشاشة بعد الحفظ.',
+  memberRecordedBy: 'منفّذ العملية',
+  memberUnnamed: 'عضو غير مسمّى',
   merchantSettings: "إعدادات قسم التجار",
   merchantSettingsHint: "قائمة موحّدة لهذه المساحة. الأسعار اقتراحات قابلة للتعديل عند الشراء؛ تغييرها لا يعدّل العمليات السابقة. التعطيل يخفي الخيار من العمليات الجديدة فقط.",
   merchantMaterials: "المواد والأسعار",
@@ -457,6 +462,11 @@ const ar = {
 export type TranslationKey = keyof typeof ar;
 
 const en: Record<TranslationKey, string> = {
+  memberName: 'Your name in this workspace',
+  memberNameTitle: 'Confirm your name',
+  memberNameHint: 'Your name appears beside your operations in this workspace only. Check it before confirming; it cannot be changed from this screen after saving.',
+  memberRecordedBy: 'Recorded by',
+  memberUnnamed: 'Unnamed member',
   merchantSettings: "Merchant settings",
   merchantSettingsHint: "Shared workspace lists. Prices are editable purchase defaults; changes do not alter previous operations. Disabled entries are hidden only from new selections.",
   merchantMaterials: "Materials and prices",
@@ -911,6 +921,11 @@ const en: Record<TranslationKey, string> = {
 };
 
 const tr: Record<TranslationKey, string> = {
+  memberName: 'Bu alandaki adınız',
+  memberNameTitle: 'Adınızı onaylayın',
+  memberNameHint: 'Adınız yalnızca bu alandaki işlemlerinizin yanında görünür. Onaylamadan önce kontrol edin; kaydettikten sonra bu ekrandan değiştirilemez.',
+  memberRecordedBy: 'İşlemi kaydeden',
+  memberUnnamed: 'Adsız üye',
   merchantSettings: "Tedarikçi ayarları",
   merchantSettingsHint: "Çalışma alanının ortak listeleri. Fiyatlar alım sırasında değiştirilebilir; önceki işlemler değişmez. Devre dışı girdiler yalnızca yeni seçimlerden gizlenir.",
   merchantMaterials: "Malzemeler ve fiyatlar",

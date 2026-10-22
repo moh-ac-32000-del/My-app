@@ -62,6 +62,7 @@ export interface CashTransactionDraft {
 }
 
 export interface Transaction extends StoreScopedEntity {
+  createdByUserId?: string;
   type: TransactionType;
   amount: number;
   currency: CurrencyCode;

@@ -5,11 +5,14 @@ import { assertWorkspaceAccess } from './workspaceAccess.js';
 import { canonicalTimeZone, closingSettings } from '../../data/workspaceClosing.js';
 import { automaticClosingPolicy, nextClosingAt, queueClosingTransition } from '../../data/automaticClosing.js';
 import { prepareAutomaticClosing } from './automaticClosing.js';
+import { memberDisplayName } from '../../data/memberIdentity.js';
 
 type Role = 'editor' | 'viewer';
 type Input = {
   action:
     | 'quota'
+    | 'memberNames'
+    | 'setMemberName'
     | 'create'
     | 'rename'
     | 'overview'
@@ -25,6 +28,7 @@ type Input = {
   closingSettings?: { timeZone: string; executionTime: string; expectedRevision: number };
   spaceId?: string;
   name?: string;
+  displayName?: string;
   mode?: 'private' | 'shared';
   role?: Role;
   userId?: string;
@@ -65,6 +69,8 @@ export async function workspaceCommandHandler(
     !input ||
     ![
       'quota',
+      'memberNames',
+      'setMemberName',
       'create',
       'rename',
       'overview',
@@ -79,6 +85,12 @@ export async function workspaceCommandHandler(
     ].includes(input.action)
   )
     fail('invalid-argument', 'Invalid workspace action');
+  let explicitName: string | undefined;
+  if (input.displayName !== undefined || input.action === 'setMemberName') {
+    if (!['create', 'accept', 'setMemberName'].includes(input.action)) fail('invalid-argument', 'Unexpected member name');
+    try { explicitName = memberDisplayName(input.displayName); }
+    catch { fail('invalid-argument', 'Invalid member name'); }
+  }
   if (
     ['create', 'rename'].includes(input.action) &&
     (typeof input.name !== 'string' || !input.name.trim() || input.name.trim().length > 80)
@@ -167,11 +179,14 @@ export async function workspaceCommandHandler(
       assertWorkspaceAccess(ownerMemberSnap.data(), 'owner', space, invite.invitedByUserId);
       if (space.ownerUserId === uid || memberSnap.data()?.status === 'active')
         fail('already-exists', 'Already an active member');
-      const displayName = request.auth?.token?.name || request.auth?.token?.email || uid;
+      const previousName = memberSnap.data()?.identityVersion === 1 ? memberSnap.data()?.displayName : undefined;
+      if (previousName && explicitName && previousName !== explicitName)
+        fail('already-exists', 'Confirmed member name cannot be replaced on rejoining');
+      const acceptedName = previousName ?? explicitName;
       const member = {
         spaceId: invite.spaceId,
         userId: uid,
-        displayName,
+        ...(acceptedName ? { displayName: acceptedName, identityVersion: 1 } : {}),
         role: invite.role,
         status: 'active',
         createdAt: memberSnap.data()?.createdAt ?? now,
@@ -205,7 +220,10 @@ export async function workspaceCommandHandler(
       const spaceRef = db.collection('spaces').doc(spaceId);
       const existing = (await tx.get(spaceRef)).data();
       if (existing) {
-        assertWorkspaceAccess((await tx.get(spaceRef.collection('members').doc(uid))).data(), 'owner', existing, uid);
+        const owner = (await tx.get(spaceRef.collection('members').doc(uid))).data();
+        assertWorkspaceAccess(owner, 'owner', existing, uid);
+        if (explicitName && owner?.displayName !== explicitName)
+          fail('already-exists', 'Operation ID was used with a different member name');
         if (existing.ownerUserId !== uid || existing.name !== input.name!.trim() || existing.mode !== input.mode)
           fail('already-exists', 'Operation ID was used with a different payload');
         // A retry cannot restore a suspended or archived workspace.
@@ -227,6 +245,7 @@ export async function workspaceCommandHandler(
         spaceId,
         userId: uid,
         role: 'owner',
+        ...(explicitName ? { displayName: explicitName, identityVersion: 1 } : {}),
         status: 'active',
         createdAt: now,
         updatedAt: now,
@@ -256,7 +275,26 @@ export async function workspaceCommandHandler(
     ]);
     const space = spaceSnap.data();
     if (!space || space.status !== 'active') fail('failed-precondition', 'Workspace unavailable');
-    assertWorkspaceAccess(memberSnap.data(), input.action === 'overview' ? 'read' : 'owner', space, uid);
+    assertWorkspaceAccess(memberSnap.data(), ['overview', 'memberNames', 'setMemberName'].includes(input.action) ? 'read' : 'owner', space, uid);
+    if (input.action === 'setMemberName') {
+      // Self only, including Viewer. A confirmed name cannot be silently replaced.
+      const member = memberSnap.data()!;
+      if (member.identityVersion === 1 && member.displayName !== explicitName)
+        fail('already-exists', 'Member name already confirmed');
+      if (member.identityVersion !== 1)
+        tx.update(spaceRef.collection('members').doc(uid), { displayName: explicitName!, identityVersion: 1, updatedAt: now });
+      return { spaceId: input.spaceId };
+    }
+    if (input.action === 'memberNames') {
+      // One directory per scoped session, not one lookup for each financial row.
+      // Removed memberships are retained so historical attribution is not lost.
+      const members = await tx.get(spaceRef.collection('members').limit(501));
+      if (members.docs.length > 500) fail('resource-exhausted', 'Member directory capacity exceeded');
+      return { spaceId: input.spaceId, members: members.docs.map(d => ({
+        userId: d.id,
+        displayName: d.data().identityVersion === 1 ? d.data().displayName : null,
+      })) };
+    }
     if (input.action === 'enableClosing' || input.action === 'retryClosing') {
       if (!runtime.automaticClosingReady) fail('failed-precondition', 'Scheduled backend has not been verified ready');
       const profile = await tx.get(spaceRef.collection('storeProfile').doc('profile'));

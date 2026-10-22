@@ -52,6 +52,10 @@ const transaction: Transaction = {
 };
 
 describe('Transaction Firestore service', () => {
+  it('retains the optional trusted creator for name attribution without fabricating legacy authors', () => {
+    expect(normalizeTransactionDocument(transaction.id, { ...transaction, createdByUserId: 'u' }, 'space-A')).toMatchObject({ createdByUserId: 'u' });
+    expect(normalizeTransactionDocument(transaction.id, transaction, 'space-A')).not.toHaveProperty('createdByUserId');
+  });
   it('preserves trusted merchant cash links and exact mirrors for journal deduplication', () => {
     expect(normalizeTransactionDocument(transaction.id, { ...transaction, workspaceId: 'space-A', merchantId: 'm',
       merchantOperationId: 'op', amountExact: '125.00' }, 'space-A')).toMatchObject({

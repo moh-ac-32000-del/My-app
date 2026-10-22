@@ -29,6 +29,7 @@ export default function WorkspacesScreen() {
   const [refresh, setRefresh] = useState(0);
   const [quota, setQuota] = useState<WorkspaceQuota | null>(null);
   const [name, setName] = useState('');
+  const [displayName, setDisplayName] = useState('');
   const [mode, setMode] = useState<'private' | 'shared'>('private');
   const [invite, setInvite] = useState(() => pendingInvitation() ?? '');
   const [busy, setBusy] = useState(false);
@@ -66,7 +67,7 @@ export default function WorkspacesScreen() {
     try {
       let result: { spaceId: string };
       if (action === 'create') {
-        const payload = JSON.stringify({ name: name.trim(), mode });
+        const payload = JSON.stringify({ name: name.trim(), mode, displayName: displayName.trim() });
         if (createAttempt.current?.payload !== payload)
           createAttempt.current = {
             payload,
@@ -75,13 +76,14 @@ export default function WorkspacesScreen() {
         result = await workspaceCommand({
           action,
           name: name.trim(),
+          displayName: displayName.trim(),
           mode,
           operationId: createAttempt.current!.operationId,
         });
       } else {
         const token = invitationToken(invite);
         if (!token) throw new Error('invalidInvitation');
-        result = await workspaceCommand({ action, token });
+        result = await workspaceCommand({ action, token, displayName: displayName.trim() });
       }
       if (getFirebaseAuth().currentUser?.uid !== uid) return;
       if (action === 'accept') clearInvitation();
@@ -207,6 +209,7 @@ export default function WorkspacesScreen() {
           </View>
         ) : null}
         <WorkspaceInput label={t('workspaceName')} value={name} onChangeText={setName} disabled={busy} maxLength={80} />
+        <WorkspaceInput label={t('memberName')} value={displayName} onChangeText={setDisplayName} disabled={busy} maxLength={40} />
         <View style={{ flexDirection: isRTL ? 'row-reverse' : 'row', gap: 10, flexWrap: 'wrap' }}>
           {(['private', 'shared'] as const).map((value) => (
             <WorkspaceButton
@@ -220,7 +223,7 @@ export default function WorkspacesScreen() {
         <WorkspaceButton
           testID="create-workspace"
           label={t('workspaceCreate')}
-          disabled={busy || !name.trim() || !quota || quota.used[mode] >= quota.limits[mode]}
+          disabled={busy || !name.trim() || !displayName.trim() || !quota || quota.used[mode] >= quota.limits[mode]}
           onPress={() => void execute('create')}
         />
       </GlassCard>
@@ -228,10 +231,11 @@ export default function WorkspacesScreen() {
         <Text style={[align, { color: colors.foreground, fontSize: 20 }]}>{t('workspaceJoin')}</Text>
         <Text style={[align, { color: colors.mutedForeground, lineHeight: 22 }]}>{t('workspaceInviteHint')}</Text>
         <WorkspaceInput label={t('workspaceInviteCode')} value={invite} onChangeText={setInvite} disabled={busy} />
+        <WorkspaceInput label={t('memberName')} value={displayName} onChangeText={setDisplayName} disabled={busy} maxLength={40} />
         <WorkspaceButton
           testID="accept-workspace-invitation"
           label={t('workspaceJoin')}
-          disabled={busy || !invitationToken(invite)}
+          disabled={busy || !displayName.trim() || !invitationToken(invite)}
           onPress={() => void execute('accept')}
         />
       </GlassCard>

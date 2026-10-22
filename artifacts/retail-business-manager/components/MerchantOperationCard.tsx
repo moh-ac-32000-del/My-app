@@ -1,4 +1,5 @@
 import React from 'react';
+import { ActorBadge } from './ActorBadge';
 import { Pressable, Text, View } from 'react-native';
 import { GlassCard } from './AppShell';
 import { merchantActionLabels } from './MerchantCommandForm';
@@ -42,6 +43,7 @@ export function MerchantOperationCard({ operation, onPress }: { operation: Merch
             {line.name}
           </Text>
         ))}
+        <ActorBadge userId={operation.createdByUserId} />
         {operation.paymentMethodName ? (
           <Text style={text}>
             {t('merchantPaymentMethod')}: {operation.paymentMethodName}

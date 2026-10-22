@@ -7,6 +7,7 @@ import { useStore } from '@/context/StoreContext';
 import { useColors } from '@/hooks/useColors';
 import { useI18n } from '@/hooks/useI18n';
 import { getLocalDateKey, type DailyJournalEvent } from '@/services/storage';
+import { ActorBadge } from '@/components/ActorBadge';
 import { buildArchiveShareMessage } from '@/services/archiveSharing';
 import { journalEventTitle, journalEventMoney, journalEventDetails } from '@/services/journalPresentation';
 import { ArchiveDayPicker } from '@/components/ArchiveDayPicker';
@@ -182,6 +183,7 @@ export default function ArchiveScreen() {
                             >
                               {getEventTitle(event)} — {journalEventMoney(event, language)}
                             </Text>
+                            <ActorBadge userId={event.createdByUserId} />
                             {journalEventDetails(event, language, t).map((detail, index) => (
                               <Text
                                 key={`${event.id}:${index}`}

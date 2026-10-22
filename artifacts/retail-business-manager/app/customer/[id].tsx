@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ActorBadge } from '@/components/ActorBadge';
 import { ActivityIndicator, Alert, Linking, Modal, Pressable, Share, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
@@ -473,6 +474,7 @@ function CustomerDetails({ customerId }: { customerId: string }) {
                 {debt.creditAppliedExact && debt.creditAppliedExact !== '0.00' ? <Text style={{ color: colors.success }}>
                   {t('customerCreditUsed')}: {formatExactMoney(debt.creditAppliedExact, debt.currency, language)}
                 </Text> : null}
+                <ActorBadge userId={debt.createdByUserId} />
                 {debt.note ? <Text style={{ color: colors.mutedForeground }}>{debt.note}</Text> : null}
                 <Text style={[styles.debtHistoryDate, { color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' }]}>
                   {formatLocalizedDateTime(new Date(debt.createdAt), language)}
@@ -552,6 +554,7 @@ function CustomerDetails({ customerId }: { customerId: string }) {
                 {payment.source === 'customer-to-merchant' ? <Text style={{ color: colors.primary }}>
                   {t('merchantDirect')} · {payment.merchantName ?? ''} · {t('merchantNoncash')}
                 </Text> : null}
+                <ActorBadge userId={payment.createdByUserId} />
                 {payment.note ? <Text style={{ color: colors.mutedForeground }}>{payment.note}</Text> : null}
                 <Text style={[styles.debtHistoryDate, { color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' }]}>
                   {formatLocalizedDateTime(new Date(payment.paidAt), language)}

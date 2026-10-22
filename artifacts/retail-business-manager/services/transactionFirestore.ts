@@ -109,6 +109,7 @@ export function normalizeTransactionDocument(
 
   const transaction: Transaction = {
     id: documentId,
+    ...(typeof value.createdByUserId === 'string' ? { createdByUserId: value.createdByUserId } : {}),
     storeId: value.storeId as string,
     type: value.type,
     amount: value.amount,
