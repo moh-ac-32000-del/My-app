@@ -5,7 +5,7 @@ import { useStore } from '@/context/StoreContext';
 import { useColors } from '@/hooks/useColors';
 import { useI18n } from '@/hooks/useI18n';
 import { getFirebaseAuth, isFirebaseConfigured } from '@/services/firebase';
-import { androidPushConnected, connectAndroidPush, disconnectAndroidPush, testAndroidPush } from '@/services/androidPush.android';
+import { androidPushDeliveryState, connectAndroidPush, disconnectAndroidPush, testAndroidPush } from '@/services/androidPush.android';
 
 export function AndroidPushSettings() {
   const colors = useColors();
@@ -17,12 +17,14 @@ export function AndroidPushSettings() {
   const busy = useRef(false);
   const revision = useRef(0);
   const [connected, setConnected] = useState(false);
+  const [scheduled, setScheduled] = useState(false);
+  const [dispatchProblem, setDispatchProblem] = useState(false);
   const [working, setWorking] = useState(false);
   const [message, setMessage] = useState<'pushTestAccepted' | 'pushConnectError' | 'pushPermissionDenied' | null>(null);
   const scope = uid && activeSpaceId ? { uid, spaceId: activeSpaceId, storeId: profile.id, language } : null;
   useEffect(() => {
-    let active = true; const version = ++revision.current; setConnected(false); setMessage(null);
-    if (scope) void androidPushConnected(scope).then((value) => { if (active && revision.current === version) setConnected(value); }).catch(() => { if (active && revision.current === version) setMessage('pushConnectError'); });
+    let active = true; const version = ++revision.current; setConnected(false); setScheduled(false); setDispatchProblem(false); setMessage(null);
+    if (scope) void androidPushDeliveryState(scope).then((value) => { if (active && revision.current === version) { setConnected(value.connected); setScheduled(value.scheduled); setDispatchProblem(value.problem); } }).catch(() => { if (active && revision.current === version) setMessage('pushConnectError'); });
     return () => { active = false; };
   }, [key]);
   const act = async (action: 'connect' | 'disconnect' | 'test') => {
@@ -32,8 +34,9 @@ export function AndroidPushSettings() {
       if (action === 'connect') await connectAndroidPush(scope);
       else if (action === 'disconnect') await disconnectAndroidPush();
       else await testAndroidPush(scope);
+      const status = action === 'disconnect' ? { connected: false, scheduled: false, problem: false } : await androidPushDeliveryState(scope);
       if (current.current === key) {
-        setConnected(action !== 'disconnect');
+        setConnected(status.connected); setScheduled(status.scheduled); setDispatchProblem(status.problem);
         if (action === 'test') setMessage('pushTestAccepted');
       }
     } catch (error) {
@@ -44,7 +47,7 @@ export function AndroidPushSettings() {
   return <GlassCard style={{ gap: 12, marginBottom: 16 }}>
     <Text style={[align, { color: colors.foreground, fontSize: 16, fontFamily: 'Inter_700Bold' }]}>{t('pushAndroidTitle')}</Text>
     <Text style={[align, { color: colors.mutedForeground, lineHeight: 22 }]}>{t(connected ? 'pushDeviceConnected' : 'pushDeviceNotConnected')}</Text>
-    <Text style={[align, { color: colors.mutedForeground, lineHeight: 22 }]}>{t('pushSchedulePending')}</Text>
+    <Text style={[align, { color: dispatchProblem ? colors.destructive : colors.mutedForeground, lineHeight: 22 }]}>{t(dispatchProblem ? 'pushScheduleProblem' : scheduled ? 'pushScheduleEnabled' : 'pushSchedulePending')}</Text>
     {message ? <Text accessibilityLiveRegion="polite" style={[align, { color: message === 'pushTestAccepted' ? colors.primary : colors.destructive }]}>{t(message)}</Text> : null}
     {working ? <ActivityIndicator color={colors.primary} /> : null}
     <View style={{ flexDirection: isRTL ? 'row-reverse' : 'row', flexWrap: 'wrap', gap: 12 }}>

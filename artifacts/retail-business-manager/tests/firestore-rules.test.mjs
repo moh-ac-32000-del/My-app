@@ -237,6 +237,19 @@ try {
       await runCase(`Push privacy — ${label} cannot ${operation} server-only device records`, run, 'DENY');
     }
   }
+  await testEnvironment.withSecurityRulesDisabled(async context => {
+    await setDoc(doc(context.firestore(), 'pushDeliveryReceipts', 'synthetic-receipt'), { uid: 'user-A', state: 'reserved' });
+  });
+  for (const [label, context] of [['authenticated', userA], ['other user', userB], ['anonymous', anonymous]]) {
+    const reference = doc(context.firestore(), 'pushDeliveryReceipts', 'synthetic-receipt');
+    for (const [operation, run] of [
+      ['read', () => getDoc(reference)],
+      ['list', () => getDocs(collection(context.firestore(), 'pushDeliveryReceipts'))],
+      ['create', () => setDoc(doc(context.firestore(), 'pushDeliveryReceipts', 'forged'), { state: 'accepted' })],
+      ['update', () => updateDoc(reference, { state: 'accepted' })],
+      ['delete', () => deleteDoc(reference)],
+    ]) await runCase(`Notification receipts — ${label} cannot ${operation} server-only delivery state`, run, 'DENY');
+  }
   await clearFirestore();
   await runCase(
     'Readiness — new user can list its empty discovery index before bootstrap',

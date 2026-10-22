@@ -3,3 +3,4 @@ export interface AndroidPushScope { uid: string; spaceId: string; storeId: strin
 export async function disconnectAndroidPush(): Promise<void> {}
 // Local settings still work on web/iOS; they do not register a Push device.
 export async function syncAndroidFollowUp(_scope: { uid: string; spaceId: string; storeId: string }, _preferences: { time: string; overdueEnabled: boolean; pendingEnabled: boolean }): Promise<void> {}
+export async function syncAndroidReminderTime(_scope: { uid: string; spaceId: string; storeId: string }, _time: string): Promise<void> {}

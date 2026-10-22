@@ -1,6 +1,22 @@
 {
   "indexes": [
     {
+      "collectionGroup": "debts", "queryScope": "COLLECTION",
+      "fields": [{ "fieldPath": "storeId", "order": "ASCENDING" }, { "fieldPath": "amount", "order": "ASCENDING" }]
+    },
+    {
+      "collectionGroup": "reminders", "queryScope": "COLLECTION",
+      "fields": [{ "fieldPath": "storeId", "order": "ASCENDING" }, { "fieldPath": "status", "order": "ASCENDING" }]
+    },
+    {
+      "collectionGroup": "pushDevices", "queryScope": "COLLECTION",
+      "fields": [{ "fieldPath": "enabled", "order": "ASCENDING" }, { "fieldPath": "scheduledVersion", "order": "ASCENDING" }, { "fieldPath": "nextDispatchAt", "order": "ASCENDING" }]
+    },
+    {
+      "collectionGroup": "pushDevices", "queryScope": "COLLECTION",
+      "fields": [{ "fieldPath": "enabled", "order": "ASCENDING" }, { "fieldPath": "scheduledVersion", "order": "ASCENDING" }, { "fieldPath": "spaceId", "order": "ASCENDING" }]
+    },
+    {
       "collectionGroup": "spaces",
       "queryScope": "COLLECTION",
       "fields": [

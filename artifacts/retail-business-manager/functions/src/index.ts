@@ -17,9 +17,12 @@ import { merchantSettingsCommandHandler } from './merchantSettingsCommand.js';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { defineBoolean } from 'firebase-functions/params';
 import { dispatchAutomaticClosings } from './automaticClosing.js';
+import { onDocumentWritten } from 'firebase-functions/v2/firestore';
+import { dispatchNotifications, wakeNotificationEvent } from './notificationDispatch.js';
 
 // Explicit rollout gate: deploy all trusted writers and indexes before enabling activation/dispatch.
 const automaticClosingReady = defineBoolean('AUTOMATIC_CLOSING_READY', { default: false });
+const notificationDispatchReady = defineBoolean('NOTIFICATION_DISPATCH_READY', { default: false });
 
 initializeApp();
 
@@ -68,8 +71,25 @@ export const pushDeviceCommand = onCall(
     cpu: 'gcf_gen1',
     timeoutSeconds: 30,
   },
-  (request) => pushDeviceCommandHandler(request, { firestore, messaging: getMessaging(), now: () => Date.now() }),
+  (request) => pushDeviceCommandHandler(request, { firestore, messaging: getMessaging(), now: () => Date.now(), notificationDispatchReady: notificationDispatchReady.value() }),
 );
+// No deployed behavior until this independently reviewed opt-in gate is enabled.
+export const notificationDispatch = onSchedule({ schedule: '*/5 * * * *', timeZone: 'UTC', minInstances: 0,
+  maxInstances: 1, concurrency: 1, memory: '256MiB', cpu: 'gcf_gen1', timeoutSeconds: 120, retryCount: 0 }, async () => {
+  if (!notificationDispatchReady.value()) return;
+  const result = await dispatchNotifications({ firestore, messaging: getMessaging(), now: () => new Date().toISOString() });
+  console.info('Notification bounded dispatch', result);
+});
+const notificationSourceOptions = { minInstances: 0, maxInstances: 1, concurrency: 1, memory: '256MiB' as const,
+  cpu: 'gcf_gen1' as const, timeoutSeconds: 60, retry: true };
+export const notificationDebtChanged = onDocumentWritten({ ...notificationSourceOptions, document: 'spaces/{spaceId}/debts/{documentId}' }, async event => {
+  if (!notificationDispatchReady.value()) return;
+  console.info('Notification source wake', await wakeNotificationEvent({ firestore, now: () => new Date().toISOString() }, event.params.spaceId, event.time));
+});
+export const notificationReminderChanged = onDocumentWritten({ ...notificationSourceOptions, document: 'spaces/{spaceId}/reminders/{documentId}' }, async event => {
+  if (!notificationDispatchReady.value()) return;
+  console.info('Notification source wake', await wakeNotificationEvent({ firestore, now: () => new Date().toISOString() }, event.params.spaceId, event.time));
+});
 const runtime = createDefaultBootstrapRuntime(firestore);
 const settlementRuntime = createSettlementRuntime(firestore);
 const cashTransactionRuntime = createCashTransactionRuntime(firestore);
