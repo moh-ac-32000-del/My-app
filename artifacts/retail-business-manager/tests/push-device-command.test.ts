@@ -31,6 +31,35 @@ const request = (action: string, changes: Doc = {}) => ({ auth: { uid: 'u' }, da
 const call = (f: ReturnType<typeof fixture>, action: string, changes: Doc = {}) => pushDeviceCommandHandler(request(action, changes) as never, f.runtime);
 
 describe('authenticated Android Push registration and bounded test sending', () => {
+  it('requires an explicit versioned reconnect to enroll scheduled delivery; preferences do not enroll old devices', async () => {
+    const f = fixture();
+    await call(f, 'register', { followUp });
+    await call(f, 'preferences', { followUp, scheduledVersion: 1, reminderTime: '08:30' });
+    expect(f.docs[path]).not.toHaveProperty('scheduledVersion');
+    await expect(call(f, 'register', { followUp, scheduledVersion: 1 })).rejects.toMatchObject({ code: 'invalid-argument' });
+    await call(f, 'register', { followUp, scheduledVersion: 1, reminderTime: '08:30' });
+    expect(f.docs[path]).toMatchObject({ scheduledVersion: 1, reminderTime: '08:30', dispatchFailures: 0 });
+    expect(f.docs[path].dispatchRevision).toMatch(/^[a-f0-9-]{36}$/);
+    expect(await call(f, 'status', { scheduledVersion: 1 })).toMatchObject({ enabled: true, scheduledEnabled: false });
+    Object.assign(f.runtime, { notificationDispatchReady: true });
+    expect(await call(f, 'status', { scheduledVersion: 1 })).toMatchObject({ scheduledEnabled: true });
+    const before = f.docs[path].dispatchRevision;
+    await call(f, 'preferences', { followUp, scheduledVersion: 1, reminderTime: '10:45' });
+    expect(f.docs[path].reminderTime).toBe('10:45');
+    expect(f.docs[path].dispatchRevision).not.toBe(before);
+    await call(f, 'register', { followUp });
+    expect(f.docs[path]).not.toHaveProperty('scheduledVersion');
+    expect(f.send).not.toHaveBeenCalled();
+  });
+  it.each([{ scheduledVersion: 2 }, { scheduledVersion: 1, reminderTime: '24:00' }, { scheduledVersion: 1, reminderTime: '09:00', followUp: undefined }])('rejects malformed scheduled opt-in %j', async changes => {
+    await expect(call(fixture(), 'register', { followUp, ...changes })).rejects.toMatchObject({ code: 'invalid-argument' });
+  });
+  it('reports paused/failed or stale ambiguous delivery state without exposing receipts or tokens', async () => {
+    const f = fixture(); await call(f, 'register', { followUp, scheduledVersion: 1, reminderTime: '09:00' });
+    f.docs[path].dispatchLastAttemptState = 'attempting';
+    f.docs[path].dispatchLastAttemptAt = new Date(f.runtime.now() - 180_000).toISOString();
+    expect(await call(f, 'status', { scheduledVersion: 1 })).toEqual({ enabled: true, scheduledEnabled: false, dispatchProblem: true });
+  });
   it.each([
     null, {}, { ...followUp, time: '24:00' }, { ...followUp, time: '9:00' }, { ...followUp, time: '17:60' },
     { ...followUp, overdueEnabled: 'true' }, { ...followUp, pendingEnabled: 1 },

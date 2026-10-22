@@ -32,6 +32,32 @@ describe('Android Push client lifecycle with mocked native APIs (not a device te
     await expect(client.connectAndroidPush(scope)).rejects.toThrow('pushPermissionDenied');
     expect(mocks.call).not.toHaveBeenCalled();
   });
+  it('hands off the reminder time without silently keeping a different server schedule', async () => {
+    const client = await import('@/services/androidPush.android');
+    mocks.getItem.mockImplementation(async (key: string) => key.includes('/notification-time') ? '10:45' : null);
+    await client.connectAndroidPush(scope);
+    expect(mocks.call).toHaveBeenCalledWith(expect.objectContaining({ action: 'register', scheduledVersion: 1, reminderTime: '10:45' }));
+  });
+  it('syncs reminder-time changes only to the connected scope, before local success', async () => {
+    const client = await import('@/services/androidPush.android'); mocks.getItem.mockResolvedValue(saved);
+    await client.syncAndroidReminderTime(scope, '10:30');
+    expect(mocks.call).toHaveBeenCalledWith(expect.objectContaining({ action: 'preferences', reminderTime: '10:30' }));
+    mocks.call.mockRejectedValueOnce(new Error('offline'));
+    await expect(client.syncAndroidReminderTime(scope, '11:00')).rejects.toThrow('offline');
+    expect(mocks.request).not.toHaveBeenCalled();
+  });
+  it('rotates a matching native token without permission prompts and ignores another scope', async () => {
+    const client = await import('@/services/androidPush.android'); mocks.getItem.mockResolvedValue(saved);
+    await client.refreshAndroidPushToken({ ...scope, spaceId: 'other' }, 'new-token');
+    expect(mocks.call).not.toHaveBeenCalled();
+    await client.refreshAndroidPushToken(scope, 'new-token');
+    expect(mocks.call.mock.calls.map(([request]) => request.action)).toEqual(['disable', 'register']);
+    expect(mocks.request).not.toHaveBeenCalled();
+  });
+  it('does not claim automatic delivery from an old server or a connection-test-only registration', async () => {
+    const client = await import('@/services/androidPush.android'); mocks.getItem.mockResolvedValue(saved);
+    expect(await client.androidPushDeliveryState(scope)).toEqual({ connected: true, scheduled: false, problem: false });
+  });
   it('registers an FCM token with an explicit actor and scope, then sends only an explicit test', async () => {
     const client = await import('@/services/androidPush.android');
     await client.connectAndroidPush(scope);

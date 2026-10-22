@@ -4,10 +4,13 @@ import { useRouter } from 'expo-router';
 import { useStore } from '@/context/StoreContext';
 import { getFirebaseAuth, isFirebaseConfigured } from '@/services/firebase';
 import { matchesPushScope } from '@/services/pushNotificationScope';
+import { refreshAndroidPushToken } from '@/services/androidPush.android';
+import { useI18n } from '@/hooks/useI18n';
 
 export function AndroidPushObserver() {
   const { isReady, isAuthenticated, activeSpaceId, profile } = useStore();
   const router = useRouter();
+  const { language } = useI18n();
   const consumed = useRef('');
   useEffect(() => {
     let active = true;
@@ -25,8 +28,16 @@ export function AndroidPushObserver() {
       void Notifications.clearLastNotificationResponseAsync();
     };
     const listener = Notifications.addNotificationResponseReceivedListener(respond);
+    const tokenListener = Notifications.addPushTokenListener(token => {
+      const uid = isFirebaseConfigured && isAuthenticated ? getFirebaseAuth().currentUser?.uid : null;
+      if (active && isReady && uid && activeSpaceId && typeof token.data === 'string') {
+        void refreshAndroidPushToken({ uid, spaceId: activeSpaceId, storeId: profile.id, language }, token.data).catch(() => {
+          // No automatic send/permission prompt or false success; reconnect status remains authoritative.
+        });
+      }
+    });
     void Notifications.getLastNotificationResponseAsync().then((response) => { if (response) respond(response); }).catch(() => {});
-    return () => { active = false; listener.remove(); Notifications.setNotificationHandler(null); };
-  }, [isReady, isAuthenticated, activeSpaceId, profile.id, router]);
+    return () => { active = false; listener.remove(); tokenListener.remove(); Notifications.setNotificationHandler(null); };
+  }, [isReady, isAuthenticated, activeSpaceId, profile.id, router, language]);
   return null;
 }

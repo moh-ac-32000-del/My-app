@@ -76,3 +76,4 @@ try {
 await import('./merchant-backend.emulator.mjs');
 await import('./archive-calendar.emulator.mjs');
 await import('./automatic-closing.emulator.mjs');
+await import('./notification-dispatch.emulator.mjs');

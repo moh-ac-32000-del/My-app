@@ -17,6 +17,7 @@ import { CURRENCY_OPTIONS, getCurrency, type CurrencyCode } from '@/constants/cu
 import { useI18n } from '@/hooks/useI18n';
 import { DEFAULT_NOTIFICATION_TIME, loadNotificationTime, saveNotificationTime } from '@/services/preferences';
 import { loadCloudReminders } from '@/services/cloudReminders';
+import { syncAndroidReminderTime } from '@/services/androidPush';
 
 function SettingInput({ label, value, onChangeText, icon, multiline = false, placeholder, disabled = false }: { label: string; value: string; onChangeText: (value: string) => void; icon: React.ComponentProps<typeof Ionicons>['name']; multiline?: boolean; placeholder?: string; disabled?: boolean }) {
   const colors = useColors();
@@ -154,6 +155,9 @@ export default function SettingsScreen() {
 
     const nextTime = formatNotificationTime(value);
     try {
+      const actorUid = isFirebaseConfigured ? getFirebaseAuth().currentUser?.uid : null;
+      if (!activeSpaceId || !actorUid) throw new Error('cloudSpaceUnavailable');
+      await syncAndroidReminderTime({ uid: actorUid, spaceId: activeSpaceId, storeId: profile.id }, nextTime);
       await saveNotificationTime(profile.id, nextTime);
       if (isFirebaseConfigured) {
         if (!activeSpaceId) throw new Error('cloudSpaceUnavailable');

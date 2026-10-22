@@ -1,5 +1,7 @@
 # Android Push: connection milestone
 
+> Historical connection milestone below. The next source increment implements the default-off bounded dispatcher and the user-approved **all opted-in active members** policy; see `notification-dispatch-audit.md` for its current architecture, capacity limits, safety trade-offs and rollout gates. No new deployment, FCM/device delivery or APK is implied by that source implementation.
+
 Repository: `moh-ac-32000-del/My-app`. Firebase: `retail-business-manager` (`786943009866`). Android package: `com.retailbusinessmanager.app`.
 
 This milestone implements Android permission/channel setup, authenticated FCM device registration, disconnection, account/workspace-checked tap navigation and a **user-requested connection test**. It does not implement the reminder/daily-follow-up dispatcher. UI explicitly states this; saving the 17:00 preference does not schedule a notification yet. No web/iOS Push is enabled.

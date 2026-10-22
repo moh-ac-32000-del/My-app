@@ -5,6 +5,13 @@ import workflow from '../../../.github/workflows/retail-business-manager-ci.yml?
 import entrypoint from '../functions/src/index.ts?raw';
 
 describe('supported Functions runtime configuration', () => {
+  it('gates one notification schedule and both source wakeups off independently of closing', () => {
+    expect(entrypoint).toContain("defineBoolean('NOTIFICATION_DISPATCH_READY', { default: false })");
+    for (const name of ['notificationDispatch', 'notificationDebtChanged', 'notificationReminderChanged']) {
+      expect(entrypoint).toContain(`export const ${name}`);
+    }
+    expect((entrypoint.match(/if \(!notificationDispatchReady.value\(\)\) return;/g) ?? []).length).toBe(3);
+  });
   it('gates one bounded shared five-minute closing schedule off by default', () => {
     expect(entrypoint).toContain("defineBoolean('AUTOMATIC_CLOSING_READY', { default: false })");
     const schedule = entrypoint.slice(entrypoint.indexOf('export const automaticDailyClosing'), entrypoint.indexOf('export const pushDeviceCommand'));

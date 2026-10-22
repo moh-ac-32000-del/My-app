@@ -1,12 +1,12 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import type { Firestore } from 'firebase-admin/firestore';
 import type { Messaging } from 'firebase-admin/messaging';
 import { HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
 import { parsePushFollowUp } from './pushFollowUpPreferences.js';
 import { assertWorkspaceAccess } from './workspaceAccess.js';
 
-type Input = { action: 'register' | 'status' | 'disable' | 'test' | 'preferences'; actorUid: string; token: string; spaceId: string; storeId: string; language?: 'ar' | 'en' | 'tr'; followUp?: unknown };
-export interface PushDeviceRuntime { firestore: Firestore; messaging: Pick<Messaging, 'send'>; now: () => number }
+type Input = { action: 'register' | 'status' | 'disable' | 'test' | 'preferences'; actorUid: string; token: string; spaceId: string; storeId: string; language?: 'ar' | 'en' | 'tr'; followUp?: unknown; scheduledVersion?: 1; reminderTime?: string };
+export interface PushDeviceRuntime { firestore: Firestore; messaging: Pick<Messaging, 'send'>; now: () => number; notificationDispatchReady?: boolean }
 export const pushDeviceId = (token: string) => createHash('sha256').update(token).digest('hex');
 
 /** Registration and user-requested connection test only; never reads/writes financial documents. */
@@ -22,6 +22,11 @@ export async function pushDeviceCommandHandler(request: CallableRequest<Input>, 
     throw new HttpsError('invalid-argument', 'Invalid notification device');
   }
   const followUp = input.followUp === undefined ? undefined : parsePushFollowUp(input.followUp);
+  if ((input.scheduledVersion !== undefined && input.scheduledVersion !== 1)
+    || (input.reminderTime !== undefined && (typeof input.reminderTime !== 'string' || !/^([01]\d|2[0-3]):[0-5]\d$/.test(input.reminderTime)))
+    || (input.action === 'register' && input.scheduledVersion === 1 && (!followUp || !input.reminderTime))) {
+    throw new HttpsError('invalid-argument', 'Invalid scheduled notification settings');
+  }
   if (input.action === 'preferences' && !followUp) throw new HttpsError('invalid-argument', 'Follow-up preferences required');
   const ref = runtime.firestore.collection('pushDevices').doc(pushDeviceId(input.token));
   const space = runtime.firestore.collection('spaces').doc(input.spaceId);
@@ -44,17 +49,25 @@ export async function pushDeviceCommandHandler(request: CallableRequest<Input>, 
     }
     // A viewer may manage their own device preferences, not shared business records.
     assertWorkspaceAccess(member.data(), 'read');
-    if (input.action === 'status') return { enabled: Boolean(matches && device?.enabled) };
+    if (input.action === 'status') return { enabled: Boolean(matches && device?.enabled), ...(input.scheduledVersion === 1 ? {
+      scheduledEnabled: Boolean(matches && device?.enabled && device.scheduledVersion === 1 && runtime.notificationDispatchReady),
+      dispatchProblem: Boolean(matches && (device?.dispatchFailures >= 3 || device?.dispatchLastAttemptState === 'failed'
+        || (['reserved', 'attempting'].includes(device?.dispatchLastAttemptState) && now - Date.parse(device?.dispatchLastAttemptAt) > 120_000))),
+    } : {}) };
     if (input.action === 'register') {
       tx.set(ref, { uid, token: input.token, spaceId: input.spaceId, storeId: input.storeId, language: input.language ?? 'ar',
         enabled: true, updatedAt: now,
+        ...(input.scheduledVersion === 1 ? { scheduledVersion: 1, reminderTime: input.reminderTime,
+          dispatchRevision: randomUUID(), nextDispatchAt: new Date(now).toISOString(), dispatchFailures: 0 } : {}),
         ...(followUp ? { followUp, followUpUpdatedAt: now } : matches && device?.followUp ? { followUp: device.followUp, followUpUpdatedAt: device.followUpUpdatedAt ?? now } : {}),
         testDay: device?.testDay ?? '', testCount: device?.testCount ?? 0, lastTestAt: device?.lastTestAt ?? 0 });
       return { enabled: true };
     }
     if (!matches || !device?.enabled) throw new HttpsError('failed-precondition', 'Connect this device first');
     if (input.action === 'preferences') {
-      tx.update(ref, { followUp, followUpUpdatedAt: now, language: input.language ?? device.language ?? 'ar', updatedAt: now });
+      tx.update(ref, { followUp, followUpUpdatedAt: now, language: input.language ?? device.language ?? 'ar', updatedAt: now,
+        ...(device.scheduledVersion === 1 ? { reminderTime: input.reminderTime ?? device.reminderTime, dispatchRevision: randomUUID(),
+          dispatchClaim: null, dispatchFailures: 0, nextDispatchAt: new Date(now).toISOString() } : {}) });
       return { enabled: true };
     }
     const day = new Date(now).toISOString().slice(0, 10);
@@ -84,6 +97,7 @@ export async function pushDeviceCommandHandler(request: CallableRequest<Input>, 
     }
     return { enabled: true, accepted: true };
   }
+  if (input.action === 'status' && input.scheduledVersion === 1) return result;
   return { enabled: result.enabled };
 }
 
