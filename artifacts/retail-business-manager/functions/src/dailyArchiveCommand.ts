@@ -1,4 +1,4 @@
-import type { Firestore } from 'firebase-admin/firestore';
+import type { Firestore, Transaction, DocumentReference } from 'firebase-admin/firestore';
 import { HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
 import { closingCashBalances } from './closingCashBalances.js';
 import { assertWorkspaceAccess } from './workspaceAccess.js';
@@ -29,7 +29,7 @@ type CloudPaymentRecord = {
   note?: unknown;
 };
 
-type ArchiveRecord = {
+export type ArchiveRecord = {
   id: string;
   storeId: string;
   date: string;
@@ -39,6 +39,10 @@ type ArchiveRecord = {
   workspaceId: string;
   closingCashBalances?: Array<{ currency: string; amount: number }>;
   closedByUserId?: string;
+  closingMode?: 'automatic';
+  periodStartAt?: string;
+  periodEndAt?: string;
+  timeZone?: string;
 };
 
 type ArchiveRequest = {
@@ -93,6 +97,7 @@ export async function dailyArchiveCommandHandler(
     // A role change/removal races with this transaction, not with an earlier permission check.
     const [space, member, profile] = await Promise.all([tx.get(spaceRef), tx.get(memberRef), tx.get(profileRef)]);
     authorize(space.data(), member.data(), profile.data(), 'write');
+    if (space.data()?.automaticClosing) throw new HttpsError('failed-precondition', 'Automatic closing controls this workspace');
     const [transactionSnap, debtSnap, paymentSnap, existingArchives, counterSnap, cashSnapshot, merchantSnap] = await Promise.all([
       tx.get(spaceRef.collection('transactions').where('storeId', '==', input.storeId).where('createdAt', '>=', startAt).where('createdAt', '<', endAt)),
       tx.get(spaceRef.collection('debts').where('storeId', '==', input.storeId).where('createdAt', '>=', startAt).where('createdAt', '<', endAt)),
@@ -105,81 +110,7 @@ export async function dailyArchiveCommandHandler(
       tx.get(spaceRef.collection('merchantOperations').where('storeId', '==', input.storeId).where('createdAt', '>=', startAt).where('createdAt', '<', endAt)),
     ]);
 
-    const payments: CloudPaymentRecord[] = paymentSnap.docs.map((doc) => ({
-      id: doc.id,
-      ...(doc.data() as Omit<CloudPaymentRecord, 'id'>),
-    }));
-    const customerIds = new Set<string>();
-    for (const doc of debtSnap.docs) {
-      const customerId = doc.data().customerId;
-      if (typeof customerId === 'string' && customerId.trim()) customerIds.add(customerId);
-    }
-    for (const payment of payments) {
-      if (typeof payment.customerId === 'string' && payment.customerId.trim()) customerIds.add(payment.customerId);
-    }
-    const customerDocs = await Promise.all([...customerIds].map((id) => tx.get(spaceRef.collection('customers').doc(id))));
-    const customers = new Map(customerDocs.flatMap((doc) => {
-      const name = doc.data()?.name;
-      return doc.exists && typeof name === 'string' ? [[doc.id, name] as const] : [];
-    }));
-    const settlementTransactionIds = new Set(
-      payments.filter((payment) => payment.direction === 'in' && typeof payment.transactionId === 'string')
-        .map((payment) => payment.transactionId as string),
-    );
-    const alreadyArchivedIds = new Set(
-      existingArchives.docs.flatMap((doc) => {
-        const data = doc.data();
-        return Array.isArray(data.snapshot)
-          ? data.snapshot.filter((event) => event && typeof event.id === 'string').map((event) => event.id as string)
-          : [];
-      }),
-    );
-    const events: JournalEvent[] = [];
-    for (const doc of transactionSnap.docs) {
-      const value = doc.data();
-      if (settlementTransactionIds.has(doc.id) || alreadyArchivedIds.has(`transaction:${doc.id}`)) continue;
-      events.push({
-        id: `transaction:${doc.id}`, storeId: input.storeId,
-        type: value.type, amount: value.amount, currency: value.currency,
-        ...(typeof value.note === 'string' && value.note ? { note: value.note } : {}),
-        occurredAt: value.createdAt, sourceId: doc.id,
-      } as JournalEvent);
-    }
-    for (const doc of debtSnap.docs) {
-      const value = doc.data();
-      if (alreadyArchivedIds.has(`debt:${doc.id}`)) continue;
-      events.push({
-        id: `debt:${doc.id}`, storeId: input.storeId, type: 'debt',
-        amount: typeof value.originalAmount === 'number' ? value.originalAmount : value.amount,
-        currency: value.currency, customerId: value.customerId,
-        customerName: customers.get(value.customerId),
-        ...(typeof value.note === 'string' && value.note ? { note: value.note } : {}),
-        occurredAt: value.createdAt, sourceId: doc.id,
-      } as JournalEvent);
-    }
-    for (const payment of payments) {
-      if (payment.direction !== 'in' || typeof payment.customerId !== 'string'
-        || alreadyArchivedIds.has(`settlement:${payment.id}`)) continue;
-      events.push({
-        id: `settlement:${payment.id}`, storeId: input.storeId, type: 'settlement',
-        amount: payment.amount?.amount, currency: payment.amount?.currency,
-        customerId: payment.customerId, customerName: customers.get(payment.customerId),
-        ...(typeof payment.note === 'string' && payment.note ? { note: payment.note } : {}),
-        occurredAt: payment.paidAt, sourceId: payment.id,
-      } as JournalEvent);
-    }
-    let mergedEvents: JournalEvent[];
-    try {
-      mergedEvents = mergeMerchantJournal(input.spaceId, input.storeId,
-        merchantSnap.docs.map((doc) => merchantOperationFromDocument(doc.id, doc.data(), input.spaceId, input.storeId)),
-        events as import('../../types/journal.js').DailyJournalEvent[], {
-          transactions: transactionSnap.docs.map((doc) => ({ ...doc.data(), id: doc.id })),
-          payments: paymentSnap.docs.map((doc) => ({ ...doc.data(), id: doc.id })),
-          debts: debtSnap.docs.map((doc) => ({ ...doc.data(), id: doc.id })),
-        }).filter((event) => !alreadyArchivedIds.has(event.id));
-    } catch {
-      throw new HttpsError('failed-precondition', 'Merchant journal records are inconsistent');
-    }
+    const mergedEvents = await projectArchiveSnapshot(tx, spaceRef, input, transactionSnap, debtSnap, paymentSnap, merchantSnap, existingArchives);
     const balances = closingCashBalances(cashSnapshot.docs.map((doc) => doc.data()));
     const now = runtime.now();
     const closingNumber = (typeof counterSnap.data()?.lastClosingNumber === 'number'
@@ -240,4 +171,89 @@ function validTimestamp(value: unknown): value is string {
 
 function isRecord(value: unknown): value is Record<string, any> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+type ArchiveSourceSnapshot = { docs: Array<{ id: string; data: () => Record<string, any> }> };
+/** Shared immutable event projection for manual closing, activation audit and scheduled periods. */
+export async function projectArchiveSnapshot(
+  tx: Transaction, spaceRef: DocumentReference, input: { spaceId: string; storeId: string },
+  transactionSnap: ArchiveSourceSnapshot, debtSnap: ArchiveSourceSnapshot, paymentSnap: ArchiveSourceSnapshot,
+  merchantSnap: ArchiveSourceSnapshot, existingArchives: ArchiveSourceSnapshot,
+): Promise<JournalEvent[]> {
+  const payments: CloudPaymentRecord[] = paymentSnap.docs.map((doc) => ({
+    id: doc.id,
+    ...(doc.data() as Omit<CloudPaymentRecord, 'id'>),
+  }));
+  const customerIds = new Set<string>();
+  for (const doc of debtSnap.docs) {
+    const customerId = doc.data().customerId;
+    if (typeof customerId === 'string' && customerId.trim()) customerIds.add(customerId);
+  }
+  for (const payment of payments) {
+    if (typeof payment.customerId === 'string' && payment.customerId.trim()) customerIds.add(payment.customerId);
+  }
+  const customerDocs = await Promise.all([...customerIds].map((id) => tx.get(spaceRef.collection('customers').doc(id))));
+  const customers = new Map(customerDocs.flatMap((doc) => {
+    const name = doc.data()?.name;
+    return doc.exists && typeof name === 'string' ? [[doc.id, name] as const] : [];
+  }));
+  const settlementTransactionIds = new Set(
+    payments.filter((payment) => payment.direction === 'in' && typeof payment.transactionId === 'string')
+      .map((payment) => payment.transactionId as string),
+  );
+  const alreadyArchivedIds = new Set(
+    existingArchives.docs.flatMap((doc) => {
+      const data = doc.data();
+      return Array.isArray(data.snapshot)
+        ? data.snapshot.filter((event) => event && typeof event.id === 'string').map((event) => event.id as string)
+        : [];
+    }),
+  );
+  const events: JournalEvent[] = [];
+  for (const doc of transactionSnap.docs) {
+    const value = doc.data();
+    if (settlementTransactionIds.has(doc.id) || alreadyArchivedIds.has(`transaction:${doc.id}`)) continue;
+    events.push({
+      id: `transaction:${doc.id}`, storeId: input.storeId,
+      type: value.type, amount: value.amount, currency: value.currency,
+      ...(typeof value.note === 'string' && value.note ? { note: value.note } : {}),
+      occurredAt: value.createdAt, sourceId: doc.id,
+    } as JournalEvent);
+  }
+  for (const doc of debtSnap.docs) {
+    const value = doc.data();
+    if (alreadyArchivedIds.has(`debt:${doc.id}`)) continue;
+    events.push({
+      id: `debt:${doc.id}`, storeId: input.storeId, type: 'debt',
+      amount: typeof value.originalAmount === 'number' ? value.originalAmount : value.amount,
+      currency: value.currency, customerId: value.customerId,
+      customerName: customers.get(value.customerId),
+      ...(typeof value.note === 'string' && value.note ? { note: value.note } : {}),
+      occurredAt: value.createdAt, sourceId: doc.id,
+    } as JournalEvent);
+  }
+  for (const payment of payments) {
+    if (payment.direction !== 'in' || typeof payment.customerId !== 'string'
+      || alreadyArchivedIds.has(`settlement:${payment.id}`)) continue;
+    events.push({
+      id: `settlement:${payment.id}`, storeId: input.storeId, type: 'settlement',
+      amount: payment.amount?.amount, currency: payment.amount?.currency,
+      customerId: payment.customerId, customerName: customers.get(payment.customerId),
+      ...(typeof payment.note === 'string' && payment.note ? { note: payment.note } : {}),
+      occurredAt: payment.paidAt, sourceId: payment.id,
+    } as JournalEvent);
+  }
+  let mergedEvents: JournalEvent[];
+  try {
+    mergedEvents = mergeMerchantJournal(input.spaceId, input.storeId,
+      merchantSnap.docs.map((doc) => merchantOperationFromDocument(doc.id, doc.data(), input.spaceId, input.storeId)),
+      events as import('../../types/journal.js').DailyJournalEvent[], {
+        transactions: transactionSnap.docs.map((doc) => ({ ...doc.data(), id: doc.id })),
+        payments: paymentSnap.docs.map((doc) => ({ ...doc.data(), id: doc.id })),
+        debts: debtSnap.docs.map((doc) => ({ ...doc.data(), id: doc.id })),
+      }).filter((event) => !alreadyArchivedIds.has(event.id));
+  } catch {
+    throw new HttpsError('failed-precondition', 'Merchant journal records are inconsistent');
+  }
+  return mergedEvents;
 }

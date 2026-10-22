@@ -13,6 +13,61 @@ function fixture(access: unknown = 'owner') {
   return { ...f, runtime: { ...f.runtime, token: () => token } };
 }
 describe('workspace metadata command', () => {
+  const settings = { timeZone: 'Europe/Istanbul', executionTime: '00:00', expectedRevision: 0 };
+  it('denies unauthenticated and cross-space closing settings requests', async () => {
+    const f = fixture();
+    await expect(workspaceCommandHandler(req(null, { action: 'closingSettings', spaceId: 's', closingSettings: settings }), f.runtime)).rejects.toMatchObject({ code: 'unauthenticated' });
+    await expect(workspaceCommandHandler(req('u', { action: 'closingSettings', spaceId: 'other', closingSettings: settings }), f.runtime)).rejects.toBeDefined();
+    expect(f.writes).toEqual([]);
+  });
+  it('does not repair or overwrite malformed stored closing settings silently', async () => {
+    const f = fixture();
+    f.docs['spaces/s'].closingSettings = { timeZone: 'Bad/Zone', status: 'active' };
+    await expect(workspaceCommandHandler(req('u', { action: 'closingSettings', spaceId: 's', closingSettings: settings }), f.runtime)).rejects.toMatchObject({ code: 'failed-precondition' });
+    expect(f.writes).toEqual([]);
+    expect(f.docs['spaces/s'].closingSettings.timeZone).toBe('Bad/Zone');
+  });
+  it('prepares owner settings once, keeps spaces independent and never enables automatic closing', async () => {
+    const f = fixture();
+    const before = structuredClone(f.docs);
+    const input = { action: 'closingSettings', spaceId: 's', closingSettings: settings };
+    const result = await workspaceCommandHandler(req('u', input), f.runtime);
+    expect(result.closingSettings).toMatchObject({ timeZone: 'Europe/Istanbul', executionTime: '00:00', revision: 1, status: 'prepared', updatedByUserId: 'u' });
+    expect(f.writes).toEqual(['spaces/s']);
+    expect(await workspaceCommandHandler(req('u', input), f.runtime)).toEqual(result);
+    expect(f.writes).toHaveLength(1);
+    for (const path of Object.keys(before).filter((path) => path !== 'spaces/s')) expect(f.docs[path]).toEqual(before[path]);
+    expect(f.docs['spaces/s'].automaticClosing).toBeUndefined();
+    expect(f.docs['spaces/s'].nextClosingAt).toBeUndefined();
+  });
+  it('rejects concurrent conflicting edits rather than overwriting a saved time zone', async () => {
+    const f = fixture();
+    const results = await Promise.allSettled(['Europe/Istanbul', 'America/New_York'].map((timeZone) => workspaceCommandHandler(req('u', {
+      action: 'closingSettings', spaceId: 's', closingSettings: { ...settings, timeZone },
+    }), f.runtime)));
+    expect(results.filter((row) => row.status === 'fulfilled')).toHaveLength(1);
+    expect(results.filter((row) => row.status === 'rejected')).toHaveLength(1);
+    expect(f.writes).toEqual(['spaces/s']);
+  });
+  it.each(['editor', 'viewer', 'manager', null])('rejects settings writes by %s, including forged owner/activation fields', async (role) => {
+    const f = fixture(role);
+    await expect(workspaceCommandHandler(req('u', { action: 'closingSettings', spaceId: 's', closingSettings: settings, role: 'owner', enabled: true }), f.runtime)).rejects.toMatchObject({ code: 'permission-denied' });
+    expect(f.writes).toEqual([]);
+  });
+  it.each([
+    { timeZone: 'Bad/Zone' }, { timeZone: '+03:00' }, { executionTime: '24:00' }, { executionTime: '12:60' },
+    { executionTime: '9:00' }, { expectedRevision: -1 }, { expectedRevision: 0.5 }, { enabled: true }, { status: 'enabled' },
+  ])('rejects malformed or activation payload %j with no writes', async (changed) => {
+    const f = fixture();
+    await expect(workspaceCommandHandler(req('u', { action: 'closingSettings', spaceId: 's', closingSettings: { ...settings, ...changed } }), f.runtime)).rejects.toMatchObject({ code: 'invalid-argument' });
+    expect(f.writes).toEqual([]);
+  });
+  it('rechecks owner membership on a conflict retry and does not change financial history', async () => {
+    const f = fixture();
+    f.retryOnce(() => { f.docs['spaces/s/members/u'].role = 'viewer'; });
+    await expect(workspaceCommandHandler(req('u', { action: 'closingSettings', spaceId: 's', closingSettings: settings }), f.runtime)).rejects.toMatchObject({ code: 'permission-denied' });
+    expect(f.writes).toEqual([]);
+  });
   it('requires authentication', async () => {
     const f = fixture();
     await expect(

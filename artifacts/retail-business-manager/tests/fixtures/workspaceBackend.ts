@@ -73,6 +73,8 @@ export function workspaceBackend(role: unknown = 'owner') {
                     ? data[field] > value
                   : op === '>='
                     ? data[field] >= value
+                    : op === '<='
+                      ? data[field] <= value
                     : data[field] < value,
               ),
           )
@@ -81,7 +83,8 @@ export function workspaceBackend(role: unknown = 'owner') {
             ref: ref(path),
             exists: true,
             data: () => structuredClone(data),
-          })),
+          })).sort((a, b) => reference.order ? String(a.data()[reference.order]).localeCompare(String(b.data()[reference.order])) : 0)
+          .slice(0, reference.cap ?? Infinity),
       };
     const value = docs[reference.path]
       ? structuredClone(docs[reference.path])
@@ -92,15 +95,18 @@ export function workspaceBackend(role: unknown = 'owner') {
       data: () => value,
     };
   };
-  const ref = (path: string, filters?: Filter[]): any => ({
+  const ref = (path: string, filters?: Filter[], order?: string, cap?: number): any => ({
     path,
     id: path.split('/').at(-1),
     filters,
+    order, cap,
     collection: (name: string) => ref(path + '/' + name, []),
     doc: (id: string) => ref(path + '/' + id),
     where: (field: string, op: string, value: any) =>
-      ref(path, [...(filters ?? []), [field, op, value]]),
-    get: async () => snapshot(ref(path, filters)),
+      ref(path, [...(filters ?? []), [field, op, value]], order, cap),
+    orderBy: (field: string) => ref(path, filters, field, cap),
+    limit: (size: number) => ref(path, filters, order, size),
+    get: async () => snapshot(ref(path, filters, order, cap)),
   });
   const db = {
     collection: (name: string) => ref(name, []),

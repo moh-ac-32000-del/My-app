@@ -98,6 +98,10 @@ export interface DailyArchive {
   closingNumber: number;
   /** Immutable server snapshot; absent on archives created before this field. */
   closingCashBalances?: MoneyValue[];
+  closingMode?: 'automatic';
+  periodStartAt?: string;
+  periodEndAt?: string;
+  timeZone?: string;
   snapshot: import('@/services/storage').DailyJournalEvent[];
 }
 

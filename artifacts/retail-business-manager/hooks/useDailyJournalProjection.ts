@@ -70,12 +70,8 @@ export function useDailyJournalProjection(refreshToken = 0): DailyJournalProject
       };
     }
 
-    const sourceError = initializationError
-      ?? activeSpaceError
-      ?? transactionsError
-      ?? customers.error
-      ?? debts.error
-      ?? payments.error;
+    const sourceError =
+      initializationError ?? activeSpaceError ?? transactionsError ?? customers.error ?? debts.error ?? payments.error;
     if (sourceError) {
       setEvents([]);
       setIsLoading(false);
@@ -86,15 +82,15 @@ export function useDailyJournalProjection(refreshToken = 0): DailyJournalProject
     }
 
     const allSourcesReady = Boolean(
-      activeSpaceId
-      && !activeSpaceLoading
-      && !transactionsLoading
-      && !customers.isLoading
-      && !debts.isLoading
-      && !payments.isLoading
-      && customers.canonicalSpaceId === activeSpaceId
-      && debts.canonicalSpaceId === activeSpaceId
-      && payments.canonicalSpaceId === activeSpaceId,
+      activeSpaceId &&
+      !activeSpaceLoading &&
+      !transactionsLoading &&
+      !customers.isLoading &&
+      !debts.isLoading &&
+      !payments.isLoading &&
+      customers.canonicalSpaceId === activeSpaceId &&
+      debts.canonicalSpaceId === activeSpaceId &&
+      payments.canonicalSpaceId === activeSpaceId,
       // Merchant links must be complete before combining independent provider observations.
     );
 
@@ -110,33 +106,46 @@ export function useDailyJournalProjection(refreshToken = 0): DailyJournalProject
     setIsLoading(true);
     setError(null);
     if (merchant.error) {
-      setEvents([]); setIsLoading(false); setError(merchant.error); setResultKey(sourceKey);
-      return () => { active = false; };
+      setEvents([]);
+      setIsLoading(false);
+      setError(merchant.error);
+      setResultKey(sourceKey);
+      return () => {
+        active = false;
+      };
     }
     if (!activeSpaceId) throw new Error('journalWorkspaceUnavailable');
-    void projectCloudDailyJournalEvents(activeSpaceId, profile.id, {
-      transactions,
-      debts: debts.debts,
-      payments: payments.payments,
-      customers: customers.customers,
-      merchantOperations: merchant.operations,
-      spaceId: activeSpaceId,
-    }).then((cloudEvents) => {
-      if (!active) {
-        return;
-      }
-      setEvents(cloudEvents);
-      setResultKey(sourceKey);
-      setIsLoading(false);
-    }).catch((projectionError) => {
-      if (!active) {
-        return;
-      }
-      setEvents([]);
-      setResultKey(sourceKey);
-      setIsLoading(false);
-      setError(projectionError instanceof Error ? projectionError.message : 'journalLoadFailed');
-    });
+    void projectCloudDailyJournalEvents(
+      activeSpaceId,
+      profile.id,
+      {
+        transactions,
+        debts: debts.debts,
+        payments: payments.payments,
+        customers: customers.customers,
+        merchantOperations: merchant.operations,
+        spaceId: activeSpaceId,
+      },
+      new Date(),
+      merchant.window,
+    )
+      .then((cloudEvents) => {
+        if (!active) {
+          return;
+        }
+        setEvents(cloudEvents);
+        setResultKey(sourceKey);
+        setIsLoading(false);
+      })
+      .catch((projectionError) => {
+        if (!active) {
+          return;
+        }
+        setEvents([]);
+        setResultKey(sourceKey);
+        setIsLoading(false);
+        setError(projectionError instanceof Error ? projectionError.message : 'journalLoadFailed');
+      });
 
     return () => {
       active = false;
@@ -171,11 +180,29 @@ export function useDailyJournalProjection(refreshToken = 0): DailyJournalProject
     sourceKey,
   ]);
 
-  const visibleError = initializationError ?? activeSpaceError ?? transactionsError ?? customers.error ?? debts.error ?? payments.error ?? merchant.error;
+  const visibleError =
+    initializationError ??
+    activeSpaceError ??
+    transactionsError ??
+    customers.error ??
+    debts.error ??
+    payments.error ??
+    merchant.error;
   if (visibleError) return { events: [], isLoading: false, error: visibleError };
-  if (!isReady || !isAuthenticated || activeSpaceLoading || transactionsLoading || customers.isLoading || debts.isLoading
-    || payments.isLoading || merchant.loading || customers.canonicalSpaceId !== activeSpaceId
-    || debts.canonicalSpaceId !== activeSpaceId || payments.canonicalSpaceId !== activeSpaceId
-    || resultKey !== sourceKey) return { events: [], isLoading: true, error: null };
+  if (
+    !isReady ||
+    !isAuthenticated ||
+    activeSpaceLoading ||
+    transactionsLoading ||
+    customers.isLoading ||
+    debts.isLoading ||
+    payments.isLoading ||
+    merchant.loading ||
+    customers.canonicalSpaceId !== activeSpaceId ||
+    debts.canonicalSpaceId !== activeSpaceId ||
+    payments.canonicalSpaceId !== activeSpaceId ||
+    resultKey !== sourceKey
+  )
+    return { events: [], isLoading: true, error: null };
   return { events, isLoading, error };
 }

@@ -167,6 +167,16 @@ beforeEach(() => {
 });
 
 describe('archive calendar controls', () => {
+  it('uses the workspace financial date for Today rather than the device date', () => {
+    const change = vi.fn();
+    const element = React.createElement(ArchiveDayPicker, { value: day, today: '2026-10-22', onChange: change });
+    render(element);
+    state.buttons['archive-calendar-button']();
+    render(element);
+    state.buttons['archive-today']();
+    expect(change).toHaveBeenCalledWith('2026-10-22');
+    expect(state.load).not.toHaveBeenCalled();
+  });
   it.each(['ar', 'en', 'tr'] as const)(
     'shows only a small icon until opened, then a localized %s month grid without network reads',
     (language) => {

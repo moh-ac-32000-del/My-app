@@ -41,9 +41,38 @@ try {
   await assert.rejects(command(acceptedMember,{action:'accept',token:invite.token}),{code:'failed-precondition'});
   assert.equal((await db.doc(`spaces/${spaceId}/members/${acceptedMember}`).get()).data().status,'suspended');
   console.log('Workspace emulator — consumed invitation cannot restore removed access: PASS');
+
+  const financialFixture = { id: 'kept', workspaceId: spaceId, storeId: 'emulator-store', amount: 12.5, note: 'Keep history', createdAt: '2026-10-21T12:00:00.000Z' };
+  for (const name of ['debts', 'payments', 'transactions', 'dailyArchives']) await db.doc(`spaces/${spaceId}/${name}/kept`).set(financialFixture);
+  const prepare = (uid, fields) => command(uid, { action: 'closingSettings', spaceId, closingSettings: fields });
+  const initial = { timeZone: 'Europe/Istanbul', executionTime: '00:00', expectedRevision: 0 };
+  const first = await prepare('quota-owner', initial);
+  assert.equal(first.closingSettings.status, 'prepared');
+  assert.equal(first.closingSettings.revision, 1);
+  assert.deepEqual(await prepare('quota-owner', initial), first);
+  console.log('Workspace closing emulator — owner prepares settings and retry does not duplicate revision: PASS');
+  const changed = await Promise.allSettled(['America/New_York', 'UTC'].map(timeZone => prepare('quota-owner', { ...initial, expectedRevision: 1, timeZone })));
+  assert.equal(changed.filter(row => row.status === 'fulfilled').length, 1);
+  assert.equal(changed.filter(row => row.status === 'rejected').length, 1);
+  console.log('Workspace closing emulator — conflicting devices cannot overwrite each other silently: PASS');
+  for (const role of ['editor', 'viewer']) {
+    const uid = `closing-${role}`;
+    await db.doc(`spaces/${spaceId}/members/${uid}`).set({ role, status: 'active' });
+    await assert.rejects(prepare(uid, { ...initial, expectedRevision: 2 }), { code: 'permission-denied' });
+  }
+  await assert.rejects(prepare(acceptedMember, initial), { code: 'permission-denied' });
+  console.log('Workspace closing emulator — editors, viewers and removed users cannot configure closing: PASS');
+  const savedSpace = (await db.doc(`spaces/${spaceId}`).get()).data();
+  assert.equal(savedSpace.closingSettings.revision, 2);
+  assert.equal(savedSpace.automaticClosing, undefined);
+  assert.equal(savedSpace.nextClosingAt, undefined);
+  for (const name of ['debts', 'payments', 'transactions', 'dailyArchives']) assert.deepEqual((await db.doc(`spaces/${spaceId}/${name}/kept`).get()).data(), financialFixture);
+  assert.equal((await db.collection(`spaces/${spaceId}/dailyClosingCounters`).get()).size, 0);
+  console.log('Workspace closing emulator — preparation never activates closing or modifies financial history: PASS');
 }finally{
   await db.terminate();await deleteApp(app);
 }
 // Reuse this demo emulator invocation rather than starting another service/CI job.
 await import('./merchant-backend.emulator.mjs');
 await import('./archive-calendar.emulator.mjs');
+await import('./automatic-closing.emulator.mjs');

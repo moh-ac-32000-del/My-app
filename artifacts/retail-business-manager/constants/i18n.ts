@@ -336,6 +336,22 @@ const ar = {
   archiveEvents: 'أحداث اليوم',
   archiveSelectHint: 'اختر يومًا مغلقًا لعرض نسخته الثابتة',
   archiveChooseDate: 'اختيار يوم من التقويم',
+  workspaceClosingSettings: 'توقيت المساحة والإغلاق',
+  automaticClosingActive: 'إغلاق تلقائي',
+  automaticClosingNext: 'موعد التنفيذ القادم',
+  automaticClosingScheduleHint: 'تُفحص الأيام المستحقة كل 5 دقائق من الخادم حتى والتطبيق مغلق. حدود اليوم منتصف الليل بتوقيت المساحة.',
+  automaticClosingFailed: 'تعذّر الإغلاق التلقائي. البيانات محفوظة؛ يراجع المالك إعدادات المساحة لإعادة المحاولة. يتوقف التكرار بعد 3 إخفاقات.',
+  automaticClosingEnable: 'تفعيل الإغلاق التلقائي',
+  automaticClosingEnableConfirm: 'سيبدأ الخادم معالجة الأيام غير المؤرشفة بشكل مستقل، مع إبقاء الإغلاقات السابقة. أكد توقيت الأجهزة التي سجلت البيانات القديمة؛ لن يتاح الإغلاق اليدوي بعد التفعيل.',
+  automaticClosingLegacyZone: 'توقيت السجلات السابقة — مثل Europe/Istanbul',
+  automaticClosingTransitionHint: 'تُطبق تغييرات التوقيت عند بداية اليوم التالي وفق التوقيت الحالي. قد ينشأ يوم انتقالي أقصر، دون فجوة أو تداخل أو تغيير الأرشيفات السابقة.',
+  manualClosing: 'إغلاق يدوي',
+  workspaceTimeZone: 'المنطقة الزمنية — مثل Europe/Istanbul',
+  workspaceUseDeviceZone: 'اختيار توقيت هذا الجهاز للمساحة',
+  workspaceClosingTime: 'وقت التنفيذ بتوقيت المساحة (HH:mm)',
+  workspaceClosingPrepared: 'إعداد تمهيدي فقط؛ الإغلاق التلقائي غير مفعّل، ويستمر الإغلاق اليدوي حاليًا.',
+  workspaceClosingInvalid: 'اختر منطقة زمنية صحيحة ووقتًا من 00:00 إلى 23:59.',
+  workspaceClosingSettingsHint: 'الافتراضي تركيا و00:00. الحفظ لا يغيّر تواريخ العمليات أو الأرشيفات. عند تفعيل الجدولة لاحقًا، تبقى حدود اليوم منتصف الليل ويحدد هذا الوقت موعد تنفيذ إغلاق اليوم السابق.',
   archivePreviousMonth: 'الشهر السابق',
   archiveNextMonth: 'الشهر التالي',
   archivePreviousDay: 'اليوم السابق',
@@ -774,6 +790,22 @@ const en: Record<TranslationKey, string> = {
   archiveEvents: 'Day events',
   archiveSelectHint: 'Select a closed day to view its fixed snapshot',
   archiveChooseDate: 'Choose a calendar day',
+  workspaceClosingSettings: 'Workspace time and closing',
+  automaticClosingActive: 'Automatic closing',
+  automaticClosingNext: 'Next execution',
+  automaticClosingScheduleHint: 'The server checks due days every 5 minutes, even while the app is closed. The financial day starts at workspace midnight.',
+  automaticClosingFailed: 'Automatic closing failed. Data is retained; the owner can retry from workspace settings. Retries pause after 3 failures.',
+  automaticClosingEnable: 'Enable automatic closing',
+  automaticClosingEnableConfirm: 'The server will process unarchived days separately and preserve previous closings. Confirm the time zone used by the devices recording existing data. Manual closing becomes unavailable after activation.',
+  automaticClosingLegacyZone: 'Existing records time zone — e.g. Europe/Istanbul',
+  automaticClosingTransitionHint: 'Time changes take effect at the next day boundary in the current zone. A shorter transition day may occur, with no gaps, overlaps or changes to previous archives.',
+  manualClosing: 'Manual closing',
+  workspaceTimeZone: 'Time zone — e.g. Europe/Istanbul',
+  workspaceUseDeviceZone: 'Choose this device’s time zone for the workspace',
+  workspaceClosingTime: 'Execution time in workspace time (HH:mm)',
+  workspaceClosingPrepared: 'Preparation only; automatic closing is not enabled. Manual closing remains available.',
+  workspaceClosingInvalid: 'Choose a valid time zone and a time from 00:00 to 23:59.',
+  workspaceClosingSettingsHint: 'Defaults: Turkey and 00:00. Saving does not change operation dates or archives. Once scheduling is enabled later, the day boundary stays at midnight; this time controls when the previous day is closed.',
   archivePreviousMonth: 'Previous month',
   archiveNextMonth: 'Next month',
   archivePreviousDay: 'Previous day',
@@ -1210,6 +1242,22 @@ const tr: Record<TranslationKey, string> = {
   archiveEvents: 'Gün olayları',
   archiveSelectHint: 'Sabit kopyasını görmek için kapatılmış bir gün seçin',
   archiveChooseDate: 'Takvimden gün seç',
+  workspaceClosingSettings: 'Çalışma alanı saati ve kapanış',
+  automaticClosingActive: 'Otomatik kapanış',
+  automaticClosingNext: 'Sonraki çalışma',
+  automaticClosingScheduleHint: 'Sunucu, uygulama kapalıyken de zamanı gelen günleri 5 dakikada bir kontrol eder. Mali gün alanın saat diliminde gece yarısı başlar.',
+  automaticClosingFailed: 'Otomatik kapanış başarısız. Veriler korunur; alan sahibi ayarlardan yeniden deneyebilir. 3 hatadan sonra tekrarlar duraklatılır.',
+  automaticClosingEnable: 'Otomatik kapanışı etkinleştir',
+  automaticClosingEnableConfirm: 'Sunucu arşivlenmemiş günleri ayrı ayrı işler ve önceki kapanışları korur. Eski verileri kaydeden cihazların saat dilimini doğrulayın. Etkinleştirmeden sonra manuel kapanış kullanılamaz.',
+  automaticClosingLegacyZone: 'Eski kayıtların saat dilimi — ör. Europe/Istanbul',
+  automaticClosingTransitionHint: 'Saat değişiklikleri mevcut dilimde sonraki günün başında uygulanır. Önceki arşivleri değiştirmeden, boşluk veya çakışma olmadan kısa bir geçiş günü oluşabilir.',
+  manualClosing: 'Manuel kapanış',
+  workspaceTimeZone: 'Saat dilimi — ör. Europe/Istanbul',
+  workspaceUseDeviceZone: 'Bu cihazın saat dilimini alan için seç',
+  workspaceClosingTime: 'Alan saatine göre çalışma saati (HH:mm)',
+  workspaceClosingPrepared: 'Yalnızca hazırlık; otomatik kapanış etkin değil. Manuel kapanış kullanılabilir.',
+  workspaceClosingInvalid: 'Geçerli bir saat dilimi ve 00:00–23:59 arasında bir saat seçin.',
+  workspaceClosingSettingsHint: 'Varsayılan: Türkiye ve 00:00. Kaydetmek işlem tarihlerini veya arşivleri değiştirmez. Zamanlama daha sonra etkinleştirildiğinde gün sınırı gece yarısı kalır; bu saat önceki günün ne zaman kapatılacağını belirler.',
   archivePreviousMonth: 'Önceki ay',
   archiveNextMonth: 'Sonraki ay',
   archivePreviousDay: 'Önceki gün',
@@ -1331,7 +1379,7 @@ export function formatLocalizedDate(date: Date, language: Language): string {
   return new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'long', year: 'numeric' }).format(date);
 }
 
-export function formatLocalizedDateTime(date: Date, language: Language): string {
+export function formatLocalizedDateTime(date: Date, language: Language, timeZone?: string): string {
   const locale = language === 'ar' ? 'ar' : language === 'tr' ? 'tr-TR' : 'en-US';
   return new Intl.DateTimeFormat(locale, {
     day: '2-digit',
@@ -1339,14 +1387,16 @@ export function formatLocalizedDateTime(date: Date, language: Language): string 
     year: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
+    ...(timeZone ? { timeZone } : {}),
   }).format(date);
 }
 
-export function formatLocalizedTime(date: Date, language: Language): string {
+export function formatLocalizedTime(date: Date, language: Language, timeZone?: string): string {
   const locale = language === 'ar' ? 'ar' : language === 'tr' ? 'tr-TR' : 'en-US';
   return new Intl.DateTimeFormat(locale, {
     hour: '2-digit',
     minute: '2-digit',
+    ...(timeZone ? { timeZone } : {}),
   }).format(date);
 }
 

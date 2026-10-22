@@ -4,6 +4,7 @@ import type { Space, MembershipRole } from '@/types/space';
 export { invitationToken, workspaceInvitationLink } from '@/data/invitationIntent';
 
 export interface WorkspaceOverview {
+  automaticClosingReady?: boolean;
   space: Space;
   role: MembershipRole;
   members?: Array<{ userId: string; displayName: string; role: MembershipRole; status: string }>;
@@ -12,7 +13,21 @@ export interface WorkspaceOverview {
   used?: { private: number; shared: number };
 }
 export type WorkspaceRequest = {
-  action: 'quota' | 'create' | 'rename' | 'overview' | 'invite' | 'revoke' | 'accept' | 'role' | 'remove';
+  action:
+    | 'quota'
+    | 'create'
+    | 'rename'
+    | 'overview'
+    | 'invite'
+    | 'revoke'
+    | 'accept'
+    | 'role'
+    | 'remove'
+    | 'closingSettings'
+    | 'enableClosing'
+    | 'retryClosing';
+  legacyTimeZone?: string;
+  closingSettings?: { timeZone: string; executionTime: string; expectedRevision: number };
   spaceId?: string;
   name?: string;
   mode?: 'private' | 'shared';

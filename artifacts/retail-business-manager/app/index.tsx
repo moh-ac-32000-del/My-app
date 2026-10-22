@@ -16,12 +16,24 @@ import { calculateVisibleCurrencyBalances } from '@/services/storage';
 import { useDailyJournalProjection } from '@/hooks/useDailyJournalProjection';
 import type { DailyJournalEvent } from '@/services/storage';
 import { journalEventTitle, journalEventMoney, journalEventDetails } from '@/services/journalPresentation';
+import { useFinancialWindow } from '@/hooks/useFinancialWindow';
+import { archiveDateForDisplay } from '@/data/archiveCalendar';
 
 export default function DashboardScreen() {
   const colors = useColors();
   const router = useRouter();
-  const { profile, isReady, isAuthenticated, initializationError, retryInitialization, transactions, activeSpaceId, activeSpaceLoading } = useStore();
+  const {
+    profile,
+    isReady,
+    isAuthenticated,
+    initializationError,
+    retryInitialization,
+    transactions,
+    activeSpaceId,
+    activeSpaceLoading,
+  } = useStore();
   const { t, isRTL, direction, language } = useI18n();
+  const clock = useFinancialWindow();
   const insets = useSafeAreaInsets();
   const balances = useMemo(
     () => calculateVisibleCurrencyBalances(transactions, profile.visibleCurrencies),
@@ -42,7 +54,7 @@ export default function DashboardScreen() {
   }, [isReady, isAuthenticated, router]);
   useEffect(() => {
     if (isReady && isAuthenticated && !activeSpaceLoading && !activeSpaceId) router.replace('/workspaces' as never);
-  }, [isReady,isAuthenticated,activeSpaceLoading,activeSpaceId,router]);
+  }, [isReady, isAuthenticated, activeSpaceLoading, activeSpaceId, router]);
 
   const getJournalTitle = (event: DailyJournalEvent): string => {
     if (event.type === 'merchant') return journalEventTitle(event, t);
@@ -61,35 +73,65 @@ export default function DashboardScreen() {
     <AppShell>
       <PageHeader
         title={t('dashboard')}
-        subtitle={`${t('today')} • ${formatLocalizedDate(new Date(), language)}`}
+        subtitle={`${t('today')} • ${formatLocalizedDate(clock.window ? archiveDateForDisplay(clock.window.date) : new Date(), language)}`}
         action={
           <View style={{ flexDirection: isRTL ? 'row-reverse' : 'row', gap: 10 }}>
-          <Pressable testID="open-notification-center" accessibilityRole="button" accessibilityLabel={t('notifications')}
-            onPress={() => router.push('/notifications')}
-            style={({ pressed }) => [styles.profileButton, { backgroundColor: colors.accent, borderColor: colors.border }, pressed && styles.pressed]}>
-            <Ionicons name="notifications-outline" size={22} color={colors.primary} />
-          </Pressable>
-          <Pressable
-            testID="profile-button"
-            accessibilityRole="button"
-            accessibilityLabel={t('workspaces')}
-            onPress={() => router.push('/workspaces' as never)}
-            style={({ pressed }) => [styles.profileButton, { backgroundColor: colors.accent, borderColor: colors.border }, pressed && styles.pressed]}
-          >
-            <Ionicons name="layers-outline" size={22} color={colors.primary} />
-          </Pressable>
+            <Pressable
+              testID="open-notification-center"
+              accessibilityRole="button"
+              accessibilityLabel={t('notifications')}
+              onPress={() => router.push('/notifications')}
+              style={({ pressed }) => [
+                styles.profileButton,
+                { backgroundColor: colors.accent, borderColor: colors.border },
+                pressed && styles.pressed,
+              ]}
+            >
+              <Ionicons name="notifications-outline" size={22} color={colors.primary} />
+            </Pressable>
+            <Pressable
+              testID="profile-button"
+              accessibilityRole="button"
+              accessibilityLabel={t('workspaces')}
+              onPress={() => router.push('/workspaces' as never)}
+              style={({ pressed }) => [
+                styles.profileButton,
+                { backgroundColor: colors.accent, borderColor: colors.border },
+                pressed && styles.pressed,
+              ]}
+            >
+              <Ionicons name="layers-outline" size={22} color={colors.primary} />
+            </Pressable>
           </View>
         }
       />
       {initializationError ? (
-        <View style={[styles.initializationBanner, { backgroundColor: `${colors.destructive}18`, borderColor: `${colors.destructive}55`, direction, flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
+        <View
+          style={[
+            styles.initializationBanner,
+            {
+              backgroundColor: `${colors.destructive}18`,
+              borderColor: `${colors.destructive}55`,
+              direction,
+              flexDirection: isRTL ? 'row-reverse' : 'row',
+            },
+          ]}
+        >
           <Ionicons name="cloud-offline-outline" size={18} color={colors.destructive} />
-          <Text style={[styles.initializationBannerText, { color: colors.foreground, textAlign: isRTL ? 'right' : 'left' }]}>{t('authGenericError')}</Text>
+          <Text
+            style={[styles.initializationBannerText, { color: colors.foreground, textAlign: isRTL ? 'right' : 'left' }]}
+          >
+            {t('authGenericError')}
+          </Text>
           <Pressable
             testID="retry-post-auth-initialization"
             accessibilityRole="button"
             onPress={retryInitialization}
-            style={({ pressed }) => [styles.initializationRetryButton, { borderColor: colors.destructive, flexDirection: isRTL ? 'row-reverse' : 'row' }, pressed && styles.pressed]}
+            style={({ pressed }) => [
+              styles.initializationRetryButton,
+              { borderColor: colors.destructive, flexDirection: isRTL ? 'row-reverse' : 'row' },
+              pressed && styles.pressed,
+            ]}
           >
             <Ionicons name="refresh-outline" size={15} color={colors.destructive} />
             <Text style={[styles.initializationRetryText, { color: colors.destructive }]}>{t('tryAgain')}</Text>
@@ -133,8 +175,12 @@ export default function DashboardScreen() {
           <View style={[styles.emptyActivityRow, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
             <Ionicons name="pulse-outline" size={22} color={colors.mutedForeground} />
             <View style={{ flex: 1 }}>
-              <Text style={[styles.emptyTitle, { color: colors.foreground, textAlign: isRTL ? 'right' : 'left' }]}>{t('noActivity')}</Text>
-              <Text style={[styles.emptyHint, { color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' }]}>{t('startByAdding')}</Text>
+              <Text style={[styles.emptyTitle, { color: colors.foreground, textAlign: isRTL ? 'right' : 'left' }]}>
+                {t('noActivity')}
+              </Text>
+              <Text style={[styles.emptyHint, { color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' }]}>
+                {t('startByAdding')}
+              </Text>
             </View>
           </View>
         ) : (
@@ -152,18 +198,41 @@ export default function DashboardScreen() {
                   ]}
                 >
                   <Ionicons
-                    name={isCashIn ? 'arrow-down-circle-outline' : isCashOut ? 'arrow-up-circle-outline' : event.type === 'debt' ? 'time-outline' : 'checkmark-done-circle-outline'}
+                    name={
+                      isCashIn
+                        ? 'arrow-down-circle-outline'
+                        : isCashOut
+                          ? 'arrow-up-circle-outline'
+                          : event.type === 'debt'
+                            ? 'time-outline'
+                            : 'checkmark-done-circle-outline'
+                    }
                     size={21}
                     color={isCashOut ? colors.destructive : colors.primary}
                   />
                   <View style={styles.activityContent}>
-                    <Text style={[styles.activityTitle, { color: colors.foreground, textAlign: isRTL ? 'right' : 'left' }]}>
+                    <Text
+                      style={[styles.activityTitle, { color: colors.foreground, textAlign: isRTL ? 'right' : 'left' }]}
+                    >
                       {getJournalTitle(event)} — {journalEventMoney(event, language)}
                     </Text>
                     {journalEventDetails(event, language, t).map((detail, index) => (
-                      <Text key={`${event.id}:${index}`} style={[styles.activityDate, { color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' }]}>{detail}</Text>
+                      <Text
+                        key={`${event.id}:${index}`}
+                        style={[
+                          styles.activityDate,
+                          { color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' },
+                        ]}
+                      >
+                        {detail}
+                      </Text>
                     ))}
-                    <Text style={[styles.activityDate, { color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' }]}>
+                    <Text
+                      style={[
+                        styles.activityDate,
+                        { color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' },
+                      ]}
+                    >
                       {formatLocalizedDateTime(new Date(event.occurredAt), language)}
                     </Text>
                   </View>
@@ -179,14 +248,42 @@ export default function DashboardScreen() {
 }
 
 const styles = StyleSheet.create({
-  initializationBanner: { alignItems: 'center', gap: 9, borderWidth: 1, borderRadius: 14, paddingHorizontal: 12, paddingVertical: 9, marginBottom: 14 },
+  initializationBanner: {
+    alignItems: 'center',
+    gap: 9,
+    borderWidth: 1,
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    marginBottom: 14,
+  },
   initializationBannerText: { flex: 1, fontSize: 12, fontFamily: 'Inter_500Medium', lineHeight: 18 },
-  initializationRetryButton: { alignItems: 'center', gap: 5, borderWidth: 1, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 6 },
+  initializationRetryButton: {
+    alignItems: 'center',
+    gap: 5,
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
   initializationRetryText: { fontSize: 12, fontFamily: 'Inter_700Bold' },
-  profileButton: { width: 42, height: 42, borderRadius: 15, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  profileButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 15,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   profileInitial: { fontSize: 18, fontFamily: 'Inter_700Bold' },
   pressed: { opacity: 0.7 },
-  metricRow: { flexDirection: 'row-reverse', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: 9, marginBottom: 9 },
+  metricRow: {
+    flexDirection: 'row-reverse',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    rowGap: 9,
+    marginBottom: 9,
+  },
   metricCell: { minWidth: 0 },
   emptyActivity: { marginBottom: 18 },
   journalStatus: { alignItems: 'center', gap: 8, minHeight: 64, justifyContent: 'center' },

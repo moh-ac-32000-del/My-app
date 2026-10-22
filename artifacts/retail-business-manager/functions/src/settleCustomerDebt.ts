@@ -1,5 +1,6 @@
 import { HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
 import { assertWorkspaceAccess } from './workspaceAccess.js';
+import { financialPostingTime } from '../../data/automaticClosing.js';
 import { readCustomerCredit, writeCustomerCredit } from './customerCreditState.js';
 import { legacyAmountExact, planCustomerPayment } from '../../data/customerCreditAccounting.js';
 import type { Firestore } from 'firebase-admin/firestore';
@@ -40,12 +41,20 @@ export async function settleCustomerDebtHandler(
   const receiptRef = spaceRef.collection('operationReceipts').doc(input.operationId);
   const transactionRef = spaceRef.collection('transactions').doc(input.transactionId);
   const paymentRef = spaceRef.collection('payments').doc(input.paymentId);
-  const debtsQuery = spaceRef.collection('debts')
-    .where('customerId', '==', input.customerId);
+  const debtsQuery = spaceRef.collection('debts').where('customerId', '==', input.customerId);
 
   try {
     return await db.runTransaction(async (transaction) => {
-      const [spaceSnap, memberSnap, profileSnap, customerSnap, receiptSnap, debtSnaps, existingTransaction, existingPayment] = await Promise.all([
+      const [
+        spaceSnap,
+        memberSnap,
+        profileSnap,
+        customerSnap,
+        receiptSnap,
+        debtSnaps,
+        existingTransaction,
+        existingPayment,
+      ] = await Promise.all([
         transaction.get(spaceRef),
         transaction.get(memberRef),
         transaction.get(profileRef),
@@ -61,12 +70,17 @@ export async function settleCustomerDebtHandler(
       }
       assertWorkspaceAccess(memberSnap.data(), 'write');
       if (!profileSnap.exists || profileSnap.data()?.storeId !== input.storeId) {
-        throw new HttpsError('permission-denied', 'Store profile does not match workspace', { code: 'STORE_SCOPE_MISMATCH' });
+        throw new HttpsError('permission-denied', 'Store profile does not match workspace', {
+          code: 'STORE_SCOPE_MISMATCH',
+        });
       }
-      if (!customerSnap.exists || customerSnap.data()?.isActive !== true
-        || customerSnap.data()?.id !== input.customerId
-        || customerSnap.data()?.storeId !== input.storeId
-        || (customerSnap.data()?.workspaceId && customerSnap.data()?.workspaceId !== input.spaceId)) {
+      if (
+        !customerSnap.exists ||
+        customerSnap.data()?.isActive !== true ||
+        customerSnap.data()?.id !== input.customerId ||
+        customerSnap.data()?.storeId !== input.storeId ||
+        (customerSnap.data()?.workspaceId && customerSnap.data()?.workspaceId !== input.spaceId)
+      ) {
         throw new HttpsError('not-found', 'Active customer was not found', { code: 'CUSTOMER_NOT_FOUND' });
       }
 
@@ -77,11 +91,16 @@ export async function settleCustomerDebtHandler(
         const receiptMatches = payload
           ? samePayload(payload, input)
           : sameLegacySettlement(receipt, existingTransaction.data() ?? {}, existingPayment.data() ?? {}, input);
-        if (receipt.operationId !== input.operationId || receipt.spaceId !== input.spaceId
-          || receipt.actorUserId !== uid || receipt.status !== 'completed'
-          || receipt.command !== 'settleCustomerDebt'
-          || result?.transactionId !== input.transactionId || result?.paymentId !== input.paymentId
-          || !receiptMatches) {
+        if (
+          receipt.operationId !== input.operationId ||
+          receipt.spaceId !== input.spaceId ||
+          receipt.actorUserId !== uid ||
+          receipt.status !== 'completed' ||
+          receipt.command !== 'settleCustomerDebt' ||
+          result?.transactionId !== input.transactionId ||
+          result?.paymentId !== input.paymentId ||
+          !receiptMatches
+        ) {
           throw new HttpsError('already-exists', 'Operation ID was already used', { code: 'IDEMPOTENCY_CONFLICT' });
         }
         return {
@@ -94,13 +113,16 @@ export async function settleCustomerDebtHandler(
 
       const matchingDebts = debtSnaps.docs
         .map((snapshot) => ({ ref: snapshot.ref, data: snapshot.data() }))
-        .filter(({ data }) => data.storeId === input.storeId
-          && data.workspaceId === input.spaceId
-          && data.customerId === input.customerId
-          && data.currency === input.currency
-          && typeof data.amount === 'number'
-          && Number.isFinite(data.amount)
-          && data.amount >= 0)
+        .filter(
+          ({ data }) =>
+            data.storeId === input.storeId &&
+            data.workspaceId === input.spaceId &&
+            data.customerId === input.customerId &&
+            data.currency === input.currency &&
+            typeof data.amount === 'number' &&
+            Number.isFinite(data.amount) &&
+            data.amount >= 0,
+        )
         .sort((a, b) => {
           const createdA = typeof a.data.createdAt === 'string' ? a.data.createdAt : '';
           const createdB = typeof b.data.createdAt === 'string' ? b.data.createdAt : '';
@@ -111,13 +133,20 @@ export async function settleCustomerDebtHandler(
         throw new HttpsError('already-exists', 'Settlement record ID already exists', { code: 'IDEMPOTENCY_CONFLICT' });
       }
 
-      const now = runtime.now();
+      const now = financialPostingTime(spaceSnap.data()!, runtime.now());
       const credit = await readCustomerCredit(transaction, spaceRef, input.storeId, input.customerId, input.currency);
-      const plan = planCustomerPayment(matchingDebts.map(({ ref, data }) => ({
-        id: ref.id, amount: data.amount, amountExact: data.amountExact, createdAt: data.createdAt,
-      })), credit.amount, legacyAmountExact(input.amount));
+      const plan = planCustomerPayment(
+        matchingDebts.map(({ ref, data }) => ({
+          id: ref.id,
+          amount: data.amount,
+          amountExact: data.amountExact,
+          createdAt: data.createdAt,
+        })),
+        credit.amount,
+        legacyAmountExact(input.amount),
+      );
       if (plan.updates.length > 450) throw new HttpsError('resource-exhausted', 'Too many debts for one settlement');
-      const byId = new Map(matchingDebts.map(debt => [debt.ref.id, debt]));
+      const byId = new Map(matchingDebts.map((debt) => [debt.ref.id, debt]));
 
       // Firestore transactions require every read to finish before the first write.
       for (const update of plan.updates) {
@@ -194,7 +223,15 @@ function validateRequest(value: unknown): SettleCustomerDebtRequest {
   if (!isRecord(value)) {
     throw new HttpsError('invalid-argument', 'Settlement request is invalid', { code: 'INVALID_ARGUMENT' });
   }
-  const stringFields = ['spaceId', 'storeId', 'customerId', 'currency', 'operationId', 'transactionId', 'paymentId'] as const;
+  const stringFields = [
+    'spaceId',
+    'storeId',
+    'customerId',
+    'currency',
+    'operationId',
+    'transactionId',
+    'paymentId',
+  ] as const;
   for (const field of stringFields) {
     const fieldValue = value[field];
     if (typeof fieldValue !== 'string' || !fieldValue.trim() || fieldValue.includes('/')) {
@@ -232,13 +269,15 @@ function payloadForReceipt(input: SettleCustomerDebtRequest): Record<string, unk
 }
 
 function samePayload(receiptPayload: Record<string, unknown>, input: SettleCustomerDebtRequest): boolean {
-  return receiptPayload.spaceId === input.spaceId
-    && receiptPayload.storeId === input.storeId
-    && receiptPayload.customerId === input.customerId
-    && receiptPayload.amount === input.amount
-    && receiptPayload.currency === input.currency
-    && receiptPayload.transactionId === input.transactionId
-    && receiptPayload.paymentId === input.paymentId;
+  return (
+    receiptPayload.spaceId === input.spaceId &&
+    receiptPayload.storeId === input.storeId &&
+    receiptPayload.customerId === input.customerId &&
+    receiptPayload.amount === input.amount &&
+    receiptPayload.currency === input.currency &&
+    receiptPayload.transactionId === input.transactionId &&
+    receiptPayload.paymentId === input.paymentId
+  );
 }
 
 function sameLegacySettlement(
@@ -248,24 +287,26 @@ function sameLegacySettlement(
   input: SettleCustomerDebtRequest,
 ): boolean {
   const paymentAmount = payment.amount;
-  return transaction.id === input.transactionId
-    && transaction.storeId === input.storeId
-    && transaction.workspaceId === input.spaceId
-    && transaction.type === 'cash_in'
-    && transaction.amount === input.amount
-    && transaction.currency === input.currency
-    && transaction.note === `payment_${input.customerId}`
-    && payment.id === input.paymentId
-    && payment.storeId === input.storeId
-    && payment.workspaceId === input.spaceId
-    && payment.customerId === input.customerId
-    && payment.transactionId === input.transactionId
-    && isRecord(paymentAmount)
-    && paymentAmount.amount === input.amount
-    && paymentAmount.currency === input.currency
-    && payment.direction === 'in'
-    && payment.method === 'cash'
-    && payment.paidAt === receipt.processedAt;
+  return (
+    transaction.id === input.transactionId &&
+    transaction.storeId === input.storeId &&
+    transaction.workspaceId === input.spaceId &&
+    transaction.type === 'cash_in' &&
+    transaction.amount === input.amount &&
+    transaction.currency === input.currency &&
+    transaction.note === `payment_${input.customerId}` &&
+    payment.id === input.paymentId &&
+    payment.storeId === input.storeId &&
+    payment.workspaceId === input.spaceId &&
+    payment.customerId === input.customerId &&
+    payment.transactionId === input.transactionId &&
+    isRecord(paymentAmount) &&
+    paymentAmount.amount === input.amount &&
+    paymentAmount.currency === input.currency &&
+    payment.direction === 'in' &&
+    payment.method === 'cash' &&
+    payment.paidAt === receipt.processedAt
+  );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

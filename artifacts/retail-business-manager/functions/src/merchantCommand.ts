@@ -11,6 +11,7 @@ import {
 import { legacyAmountExact, planCustomerPayment } from '../../data/customerCreditAccounting.js';
 import { readCustomerCredit, writeCustomerCredit } from './customerCreditState.js';
 import { assertWorkspaceAccess } from './workspaceAccess.js';
+import { financialPostingTime } from '../../data/automaticClosing.js';
 import { reverseMerchantOperation } from './merchantReversal.js';
 import { merchantOperationDate, validateMerchantSettings } from '../../data/merchantSettings.js';
 
@@ -299,7 +300,7 @@ export async function merchantCommandHandler(request: CallableRequest<unknown>, 
       }
       return { ...receipt.result, outcome: 'replayed' };
     }
-    const now = runtime.now();
+    const now = financialPostingTime(spaceSnap.data()!, runtime.now());
     if (input.paymentMethodId) {
       const settingsSnap = await tx.get(space.collection('merchantSettings').doc('config'));
       const settings = settingsSnap.data();

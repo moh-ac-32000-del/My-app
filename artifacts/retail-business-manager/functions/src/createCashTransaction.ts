@@ -1,6 +1,7 @@
 import { HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
 import type { Firestore } from 'firebase-admin/firestore';
 import { assertWorkspaceAccess } from './workspaceAccess.js';
+import { financialPostingTime } from '../../data/automaticClosing.js';
 
 const SUPPORTED_CURRENCIES = new Set(['TRY', 'USD', 'EUR', 'GBP', 'SAR', 'AED', 'SYP']);
 
@@ -50,7 +51,9 @@ export async function createCashTransactionHandler(
       }
       assertWorkspaceAccess(memberSnap.data(), 'write');
       if (!profileSnap.exists || profileSnap.data()?.storeId !== input.storeId) {
-        throw new HttpsError('permission-denied', 'Store profile does not match workspace', { code: 'STORE_SCOPE_MISMATCH' });
+        throw new HttpsError('permission-denied', 'Store profile does not match workspace', {
+          code: 'STORE_SCOPE_MISMATCH',
+        });
       }
       if (receiptSnap.exists) {
         const receipt = receiptSnap.data() ?? {};
@@ -59,11 +62,13 @@ export async function createCashTransactionHandler(
         const receiptMatches = payload
           ? samePayload(payload, input)
           : sameLegacyCashTransaction(receipt, transactionSnap.data() ?? {}, input);
-        if (receipt.command !== 'createCashTransaction'
-          || receipt.actorUserId !== uid
-          || receipt.spaceId !== input.spaceId
-          || result?.transactionId !== input.transactionId
-          || !receiptMatches) {
+        if (
+          receipt.command !== 'createCashTransaction' ||
+          receipt.actorUserId !== uid ||
+          receipt.spaceId !== input.spaceId ||
+          result?.transactionId !== input.transactionId ||
+          !receiptMatches
+        ) {
           throw new HttpsError('already-exists', 'Operation ID was already used', { code: 'IDEMPOTENCY_CONFLICT' });
         }
         return {
@@ -76,7 +81,7 @@ export async function createCashTransactionHandler(
         throw new HttpsError('already-exists', 'Transaction ID already exists', { code: 'TRANSACTION_ALREADY_EXISTS' });
       }
 
-      const now = runtime.now();
+      const now = financialPostingTime(spaceSnap.data()!, runtime.now());
       transaction.create(transactionRef, {
         id: input.transactionId,
         storeId: input.storeId,
@@ -155,13 +160,15 @@ function payloadForReceipt(input: CreateCashTransactionRequest): Record<string, 
 }
 
 function samePayload(receiptPayload: Record<string, unknown>, input: CreateCashTransactionRequest): boolean {
-  return receiptPayload.spaceId === input.spaceId
-    && receiptPayload.storeId === input.storeId
-    && receiptPayload.transactionId === input.transactionId
-    && receiptPayload.type === input.type
-    && receiptPayload.amount === input.amount
-    && receiptPayload.currency === input.currency
-    && receiptPayload.note === (input.note ?? null);
+  return (
+    receiptPayload.spaceId === input.spaceId &&
+    receiptPayload.storeId === input.storeId &&
+    receiptPayload.transactionId === input.transactionId &&
+    receiptPayload.type === input.type &&
+    receiptPayload.amount === input.amount &&
+    receiptPayload.currency === input.currency &&
+    receiptPayload.note === (input.note ?? null)
+  );
 }
 
 function sameLegacyCashTransaction(
@@ -169,15 +176,17 @@ function sameLegacyCashTransaction(
   transaction: Record<string, unknown>,
   input: CreateCashTransactionRequest,
 ): boolean {
-  return transaction.id === input.transactionId
-    && transaction.storeId === input.storeId
-    && transaction.workspaceId === input.spaceId
-    && transaction.type === input.type
-    && transaction.amount === input.amount
-    && transaction.currency === input.currency
-    && (transaction.note ?? null) === (input.note ?? null)
-    && transaction.createdAt === receipt.processedAt
-    && transaction.updatedAt === receipt.processedAt;
+  return (
+    transaction.id === input.transactionId &&
+    transaction.storeId === input.storeId &&
+    transaction.workspaceId === input.spaceId &&
+    transaction.type === input.type &&
+    transaction.amount === input.amount &&
+    transaction.currency === input.currency &&
+    (transaction.note ?? null) === (input.note ?? null) &&
+    transaction.createdAt === receipt.processedAt &&
+    transaction.updatedAt === receipt.processedAt
+  );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
