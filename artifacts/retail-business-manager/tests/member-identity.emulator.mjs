@@ -76,4 +76,3 @@ try {
   await db.terminate();
   await deleteApp(app);
 }
-
