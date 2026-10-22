@@ -118,6 +118,20 @@ try {
   assert.equal((await amend.space.collection('merchantOperations').doc('new-direct').get()).data().cancelled, true);
   console.log('Merchant edit/cancel emulator — atomic shared-credit preparation, concurrent replay, stale edit rejection and no cash: PASS');
 
+  // A prior partial debt means preparation creates a positive correction debt,
+  // which the replacement may consume in this SAME transaction (create + update).
+  const partialEdit = await fixture('edit-partial-customer-debt');
+  await partialEdit.merchant('directPayment', 'old-direct', { customerId: partialEdit.base.customerId, amountExact: '300.00' });
+  assert.equal((await partialEdit.credit()).data().creditExact, '200.00');
+  await partialEdit.merchant('directPayment', 'new-direct', { customerId: partialEdit.base.customerId,
+    amountExact: '100.00', replacesOperationId: 'old-direct' });
+  assert.equal((await partialEdit.credit()).data().creditExact, '0.00');
+  const partialDebts = await partialEdit.space.collection('debts').get();
+  assert.equal(partialDebts.docs.reduce((sum, doc) => sum + doc.data().amount, 0), 0);
+  assert.equal((await partialEdit.balance()).data().balanceExact, '-100.00');
+  assert.equal((await partialEdit.space.collection('transactions').get()).size, 0);
+  console.log('Merchant edit emulator — prepared positive correction debt and replacement consume together without residual customer debt: PASS');
+
   const materials = await fixture('separate-materials');
   const materialInput = { separateLines: true, paidExact: '0.00', source: 'cash', lines: [
     { name: 'Screens', quantity: '2', unitPrice: '100.0050' },

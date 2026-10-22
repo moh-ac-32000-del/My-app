@@ -416,7 +416,7 @@ export function MerchantCommandForm({
                     value={paymentMethodId}
                     options={(settings.data?.paymentMethods ?? []).filter((row) => row.isActive)}
                     onChange={setPaymentMethodId}
-                    disabled={locked || !settings.data}
+                    disabled={locked || !settings.data || (editing && target.source === 'external')}
                   />
                 ) : null}
                 {action === 'purchase' ? (
