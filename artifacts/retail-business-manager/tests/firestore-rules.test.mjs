@@ -801,12 +801,18 @@ try {
     const roleLegacy=testEnvironment.authenticatedContext('role-legacy');
     const journalArchiveQuery = context => getDocs(query(
       collection(context.firestore(), 'spaces', 'role-space', 'dailyArchives'), where('storeId', '==', 'store-A')));
+    const archiveDayQuery = context => getDocs(query(
+      collection(context.firestore(), 'spaces', 'role-space', 'dailyArchives'),
+      where('storeId', '==', 'store-A'), where('date', '==', '2026-10-23')));
     try {
       for (const [role, context] of [['owner', roleOwner], ['editor', roleEditor], ['viewer', roleViewer]]) {
         await runCase(`Journal performance — ${role} may observe archive query`, () => journalArchiveQuery(context), 'ALLOW');
+        await runCase(`Archive performance — ${role} may observe selected-day query`, () => archiveDayQuery(context), 'ALLOW');
       }
       await runCase('Journal performance — anonymous archive query denied', () => journalArchiveQuery(anonymous), 'DENY');
       await runCase('Journal performance — legacy role archive query denied', () => journalArchiveQuery(roleLegacy), 'DENY');
+      await runCase('Archive performance — anonymous selected-day query denied', () => archiveDayQuery(anonymous), 'DENY');
+      await runCase('Archive performance — legacy selected-day query denied', () => archiveDayQuery(roleLegacy), 'DENY');
       for(const name of ['customers','debts','payments','transactions','dailyArchives']) {
         await runCase(`Roles — viewer reads ${name}`,()=>getDocFromServer(doc(roleViewer.firestore(),'spaces','role-space',name,name==='customers'?'base':'history')),'ALLOW');
       }
@@ -839,6 +845,7 @@ try {
       await testEnvironment.withSecurityRulesDisabled(context=>updateDoc(multiSpaceReference(context,'role-space'),{status:'suspended'}));
       await runCase('Roles — suspended space blocks financial reads',()=>getDocFromServer(customerReference(roleOwner,'role-space','base')),'DENY');
       await runCase('Journal performance — suspended workspace archive query denied', () => journalArchiveQuery(roleOwner), 'DENY');
+      await runCase('Archive performance — suspended workspace selected-day query denied', () => archiveDayQuery(roleOwner), 'DENY');
       await runCase('Roles — suspended space blocks customer writes',()=>updateDoc(customerReference(roleOwner,'role-space','base'),{name:'suspended write'}),'DENY');
     } finally {await roleOwner.cleanup();await roleEditor.cleanup();await roleViewer.cleanup();await roleLegacy.cleanup();}
 

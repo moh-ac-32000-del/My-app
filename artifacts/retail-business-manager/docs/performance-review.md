@@ -1,6 +1,7 @@
 # App-wide performance review — 2026-10-23
 
-Repository: `moh-ac-32000-del/My-app`, PR #62 draft only. No deploy or APK build.
+Repository: `moh-ac-32000-del/My-app`, PR #62 draft only. Review Web and compatible
+Functions were deployed on 2026-10-23; no main publication, merge or APK build.
 
 ## Confirmed redundant work corrected
 
@@ -62,3 +63,36 @@ Repository: `moh-ac-32000-del/My-app`, PR #62 draft only. No deploy or APK build
 
 The fixes remove demonstrated shared overhead; they do not prove that all reported
 slowness is resolved. Keep CI, build results and actual device acceptance separate.
+
+## Archive follow-up — 2026-10-24
+
+The user reports partial improvement, but Archive still slow. Inspection found
+that its full-page spinner still waited for the callable to read every selected-day
+source's current edit/cancel status, including unselected same-day closings.
+
+- Read immutable closings through a server-confirmed, store/date-filtered Firestore
+  listener under existing Rules. Current status checks run separately; saved values
+  are visible while an explicit localized notice says statuses are being checked.
+  This removes the status RPC from the saved-values rendering gate; it is not a
+  measured phone-speed result and does not eliminate network latency.
+- Status failure is shown as unverified, not an empty day or a verified active
+  operation. Backend authentication/authorization/precondition rejection clears
+  data. Cached/pending, malformed and cross-scope snapshots never become trusted.
+  Date/space/session/role changes and newer snapshots invalidate late results.
+- Overlay status labels only for matching closing/event/source identities; never
+  overwrite saved snapshot amounts, notes, cash balances or sharing data.
+- Deduplicated current-source reads use one transaction `getAll` batch rather than
+  one RPC per source. Same <=500 document budget and transaction authorization;
+  document billing is NOT reduced just by batching.
+- Tradeoff: selected-day closings are read once by the listener and again by the
+  status callable. Only the selected day is queried, with no polling or history
+  scan. This extra day-sized read buys earlier trustworthy rendering. Empty days
+  do not call the status backend. Partial day results never replace full export
+  coverage. No paid warm instances, Rules/index changes or accounting changes.
+- Test coverage includes selected-day query filtering/server confirmation, late
+  responses, status failure/revoked access, immutable snapshots, and real `getAll`
+  execution plus query allow/deny cases in the CI demo emulator.
+
+Long-list rendering and other navigation bottlenecks remain unmeasured on the
+user's device; this targeted fix must be practically checked before claiming the
+app-wide slowness is resolved.

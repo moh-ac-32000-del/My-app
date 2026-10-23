@@ -22,7 +22,23 @@ describe('read-time current status, immutable historical archive values', () => 
       expect(archive).toMatchObject({ operationStatuses: { 'debt:d': 'cancelled' }, snapshot: [event], closingCashBalances: [{ currency: 'TRY', amount: 300 }] });
     }
     expect(b.reads.filter(path => path === 'spaces/s/debts/d')).toHaveLength(1);
+    expect(b.batches).toEqual([['spaces/s/debts/d']]);
     expect(b.docs).toEqual(before); expect(b.writes).toHaveLength(0);
+  });
+  it('uses one batch for distinct sources, preserving type-specific labels and no writes', async () => {
+    const b = setup();
+    b.docs['spaces/s/payments/p'] = { id: 'p', workspaceId: 's', storeId: 'store', amendmentRevision: 1 };
+    b.docs['spaces/s/merchantOperations/m'] = { id: 'm', workspaceId: 's', storeId: 'store', reversedByOperationId: 'reverse' };
+    b.docs['spaces/s/dailyArchives/one'].snapshot = [event,
+      { ...event, id: 'payment:p', sourceId: 'p', type: 'settlement' },
+      { ...event, id: 'merchant:m', sourceId: 'm', type: 'merchant' }];
+    const result = await b.read();
+    expect(b.batches).toHaveLength(1);
+    expect(b.batches[0]).toHaveLength(3);
+    expect(result.archives.find(row => row.id === 'one')).toMatchObject({
+      operationStatuses: { 'payment:p': 'edited', 'merchant:m': 'cancelled' },
+    });
+    expect(b.writes).toHaveLength(0);
   });
   it('does not invent cancellation for a missing or wrong-scope source', async () => {
     for (const missing of [true,false]) {

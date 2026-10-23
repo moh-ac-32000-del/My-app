@@ -18,12 +18,17 @@ export async function annotateArchiveOperationStatuses<T extends Archive>(tx: Tr
   // Status decoration must not make an already readable historical archive disappear.
   if (paths.size > 500) return archives.map(archive => ({ ...archive, operationStatusesUnavailable: true as const }));
   const statuses = new Map<string, 'cancelled' | 'edited'>();
-  await Promise.all([...paths].map(async ([path, ref]) => {
-    const row = (await tx.get(ref)).data();
+  const references = [...paths.values()];
+  // One batch RPC, not one RPC per source. The same bounded document reads,
+  // authorization transaction and conflict retry still apply.
+  const snapshots = references.length ? await tx.getAll(...references) : [];
+  snapshots.forEach((snapshot, index) => {
+    const ref = references[index], path = ref.path;
+    const row = snapshot.data();
     if (!row || row.id !== ref.id || row.workspaceId !== space.id || row.storeId !== storeId) return;
     if (row.cancelled === true || (row.reversedByOperationId && !row.replacementOperationId)) statuses.set(path, 'cancelled');
     else if (row.replacementOperationId || (Number.isSafeInteger(row.amendmentRevision) && row.amendmentRevision > 0)) statuses.set(path, 'edited');
-  }));
+  });
   return archives.map(archive => {
     const entries = archive.snapshot.flatMap(event => { const path = source(event), status = path ? statuses.get(path) : undefined;
       return status ? [[event.id, status] as const] : []; });

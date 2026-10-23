@@ -14,6 +14,9 @@ const state = vi.hoisted(() => ({
   picker: null as any,
   web: null as any,
   load: vi.fn(),
+  statuses: vi.fn(),
+  emitArchive: null as null | ((rows: DailyArchive[]) => void),
+  failArchive: null as null | ((error: Error) => void),
   share: vi.fn(),
   store: {
     profile: { id: 'store', name: 'Test' },
@@ -82,7 +85,17 @@ vi.mock('@/components/WebDebtDateInput', () => ({
   },
 }));
 vi.mock('@/context/StoreContext', () => ({ useStore: () => state.store }));
-vi.mock('@/services/cloudDailyArchives', () => ({ loadCloudDailyArchivesForDate: state.load }));
+vi.mock('@/services/cloudDailyArchives', () => ({ loadCloudDailyArchivesForDate: state.statuses }));
+vi.mock('@/services/archiveDayFirestore', () => ({
+  subscribeArchiveDay: (space: string, store: string, date: string, publish: any, fail: any) => {
+    let active = true;
+    state.emitArchive = rows => { if (active) publish(rows); };
+    state.failArchive = error => { if (active) fail(error); };
+    state.load(space, store, date).then((rows: any) => { if (active) publish(rows); },
+      (error: any) => { if (active) fail(error); });
+    return () => { active = false; };
+  },
+}));
 vi.mock('@/services/storage', () => ({
   getLocalDateKey: (date: Date) =>
     `${String(date.getFullYear()).padStart(4, '0')}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`,
@@ -163,6 +176,7 @@ beforeEach(() => {
     initializationError: null,
   };
   state.load.mockReset().mockResolvedValue([archive]);
+  state.statuses.mockReset().mockImplementation(async () => [archive]);
   state.share.mockReset().mockResolvedValue({});
 });
 
@@ -234,6 +248,55 @@ describe('archive day scope and request races', () => {
     render(React.createElement(Probe, { date }));
     return output!;
   }
+  it('shows server-confirmed saved values without waiting for current-status reads', async () => {
+    const pending = deferred<DailyArchive[]>();
+    state.statuses.mockReturnValueOnce(pending.promise);
+    probe(); const cleanup = state.focus!(); await settle();
+    expect(probe()).toMatchObject({ archives: [archive], isLoading: false, error: false, statusesPending: true });
+    pending.resolve([{ ...archive, operationStatuses: { 'transaction:a': 'cancelled' } }]);
+    await settle();
+    expect(probe()).toMatchObject({ statusesPending: false, statusesError: false });
+    expect(output!.archives[0]).toMatchObject({ snapshot: archive.snapshot, operationStatuses: { 'transaction:a': 'cancelled' } });
+    cleanup();
+  });
+  it('invalidates pending status responses when server confirmation is lost or a newer closing arrives', async () => {
+    const old = deferred<DailyArchive[]>();
+    const fresh = deferred<DailyArchive[]>();
+    state.statuses.mockReturnValueOnce(old.promise).mockReturnValueOnce(fresh.promise);
+    probe(); state.focus!(); await settle();
+    state.failArchive!(new Error('archiveAwaitingServer'));
+    expect(probe()).toMatchObject({ archives: [], isLoading: true, error: false });
+    const newer = { ...archive, id: 'newer', closingNumber: 2 };
+    state.emitArchive!([newer]);
+    old.resolve([{ ...archive, operationStatuses: { 'transaction:a': 'cancelled' } }]);
+    await settle();
+    expect(probe()).toMatchObject({ archives: [newer], statusesPending: true });
+    fresh.resolve([newer]); await settle();
+    expect(probe()).toMatchObject({ statusesPending: false, statusesError: false });
+  });
+  it('keeps saved values readable with an explicit unverified-status error, never a false verified result', async () => {
+    state.statuses.mockRejectedValueOnce(new Error('unavailable'));
+    probe(); state.focus!(); await settle(); await settle();
+    expect(probe()).toMatchObject({ archives: [archive], isLoading: false, error: false, statusesError: true });
+  });
+  it.each(['functions/permission-denied', 'functions/unauthenticated', 'functions/failed-precondition'])(
+    'clears saved values if the backend rejects current access (%s)', async code => {
+      state.statuses.mockRejectedValueOnce({ code });
+      probe(); state.focus!(); await settle(); await settle();
+      expect(probe()).toMatchObject({ archives: [], error: true });
+    });
+  it('does not overlay statuses for a different saved source or after leaving the day', async () => {
+    state.statuses.mockResolvedValueOnce([{ ...archive, snapshot: [{ ...archive.snapshot[0], sourceId: 'wrong' }],
+      operationStatuses: { 'transaction:a': 'cancelled' } }]);
+    probe(); const cleanup = state.focus!(); await settle(); await settle();
+    expect(probe()).toMatchObject({ archives: [archive], statusesError: true });
+    cleanup();
+    const pending = deferred<DailyArchive[]>(); state.statuses.mockReturnValueOnce(pending.promise);
+    const leave = state.focus!(); await settle(); leave();
+    expect(probe('2026-10-20').archives).toEqual([]);
+    pending.resolve([{ ...archive, operationStatuses: { 'transaction:a': 'cancelled' } }]);
+    await settle(); expect(probe('2026-10-20').archives).toEqual([]);
+  });
   it('hides the previous day immediately and ignores its late response after changing dates', async () => {
     const first = deferred<DailyArchive[]>();
     const second = deferred<DailyArchive[]>();
@@ -295,6 +358,16 @@ describe('archive day scope and request races', () => {
 });
 
 describe('archive screen reuses separate immutable closings', () => {
+  it.each(['ar', 'en', 'tr'] as const)('renders saved events and a localized %s checking notice before status completion', async language => {
+    state.language = language;
+    state.statuses.mockReturnValueOnce(new Promise(() => {}));
+    const element = React.createElement(ArchiveScreen);
+    render(element); state.focus!(); await settle();
+    const html = render(element);
+    expect(html).toContain('First closing note');
+    expect(html).toContain(translate('archiveStatusesPending', language));
+    expect(html).not.toContain('archive-loading');
+  });
   it('shows every closing of the selected day separately and shares only the selected snapshot', async () => {
     const second = {
       ...archive,
