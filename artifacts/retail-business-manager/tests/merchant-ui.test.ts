@@ -120,6 +120,7 @@ import { useMerchantAccounts } from '@/hooks/useMerchantAccounts';
 import MerchantSettingsScreen from '@/app/merchant-settings';
 import { MerchantStatementModal } from '@/components/MerchantStatementModal';
 import { merchantStatementText } from '@/constants/merchantStatementText';
+import { CustomerOperationEditor } from '@/components/CustomerOperationEditor';
 function card() {
   return renderToStaticMarkup(
     React.createElement(MerchantOperationCard, { operation: useMerchantAccounts().operations[0] }),
@@ -136,6 +137,18 @@ beforeEach(() => {
   state.limited = false;
 });
 describe('merchant screens (server-rendered, not device acceptance)', () => {
+  it.each(['ar','tr','en'] as const)('provides the same single editor and nested cancellation for customers in %s', language => {
+    state.language = language;
+    const props = { selection: { kind: 'debt', target: { id: 'd', customerId: 'c', currency: 'TRY',
+      amount: 40, originalAmount: 100, note: 'Original note', createdAt: '2026-10-19T12:00:00Z', updatedAt: '2026-10-19T12:00:00Z' } }, onClose: vi.fn() };
+    const html = renderToStaticMarkup(React.createElement(CustomerOperationEditor, props as never));
+    expect(html).toContain('value="100.00"');
+    expect(html).toContain(translate('operationDebtPrincipal', language));
+    expect(html).toContain('customer-operation-cancel');
+    expect(html).not.toContain(translate('merchantReverse', language));
+    state.role = 'viewer';
+    expect(renderToStaticMarkup(React.createElement(CustomerOperationEditor, props as never))).toBe('');
+  });
   it.each(['ar', 'tr', 'en'] as const)('prefills edit fields and nests cancellation in %s', (language) => {
     state.language = language;
     const markup = renderToStaticMarkup(React.createElement(MerchantCommandForm, {

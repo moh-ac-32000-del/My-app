@@ -5,6 +5,8 @@ import { assertWorkspaceAccess } from './workspaceAccess.js';
 import { merchantOperationFromDocument } from '../../data/merchantDocuments.js';
 import { mergeMerchantJournal } from '../../data/merchantJournal.js';
 import { isArchiveDate } from '../../data/archiveCalendar.js';
+import { annotateArchiveOperationStatuses } from './archiveOperationStatuses.js';
+import { customerPaymentJournalAmount } from '../../data/customerPaymentJournal.js';
 
 type JournalEvent = {
   id: string;
@@ -21,6 +23,7 @@ type JournalEvent = {
 };
 
 type CloudPaymentRecord = {
+  cashBaseAmountExact?: unknown;
   id: string;
   createdByUserId?: unknown;
   direction?: unknown;
@@ -54,6 +57,7 @@ type ArchiveRequest = {
   date?: string;
   startAt?: string;
   endAt?: string;
+  includeCurrentStatuses?: true;
 };
 
 export interface DailyArchiveRuntime {
@@ -64,7 +68,7 @@ export interface DailyArchiveRuntime {
 export async function dailyArchiveCommandHandler(
   request: CallableRequest<ArchiveRequest>,
   runtime: DailyArchiveRuntime,
-): Promise<{ archives: ArchiveRecord[]; created?: ArchiveRecord; processedAt: string; date?: string }> {
+): Promise<{ archives: ArchiveRecord[]; created?: ArchiveRecord; processedAt: string; date?: string; currentStatusesIncluded?: true }> {
   const uid = request.auth?.uid?.trim();
   if (!uid) throw new HttpsError('unauthenticated', 'Firebase Auth is required');
   const input = validateRequest(request.data);
@@ -80,6 +84,16 @@ export async function dailyArchiveCommandHandler(
 
   const archivesRef = spaceRef.collection('dailyArchives');
   if (input.action === 'list') {
+    if (input.includeCurrentStatuses) return db.runTransaction(async tx => {
+      const [space, member, profile] = await Promise.all([tx.get(spaceRef), tx.get(memberRef), tx.get(profileRef)]);
+      authorize(space.data(), member.data(), profile.data(), 'read');
+      const snapshot = await tx.get(archivesRef.where('storeId', '==', input.storeId).where('date', '==', input.date!));
+      const archives = snapshot.docs.map(doc => normalizeArchive(doc.id, doc.data(), input.spaceId, input.storeId))
+        .filter((archive): archive is ArchiveRecord => archive !== null)
+        .sort((a,b) => b.closingNumber - a.closingNumber);
+      const annotated = await annotateArchiveOperationStatuses(tx, spaceRef, input.storeId, archives);
+      return { archives: annotated, date: input.date, currentStatusesIncluded: true as const, processedAt: runtime.now() };
+    });
     const [space, member, profile] = await Promise.all([spaceRef.get(), memberRef.get(), profileRef.get()]);
     authorize(space.data(), member.data(), profile.data(), 'read');
     const storeQuery = archivesRef.where('storeId', '==', input.storeId);
@@ -139,6 +153,9 @@ function validateRequest(value: unknown): ArchiveRequest {
     throw new HttpsError('invalid-argument', 'Archive command is invalid');
   }
   const input = value as unknown as ArchiveRequest;
+  if (input.includeCurrentStatuses !== undefined &&
+    (input.includeCurrentStatuses !== true || input.action !== 'list' || !isArchiveDate(input.date)))
+    throw new HttpsError('invalid-argument', 'Current archive statuses require one calendar day');
   if (input.action === 'list' && input.date !== undefined && !isArchiveDate(input.date)) {
     throw new HttpsError('invalid-argument', 'Archive date is invalid');
   }
@@ -241,7 +258,7 @@ export async function projectArchiveSnapshot(
       || alreadyArchivedIds.has(`settlement:${payment.id}`)) continue;
     events.push({
       id: `settlement:${payment.id}`, storeId: input.storeId, type: 'settlement',
-      amount: payment.amount?.amount, currency: payment.amount?.currency,
+      amount: customerPaymentJournalAmount(payment), currency: payment.amount?.currency,
       customerId: payment.customerId, customerName: customers.get(payment.customerId),
       ...(typeof payment.note === 'string' && payment.note ? { note: payment.note } : {}),
       occurredAt: payment.paidAt, sourceId: payment.id,

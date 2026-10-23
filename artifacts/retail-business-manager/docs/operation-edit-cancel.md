@@ -47,19 +47,41 @@ customer-and-merchant release. Do not deploy, merge, or build another APK yet.
   presentation/PDF filter. Editing reads its original and linked states only on
   explicit submission. No local financial persistence.
 
+## Customer and archive stage (source only, not deployed)
+
+- A new trusted customer command edits/cancels original debt principal or payment
+  details, with expected revision/time, sealed idempotency and current role checks.
+  It reuses exact credit/debt arithmetic. Payment accounting is determined from
+  its trusted creation receipt; a payment document alone never proves settlement.
+  Cash changes use validated unique original links, not descriptive payment methods.
+  Linked merchant operations must be edited together at their merchant source.
+  Journal/archive projections retain the original drawer posting amount alongside
+  explicit current-period cash differences, so an edit cannot count twice.
+- Existing source posting timestamps and historical archives are preserved.
+  Account/cash differences are applied atomically in the current period; receipts
+  preserve prior values and actors. Restored debt is linked to its source payment.
+  Old-client debt updates cannot bypass the new correction/revision workflow.
+- Customer rows offer small Edit actions with nested cancellation. Viewer has no
+  edit controls. Uncertain requests retain the same ID/payload for retry; scope
+  changes and late replies cannot show success in another workspace.
+- Selected-day archive reads can annotate current Cancelled/Edited status without
+  changing saved event amounts. Sources are deduplicated and bounded to 500; larger
+  days retain archive access with an explicit status-unavailable notice. These are
+  additional reads on explicit day selection only, not startup or local export.
+  Rollout must deploy the day-read backend before this client (acknowledgement gate).
+- Confirmed customer navigation gate: reminder fetching blocked the whole account
+  and refetched on any debt/payment array update. Financial data now renders once
+  its existing authoritative contexts are ready; reminders load separately, with
+  scoped results and explicit loading/error/retry. No local financial fallback.
+  This removes an unnecessary wait, not a measured device speedup. Merchant pages
+  use separate scoped live subscriptions; their latency is not yet measured.
+
 ## Required before this overall request is complete
 
-1. Implement standalone customer debt/payment editing and cancellation with
-   reliable provenance: a generic Payment document is not proof that it reduced
-   debt. `createPayment` and `settleCustomerDebt` have different accounting effects.
-   Do not infer allocation or reverse one side of a merchant settlement.
-2. Add status annotations when viewing already-closed archive snapshots without
-   rewriting those snapshots. A current merchant-account Cancelled badge alone
-   does not satisfy the requested historical archive status.
-3. Profile actual page-open/save latency and distinguish cold callable starts,
-   server reads and UI rendering before proposing a narrowly scoped optimization.
-4. Complete emulator/CI checks and authenticated review of all operation types,
+1. Profile actual merchant/page-open latency and distinguish server reads from UI
+   rendering before proposing another narrowly scoped optimization.
+2. Complete current-source emulator/CI checks and authenticated review of all operation types,
    uncertain retry, role revocation and race conditions; inspect native/web layout
    and an actual generated PDF. Unit tests/HTML assertions are not device/PDF QA.
-5. Ask for deployment only after these remaining items and review; no main-site
+3. Ask for deployment only after these remaining items and review; no main-site
    publish, Firebase login, paid backup activation or additional APK in this stage.

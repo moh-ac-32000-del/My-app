@@ -11,10 +11,14 @@ export function MerchantDateField({
   value,
   onChange,
   disabled,
+  label,
+  showPostingHint = true,
 }: {
   value: string;
   onChange: (value: string) => void;
   disabled: boolean;
+  label?: string;
+  showPostingHint?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const colors = useColors();
@@ -22,13 +26,13 @@ export function MerchantDateField({
   return (
     <View style={{ gap: 8 }}>
       <Text style={{ color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' }}>
-        {t('merchantOperationDate')}
+        {label ?? t('merchantOperationDate')}
       </Text>
       {Platform.OS === 'web' ? (
         <WebDebtDateInput
           value={value}
           onChange={onChange}
-          label={t('merchantOperationDate')}
+          label={label ?? t('merchantOperationDate')}
           disabled={disabled}
           testID="merchant-operation-date"
           style={{
@@ -59,9 +63,9 @@ export function MerchantDateField({
           ) : null}
         </>
       )}
-      <Text style={{ color: colors.mutedForeground, fontSize: 12, textAlign: isRTL ? 'right' : 'left' }}>
+      {showPostingHint ? <Text style={{ color: colors.mutedForeground, fontSize: 12, textAlign: isRTL ? 'right' : 'left' }}>
         {t('merchantDateHint')}
-      </Text>
+      </Text> : null}
     </View>
   );
 }

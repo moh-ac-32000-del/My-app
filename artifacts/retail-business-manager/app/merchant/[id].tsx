@@ -17,11 +17,11 @@ import { useI18n } from '@/hooks/useI18n';
 import type { MerchantDraftCommand, MerchantOperation } from '@/types/merchant';
 
 export default function MerchantScreen() {
-  const params = useLocalSearchParams<{ id: string }>();
+  const params = useLocalSearchParams<{ id: string; operationId?: string }>();
   const id = typeof params.id === 'string' ? params.id : '';
-  return <MerchantDetail key={id} id={id} />;
+  return <MerchantDetail key={id} id={id} operationId={typeof params.operationId === 'string' ? params.operationId : undefined} />;
 }
-function MerchantDetail({ id }: { id: string }) {
+function MerchantDetail({ id, operationId }: { id: string; operationId?: string }) {
   const { canWriteBusiness, profile, sessionKey, activeSpaceId } = useStore();
   const {
     merchants,
@@ -40,7 +40,7 @@ function MerchantDetail({ id }: { id: string }) {
   const [menu, setMenu] = useState(false),
     [confirmed, setConfirmed] = useState(false),
     [currency, setCurrency] = useState('');
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(operationId ?? null);
   const [statementOpen, setStatementOpen] = useState(false);
   const [form, setForm] = useState<{
     action: MerchantDraftCommand['action'];

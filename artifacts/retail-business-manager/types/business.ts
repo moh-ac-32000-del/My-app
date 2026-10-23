@@ -76,7 +76,16 @@ export interface Transaction extends StoreScopedEntity {
 export type PaymentDirection = 'in' | 'out';
 export type PaymentMethod = 'cash' | 'card' | 'bank-transfer' | 'other';
 
-export interface Payment extends BusinessEntity {
+export interface OperationCorrectionMetadata {
+  operationDate?: string;
+  cancelled?: boolean;
+  amendmentRevision?: number;
+  customerAmendmentId?: string;
+}
+
+export interface Payment extends BusinessEntity, OperationCorrectionMetadata {
+  /** Trusted original cash posting; corrections have separate current-period cash entries. */
+  cashBaseAmountExact?: string;
   amount: MoneyValue;
   direction: PaymentDirection;
   method: PaymentMethod;
@@ -104,9 +113,12 @@ export interface DailyArchive {
   periodEndAt?: string;
   timeZone?: string;
   snapshot: import('@/services/storage').DailyJournalEvent[];
+  /** Read-time status annotations only; never persisted as a replacement snapshot. */
+  operationStatuses?: Record<string, 'cancelled' | 'edited'>;
+  operationStatusesUnavailable?: true;
 }
 
-export interface Debt extends BusinessEntity {
+export interface Debt extends BusinessEntity, OperationCorrectionMetadata {
   customerId: string;
   currency: CurrencyCode;
   amount: number;
@@ -115,6 +127,7 @@ export interface Debt extends BusinessEntity {
   creditAppliedExact?: string;
   merchantOperationId?: string;
   correctionOfMerchantOperationId?: string;
+  correctionOfPaymentId?: string;
   note?: string;
   dueDate?: string;
   originalAmount?: number;

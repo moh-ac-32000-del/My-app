@@ -71,10 +71,10 @@ describe('cloud daily archive client', () => {
   it('requests exactly one day, retaining all its closings without claiming complete export coverage', async () => {
     const second = { ...archive, id: 'second', closingNumber: 2 };
     firebaseMocks.callable.mockResolvedValueOnce({ data: {
-      date: archive.date, archives: [second, archive], processedAt: archive.closedAt,
+      date: archive.date, currentStatusesIncluded: true, archives: [second, archive], processedAt: archive.closedAt,
     } });
     expect(await loadCloudDailyArchivesForDate('space-a', 'store-a', archive.date)).toEqual([second, archive]);
-    expect(firebaseMocks.callable).toHaveBeenCalledWith({ action: 'list', spaceId: 'space-a', storeId: 'store-a', date: archive.date });
+    expect(firebaseMocks.callable).toHaveBeenCalledWith({ action: 'list', spaceId: 'space-a', storeId: 'store-a', date: archive.date, includeCurrentStatuses: true });
     expect(firebaseMocks.observe).not.toHaveBeenCalled();
     expect(firebaseMocks.rememberArchives).not.toHaveBeenCalled();
     await loadCloudDailyArchives('space-a', 'store-a');
@@ -99,7 +99,7 @@ describe('cloud daily archive client', () => {
   });
 
   it('accepts a confirmed empty day, but propagates a failed read rather than inventing an empty result', async () => {
-    firebaseMocks.callable.mockResolvedValueOnce({ data: { date: archive.date, archives: [], processedAt: archive.closedAt } });
+    firebaseMocks.callable.mockResolvedValueOnce({ data: { date: archive.date, currentStatusesIncluded: true, archives: [], processedAt: archive.closedAt } });
     expect(await loadCloudDailyArchivesForDate('space-a', 'store-a', archive.date)).toEqual([]);
     firebaseMocks.callable.mockRejectedValueOnce(new Error('unavailable'));
     await expect(loadCloudDailyArchivesForDate('space-a', 'store-a', archive.date)).rejects.toThrow('unavailable');

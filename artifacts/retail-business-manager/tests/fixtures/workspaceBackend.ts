@@ -68,7 +68,7 @@ export function workspaceBackend(role: unknown = 'owner') {
               path.split('/').length === reference.path.split('/').length + 1 &&
               reference.filters.every(([field, op, value]: Filter) =>
                 op === '=='
-                  ? data[field] === value
+                  ? field.split('.').reduce((entry, key) => entry?.[key], data) === value
                   : op === '>'
                     ? data[field] > value
                   : op === '>='

@@ -120,11 +120,21 @@ export async function prepareMerchantReversal({
   let customerDetails: Record<string, unknown> = {};
   let credit: Awaited<ReturnType<typeof readCustomerCredit>> | null = null;
   let charge: ReturnType<typeof planCustomerCharge> | null = null;
+  let originalPaymentRef: DocumentReference | null = null;
   const debtRef = space.collection('debts').doc(linkedId);
   if (original.action === 'directPayment') {
     if (typeof original.customerId !== 'string' || !original.customerId || original.customerId.includes('/')) {
       throw new HttpsError('data-loss', 'Original customer is invalid');
     }
+    if (typeof original.paymentId !== 'string' || !original.paymentId || original.paymentId.includes('/'))
+      throw new HttpsError('data-loss', 'Original linked payment is missing');
+    originalPaymentRef = space.collection('payments').doc(original.paymentId);
+    const originalPayment = (await tx.get(originalPaymentRef)).data();
+    if (!originalPayment || originalPayment.workspaceId !== input.spaceId || originalPayment.storeId !== input.storeId ||
+      originalPayment.customerId !== original.customerId || originalPayment.merchantId !== input.merchantId ||
+      originalPayment.merchantOperationId !== input.targetOperationId || originalPayment.source !== 'customer-to-merchant' ||
+      originalPayment.amount?.currency !== input.currency || originalPayment.amountExact !== original.amountExact || originalPayment.cancelled)
+      throw new HttpsError('data-loss', 'Original linked payment is inconsistent');
     const customerSnap = await tx.get(space.collection('customers').doc(original.customerId));
     const customer = customerSnap.data();
     if (
@@ -181,6 +191,8 @@ export async function prepareMerchantReversal({
   // Preparation performs every read. An edit may now prepare its replacement before
   // applying either half; a failure cannot leave an original cancelled on its own.
   const apply = () => {
+  if (originalPaymentRef) tx.update(originalPaymentRef, { cancelled: true, updatedAt: now, updatedByUserId: uid,
+    cancelledByMerchantOperationId: input.operationId });
   if (charge && credit && correctionDebt) {
     tx.create(debtRef, correctionDebt);
     writeCustomerCredit(tx, credit, charge.creditExact, uid, now);

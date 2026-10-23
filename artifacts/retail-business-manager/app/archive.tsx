@@ -158,6 +158,7 @@ export default function ArchiveScreen() {
                 )}
                 <Text style={[styles.shareButtonText, { color: colors.primaryForeground }]}>{t('shareArchive')}</Text>
               </Pressable>
+              {selectedArchive.operationStatusesUnavailable ? <Text style={{ color: colors.mutedForeground }}>{t('archiveStatusesUnavailable')}</Text> : null}
               {selectedArchive.snapshot.length === 0 ? (
                 <EmptyState icon="receipt-outline" title={t('archiveNoEvents')} hint={selectedArchive.date} />
               ) : (
@@ -184,6 +185,9 @@ export default function ArchiveScreen() {
                               {getEventTitle(event)} — {journalEventMoney(event, language)}
                             </Text>
                             <ActorBadge userId={event.createdByUserId} />
+                            {selectedArchive.operationStatuses?.[event.id] ? <Text style={[styles.eventNote, { color: colors.mutedForeground }]}>
+                              {t('archiveCurrentStatus')}: {t(selectedArchive.operationStatuses[event.id] === 'cancelled' ? 'operationCancelled' : 'operationSuperseded')}
+                            </Text> : null}
                             {journalEventDetails(event, language, t).map((detail, index) => (
                               <Text
                                 key={`${event.id}:${index}`}

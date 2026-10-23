@@ -100,6 +100,9 @@ export async function trustedDebtCommandHandler(
       }
       if (input.action === 'update') {
         const current = debtSnap.data() ?? {};
+        if (current.cancelled || current.customerAmendmentId) {
+          throw new HttpsError('failed-precondition', 'Use the current operation editor for this corrected debt', { code: 'CURRENT_EDITOR_REQUIRED' });
+        }
         if (
           current.workspaceId !== input.spaceId ||
           current.storeId !== input.storeId ||
