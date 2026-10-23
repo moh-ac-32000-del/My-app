@@ -1,4 +1,5 @@
 import type { Language, TranslationKey } from '@/constants/i18n';
+import { numberFormatter } from '../data/intlFormatters';
 
 export type CurrencyCode = 'TRY' | 'USD' | 'EUR' | 'GBP' | 'SAR' | 'AED' | 'SYP';
 export type CurrencyPlacement = 'before' | 'after';
@@ -73,10 +74,10 @@ export function formatMoney(
 ): string {
   const currency = getCurrency(code);
   const locale = language === 'ar' ? 'ar' : language === 'tr' ? 'tr-TR' : 'en-US';
-  const formattedAmount = amount.toLocaleString(locale, {
+  const formattedAmount = numberFormatter(locale, {
     minimumFractionDigits: 0,
     maximumFractionDigits: 2,
-  });
+  }).format(amount);
   return currency.placement === 'before'
     ? `${currency.symbol} ${formattedAmount}`
     : `${formattedAmount} ${currency.symbol}`;

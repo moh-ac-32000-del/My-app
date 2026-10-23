@@ -1,3 +1,5 @@
+import { dateTimeFormatter } from '../data/intlFormatters';
+
 export type Language = 'ar' | 'en' | 'tr';
 
 const ar = {
@@ -1439,12 +1441,12 @@ export function isRTL(language: Language): boolean {
 
 export function formatLocalizedDate(date: Date, language: Language): string {
   const locale = language === 'ar' ? 'ar' : language === 'tr' ? 'tr-TR' : 'en-US';
-  return new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'long', year: 'numeric' }).format(date);
+  return dateTimeFormatter(locale, { day: 'numeric', month: 'long', year: 'numeric' }).format(date);
 }
 
 export function formatLocalizedDateTime(date: Date, language: Language, timeZone?: string): string {
   const locale = language === 'ar' ? 'ar' : language === 'tr' ? 'tr-TR' : 'en-US';
-  return new Intl.DateTimeFormat(locale, {
+  return dateTimeFormatter(locale, {
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
@@ -1456,7 +1458,7 @@ export function formatLocalizedDateTime(date: Date, language: Language, timeZone
 
 export function formatLocalizedTime(date: Date, language: Language, timeZone?: string): string {
   const locale = language === 'ar' ? 'ar' : language === 'tr' ? 'tr-TR' : 'en-US';
-  return new Intl.DateTimeFormat(locale, {
+  return dateTimeFormatter(locale, {
     hour: '2-digit',
     minute: '2-digit',
     ...(timeZone ? { timeZone } : {}),

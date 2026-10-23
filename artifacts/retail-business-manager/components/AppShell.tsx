@@ -86,7 +86,7 @@ export function AppShell({ children, scroll = true }: { children: ReactNode; scr
               <Pressable
                 key={item.path}
                 testID={`nav-${item.label}`}
-                  onPress={() => router.replace(item.path as never)}
+                  onPress={() => { if (pathname !== item.path) router.replace(item.path as never); }}
                 style={({ pressed }) => [styles.navItem, pressed && styles.pressed]}
               >
                 <View style={[styles.navIcon, active && { backgroundColor: colors.accent }]}>

@@ -88,15 +88,15 @@ async function send(input: {
     !Array.isArray(data.archives) ||
     typeof data.processedAt !== 'string' ||
     !Number.isFinite(Date.parse(data.processedAt)) ||
-    !data.archives.every((archive) => isValidArchive(archive, spaceId, storeId)) ||
-    (data.created !== undefined && !isValidArchive(data.created, spaceId, storeId))
+    !data.archives.every((archive) => isValidCloudDailyArchive(archive, spaceId, storeId)) ||
+    (data.created !== undefined && !isValidCloudDailyArchive(data.created, spaceId, storeId))
   ) {
     throw new Error('invalidCloudDailyArchiveResponse');
   }
   return data;
 }
 
-function isValidArchive(
+export function isValidCloudDailyArchive(
   value: unknown,
   spaceId: string,
   storeId: string,

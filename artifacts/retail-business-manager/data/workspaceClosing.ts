@@ -1,3 +1,5 @@
+import { dateTimeFormatter } from './intlFormatters';
+
 /** Prepared metadata only. Saving this does not enable a scheduler or re-date any record. */
 export interface WorkspaceClosingSettings {
   timeZone: string;
@@ -13,7 +15,7 @@ export function canonicalTimeZone(value: unknown): string {
     throw new Error('invalidWorkspaceTimeZone');
   }
   try {
-    return new Intl.DateTimeFormat('en', { timeZone: value }).resolvedOptions().timeZone;
+    return dateTimeFormatter('en', { timeZone: value }).resolvedOptions().timeZone;
   } catch {
     throw new Error('invalidWorkspaceTimeZone');
   }
@@ -49,7 +51,7 @@ export function closingSettings(value?: unknown): WorkspaceClosingSettings {
 
 export function workspaceDateKey(instant: Date, timeZone: string): string {
   if (!Number.isFinite(instant.getTime())) throw new Error('invalidBusinessInstant');
-  const parts = new Intl.DateTimeFormat('en-CA', {
+  const parts = dateTimeFormatter('en-CA', {
     timeZone: canonicalTimeZone(timeZone),
     calendar: 'iso8601',
     numberingSystem: 'latn',

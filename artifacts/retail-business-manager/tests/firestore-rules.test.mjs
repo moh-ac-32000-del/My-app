@@ -11,6 +11,8 @@ import {
   getDoc,
   getDocFromServer,
   getDocs,
+  query,
+  where,
   setDoc,
   updateDoc,
 } from 'firebase/firestore';
@@ -797,7 +799,14 @@ try {
     const roleEditor=testEnvironment.authenticatedContext('role-editor');
     const roleViewer=testEnvironment.authenticatedContext('role-viewer');
     const roleLegacy=testEnvironment.authenticatedContext('role-legacy');
+    const journalArchiveQuery = context => getDocs(query(
+      collection(context.firestore(), 'spaces', 'role-space', 'dailyArchives'), where('storeId', '==', 'store-A')));
     try {
+      for (const [role, context] of [['owner', roleOwner], ['editor', roleEditor], ['viewer', roleViewer]]) {
+        await runCase(`Journal performance — ${role} may observe archive query`, () => journalArchiveQuery(context), 'ALLOW');
+      }
+      await runCase('Journal performance — anonymous archive query denied', () => journalArchiveQuery(anonymous), 'DENY');
+      await runCase('Journal performance — legacy role archive query denied', () => journalArchiveQuery(roleLegacy), 'DENY');
       for(const name of ['customers','debts','payments','transactions','dailyArchives']) {
         await runCase(`Roles — viewer reads ${name}`,()=>getDocFromServer(doc(roleViewer.firestore(),'spaces','role-space',name,name==='customers'?'base':'history')),'ALLOW');
       }
@@ -822,12 +831,14 @@ try {
       await runCase('Roles — downgrade blocks the next direct write on the same device',()=>updateDoc(customerReference(roleEditor,'role-space','editor-created'),{name:'after downgrade'}),'DENY');
       await testEnvironment.withSecurityRulesDisabled(context=>deleteDoc(memberReference(context,'role-space','role-editor')));
       await runCase('Roles — removal blocks server reads despite stale discovery',()=>getDocFromServer(customerReference(roleEditor,'role-space','base')),'DENY');
+      await runCase('Journal performance — removed editor archive query denied', () => journalArchiveQuery(roleEditor), 'DENY');
       await runCase('Roles — removal retains historical actor and amount',async()=>{
         const saved=await getDocFromServer(doc(roleOwner.firestore(),'spaces','role-space','payments','history'));
         if(saved.data()?.createdByUserId!=='role-editor'||saved.data()?.amount!==100)throw new Error('Historical data changed');
       },'ALLOW');
       await testEnvironment.withSecurityRulesDisabled(context=>updateDoc(multiSpaceReference(context,'role-space'),{status:'suspended'}));
       await runCase('Roles — suspended space blocks financial reads',()=>getDocFromServer(customerReference(roleOwner,'role-space','base')),'DENY');
+      await runCase('Journal performance — suspended workspace archive query denied', () => journalArchiveQuery(roleOwner), 'DENY');
       await runCase('Roles — suspended space blocks customer writes',()=>updateDoc(customerReference(roleOwner,'role-space','base'),{name:'suspended write'}),'DENY');
     } finally {await roleOwner.cleanup();await roleEditor.cleanup();await roleViewer.cleanup();await roleLegacy.cleanup();}
 

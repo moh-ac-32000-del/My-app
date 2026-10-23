@@ -1,7 +1,6 @@
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { readFileSync } from 'node:fs';
-import { URL } from 'node:url';
+import customerDetailsSource from '../app/customer/[id].tsx?raw';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { translate } from '@/constants/i18n';
 
@@ -76,7 +75,7 @@ describe('customer page independent reminder loading (SSR contract, not device t
     expect(html).not.toContain(translate('remindersEmpty', 'en'));
   });
   it('does not requery reminders on debt/payment snapshots, and scopes late results', () => {
-    const source = readFileSync(new URL('../app/customer/[id].tsx', import.meta.url), 'utf8');
+    const source = customerDetailsSource;
     const effect = source.slice(source.indexOf('  useFocusEffect('), source.indexOf('  const updateCustomer'));
     expect(effect).not.toContain('workspaceDebts');
     expect(effect).not.toContain('workspacePayments');
