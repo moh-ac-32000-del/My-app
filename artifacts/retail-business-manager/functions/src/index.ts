@@ -13,6 +13,7 @@ import { createReminderRuntime, reminderCommandHandler } from './reminderCommand
 import { createDailyArchiveRuntime, dailyArchiveCommandHandler } from './dailyArchiveCommand.js';
 import { workspaceCommandHandler } from './workspaceCommand.js';
 import { merchantCommandHandler } from './merchantCommand.js';
+import { customerOperationCommandHandler } from './customerOperationCommand.js';
 import { merchantSettingsCommandHandler } from './merchantSettingsCommand.js';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { defineBoolean } from 'firebase-functions/params';
@@ -27,6 +28,10 @@ const notificationDispatchReady = defineBoolean('NOTIFICATION_DISPATCH_READY', {
 initializeApp();
 
 const firestore = getFirestore();
+// Registration only; deploy with its reviewed editor and current-writer guards.
+export const customerOperationCommand = onCall({ invoker: 'public', minInstances: 0, maxInstances: 2, timeoutSeconds: 60 },
+  request => customerOperationCommandHandler(request, { firestore, now: () => new Date().toISOString() }),
+);
 export const merchantSettingsCommand = onCall({ invoker: 'public', minInstances: 0, maxInstances: 2, timeoutSeconds: 60 },
   (request) => merchantSettingsCommandHandler(request, { firestore, now: () => new Date().toISOString() }),
 );

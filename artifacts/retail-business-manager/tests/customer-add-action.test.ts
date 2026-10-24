@@ -51,7 +51,7 @@ vi.mock('react-native', () => ({
 vi.mock('@expo/vector-icons', () => ({ Ionicons: () => null }));
 vi.mock('expo-router', () => ({ useRouter: () => ({ push: vi.fn() }) }));
 vi.mock('@/components/AppShell', () => ({
-  AppShell: ({ children }: any) => React.createElement('main', null, children),
+  AppShell: ({ children, overlay }: any) => React.createElement('main', null, children, overlay),
   PageHeader: ({ title, action }: any) => React.createElement('header', null, title, action),
   GlassCard: ({ children }: any) => React.createElement('section', null, children),
   SectionTitle: () => null,

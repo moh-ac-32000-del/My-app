@@ -2,6 +2,7 @@ import { addCustomerExact, subtractCustomerExact } from './customerCreditAccount
 import { localMerchantDate, merchantOperationDate } from './merchantSettings';
 import type { CurrencyCode } from '../constants/currencies';
 import type { MerchantOperation } from '../types/merchant';
+import { hiddenMerchantStatementOperations } from './merchantStatementVisibility';
 
 export interface StatementProof {
   currency: CurrencyCode;
@@ -86,6 +87,8 @@ export function merchantStatement(input: {
     if (subtractCustomerExact(delta, proof.balanceExact) !== '0.00') fail();
   }
   if (input.operations.some((row) => !input.proof.some((proof) => proof.currency === row.currency))) fail();
+  // Raw history must pass the server completeness proof BEFORE the presentation filter.
+  const hidden = hiddenMerchantStatementOperations(input.operations, input.to);
   const result: MerchantStatement = {
     rows: [],
     totals: input.proof.map((row) => ({
@@ -99,6 +102,7 @@ export function merchantStatement(input: {
   };
   const sorted = [...ids.values()].sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
   for (const operation of sorted) {
+    if (hidden.has(operation.id)) continue;
     const recordedDate = localMerchantDate(new Date(operation.createdAt));
     const totals = result.totals.find((row) => row.currency === operation.currency)!;
     const delta = subtractCustomerExact(operation.balanceAfterExact, operation.balanceBeforeExact);
@@ -112,7 +116,7 @@ export function merchantStatement(input: {
       recordedDate,
       currency: operation.currency,
       method: operation.paymentMethodName ?? '',
-      corrected: !!operation.reversedByOperationId,
+      corrected: false,
     };
     let purchases = '0.00',
       payments = '0.00',

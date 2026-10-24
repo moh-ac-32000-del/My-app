@@ -52,6 +52,16 @@ const transaction: Transaction = {
 };
 
 describe('Transaction Firestore service', () => {
+  it('retains same-workspace payment correction attribution without changing cash values', () => {
+    const metadata = { workspaceId: 'space-A', customerId: 'c', correctionOfPaymentId: 'p', customerAmendmentId: 'edit' };
+    expect(normalizeTransactionDocument(transaction.id, { ...transaction, ...metadata }, 'space-A'))
+      .toMatchObject({ customerId: 'c', correctionOfPaymentId: 'p', customerAmendmentId: 'edit', amount: 125, type: 'cash_in' });
+    for (const invalid of [{ workspaceId: 'other' }, { customerId: 'bad/id' }, { correctionOfPaymentId: '' }, { customerAmendmentId: null }]) {
+      const row = normalizeTransactionDocument(transaction.id, { ...transaction, ...metadata, ...invalid }, 'space-A');
+      expect(row).toMatchObject({ amount: 125, type: 'cash_in' });
+      expect(row).not.toHaveProperty('correctionOfPaymentId');
+    }
+  });
   it('retains the optional trusted creator for name attribution without fabricating legacy authors', () => {
     expect(normalizeTransactionDocument(transaction.id, { ...transaction, createdByUserId: 'u' }, 'space-A')).toMatchObject({ createdByUserId: 'u' });
     expect(normalizeTransactionDocument(transaction.id, transaction, 'space-A')).not.toHaveProperty('createdByUserId');

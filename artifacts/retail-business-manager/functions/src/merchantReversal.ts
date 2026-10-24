@@ -11,7 +11,7 @@ import { readCustomerCredit, writeCustomerCredit } from './customerCreditState.j
  * Keep original values and archived snapshots intact. The offset is a new current-period entry.
  * Caller has freshly authorized canonical workspace/store/merchant membership before invoking this.
  */
-export async function reverseMerchantOperation({
+export async function prepareMerchantReversal({
   tx,
   space,
   balanceRef,
@@ -38,6 +38,8 @@ export async function reverseMerchantOperation({
     currency: CurrencyCode;
     targetOperationId: string;
     reason: string;
+    replacementOperationId?: string;
+    cancelled?: true;
   };
 }) {
   const originalRef = space.collection('merchantOperations').doc(input.targetOperationId);
@@ -73,7 +75,7 @@ export async function reverseMerchantOperation({
     );
     cashDeltaExact = subtractCustomerExact('0.00', original.cashDeltaExact);
     amountExact = original.action === 'purchase' ? original.totalExact
-      : original.action === 'opening' ? original.balanceAfterExact : original.amountExact;
+      : original.action === 'opening' ? subtractCustomerExact(original.balanceAfterExact, original.balanceBeforeExact) : original.amountExact;
     summarizeMerchantBalances(input.spaceId, [{ ...balance, balance: amountExact }]);
     summarizeMerchantBalances(input.spaceId, [{ ...balance, balance: next }]);
   } catch {
@@ -118,11 +120,21 @@ export async function reverseMerchantOperation({
   let customerDetails: Record<string, unknown> = {};
   let credit: Awaited<ReturnType<typeof readCustomerCredit>> | null = null;
   let charge: ReturnType<typeof planCustomerCharge> | null = null;
+  let originalPaymentRef: DocumentReference | null = null;
   const debtRef = space.collection('debts').doc(linkedId);
   if (original.action === 'directPayment') {
     if (typeof original.customerId !== 'string' || !original.customerId || original.customerId.includes('/')) {
       throw new HttpsError('data-loss', 'Original customer is invalid');
     }
+    if (typeof original.paymentId !== 'string' || !original.paymentId || original.paymentId.includes('/'))
+      throw new HttpsError('data-loss', 'Original linked payment is missing');
+    originalPaymentRef = space.collection('payments').doc(original.paymentId);
+    const originalPayment = (await tx.get(originalPaymentRef)).data();
+    if (!originalPayment || originalPayment.workspaceId !== input.spaceId || originalPayment.storeId !== input.storeId ||
+      originalPayment.customerId !== original.customerId || originalPayment.merchantId !== input.merchantId ||
+      originalPayment.merchantOperationId !== input.targetOperationId || originalPayment.source !== 'customer-to-merchant' ||
+      originalPayment.amount?.currency !== input.currency || originalPayment.amountExact !== original.amountExact || originalPayment.cancelled)
+      throw new HttpsError('data-loss', 'Original linked payment is inconsistent');
     const customerSnap = await tx.get(space.collection('customers').doc(original.customerId));
     const customer = customerSnap.data();
     if (
@@ -158,9 +170,7 @@ export async function reverseMerchantOperation({
       customerCreditAfterExact: charge.creditExact,
     };
   }
-  // No reads after this point. The original operation and both parties commit together.
-  if (charge && credit) {
-    tx.create(debtRef, {
+  const correctionDebt = charge && credit ? {
       id: linkedId,
       ...scope,
       customerId: original.customerId,
@@ -177,10 +187,20 @@ export async function reverseMerchantOperation({
       updatedAt: now,
       createdByUserId: uid,
       updatedByUserId: uid,
-    });
+    } : null;
+  // Preparation performs every read. An edit may now prepare its replacement before
+  // applying either half; a failure cannot leave an original cancelled on its own.
+  const apply = () => {
+  if (originalPaymentRef) tx.update(originalPaymentRef, { cancelled: true, updatedAt: now, updatedByUserId: uid,
+    cancelledByMerchantOperationId: input.operationId });
+  if (charge && credit && correctionDebt) {
+    tx.create(debtRef, correctionDebt);
     writeCustomerCredit(tx, credit, charge.creditExact, uid, now);
   }
-  tx.update(originalRef, { reversedByOperationId: input.operationId, reversedAt: now, reversedByUserId: uid });
+  tx.update(originalRef, { reversedByOperationId: input.operationId, reversedAt: now, reversedByUserId: uid,
+    ...(input.replacementOperationId ? { replacementOperationId: input.replacementOperationId } : {}),
+    ...(input.cancelled ? { cancelled: true } : {}),
+  });
   tx.set(balanceRef, {
     id: balanceRef.id,
     ...scope,
@@ -203,6 +223,8 @@ export async function reverseMerchantOperation({
     amountExact,
     reversesOperationId: input.targetOperationId,
     reason: input.reason,
+    ...(input.replacementOperationId ? { replacementOperationId: input.replacementOperationId } : {}),
+    ...(input.cancelled ? { cancelled: true } : {}),
     note: input.reason,
     balanceBeforeExact: balance.balance,
     balanceAfterExact: next,
@@ -228,12 +250,22 @@ export async function reverseMerchantOperation({
       updatedAt: now,
       createdByUserId: uid,
     });
-  return {
+  };
+  return { apply, correctionDebt: correctionDebt ? { ref: debtRef, data: correctionDebt } : null,
+    customerCredit: credit && charge ? { ...credit, amount: charge.creditExact, revision: credit.revision + 1,
+      createdAt: credit.createdAt ?? now, createdByUserId: credit.createdByUserId ?? uid } : null,
+    result: {
     outcome: 'completed',
     merchantId: input.merchantId,
     operationId: input.operationId,
     balanceExact: next,
     cashDeltaExact,
     processedAt: now,
-  };
+  } };
+}
+
+export async function reverseMerchantOperation(input: Parameters<typeof prepareMerchantReversal>[0]) {
+  const plan = await prepareMerchantReversal(input);
+  plan.apply();
+  return plan.result;
 }

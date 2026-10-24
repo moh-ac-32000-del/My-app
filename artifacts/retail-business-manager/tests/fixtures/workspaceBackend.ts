@@ -55,6 +55,7 @@ export function workspaceBackend(role: unknown = 'owner') {
   };
   const reads: string[] = [];
   const writes: string[] = [];
+  const batches: string[][] = [];
   let conflict: (() => void) | null = null;
   let queue = Promise.resolve();
   const snapshot = (reference: any): any => {
@@ -68,7 +69,7 @@ export function workspaceBackend(role: unknown = 'owner') {
               path.split('/').length === reference.path.split('/').length + 1 &&
               reference.filters.every(([field, op, value]: Filter) =>
                 op === '=='
-                  ? data[field] === value
+                  ? field.split('.').reduce((entry, key) => entry?.[key], data) === value
                   : op === '>'
                     ? data[field] > value
                   : op === '>='
@@ -129,6 +130,11 @@ export function workspaceBackend(role: unknown = 'owner') {
                   : value!;
           });
         const result = await fn({
+          getAll: async (...references: any[]) => {
+            if (pending.length) throw new Error('Reads must precede writes');
+            batches.push(references.map(reference => reference.path));
+            return references.map(snapshot);
+          },
           get: async (reference: any) => {
             if (pending.length) throw new Error('Reads must precede writes');
             return snapshot(reference);
@@ -158,6 +164,7 @@ export function workspaceBackend(role: unknown = 'owner') {
     docs,
     reads,
     writes,
+    batches,
     db,
     runtime: { firestore: db as never, now: () => now },
     retryOnce(change: () => void) {

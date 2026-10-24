@@ -13,6 +13,7 @@ export interface DailyJournalEvent {
   currency: CurrencyCode;
   customerId?: string;
   customerName?: string;
+  correctionOfPaymentId?: string;
   note?: string;
   operationDate?: string;
   paymentMethodId?: string;

@@ -11,6 +11,7 @@ interface DailyArchiveCommandResponse {
   created?: DailyArchive & { workspaceId: string };
   processedAt: string;
   date?: string;
+  currentStatusesIncluded?: true;
 }
 
 let functions: Functions | null = null;
@@ -29,9 +30,9 @@ export async function loadCloudDailyArchivesForDate(
   date: string,
 ): Promise<DailyArchive[]> {
   if (!isArchiveDate(date)) throw new Error('archiveDateInvalid');
-  const data = await send({ action: 'list', spaceId, storeId, date });
+  const data = await send({ action: 'list', spaceId, storeId, date, includeCurrentStatuses: true });
   // Fail closed on old servers that ignore the filter, even when their result happens to be empty.
-  if (data.date !== date || data.archives.some((archive) => archive.date !== date)) {
+  if (data.date !== date || data.currentStatusesIncluded !== true || data.archives.some((archive) => archive.date !== date)) {
     throw new Error('invalidCloudDailyArchiveResponse');
   }
   return data.archives;
@@ -68,6 +69,7 @@ async function send(input: {
   date?: string;
   startAt?: string;
   endAt?: string;
+  includeCurrentStatuses?: true;
 }): Promise<DailyArchiveCommandResponse> {
   if (!isFirebaseConfigured) throw new Error('firebaseNotConfigured');
   const spaceId = input.spaceId.trim();
@@ -86,15 +88,15 @@ async function send(input: {
     !Array.isArray(data.archives) ||
     typeof data.processedAt !== 'string' ||
     !Number.isFinite(Date.parse(data.processedAt)) ||
-    !data.archives.every((archive) => isValidArchive(archive, spaceId, storeId)) ||
-    (data.created !== undefined && !isValidArchive(data.created, spaceId, storeId))
+    !data.archives.every((archive) => isValidCloudDailyArchive(archive, spaceId, storeId)) ||
+    (data.created !== undefined && !isValidCloudDailyArchive(data.created, spaceId, storeId))
   ) {
     throw new Error('invalidCloudDailyArchiveResponse');
   }
   return data;
 }
 
-function isValidArchive(
+export function isValidCloudDailyArchive(
   value: unknown,
   spaceId: string,
   storeId: string,
@@ -114,8 +116,18 @@ function isValidArchive(
     validClosingBalances(archive.closingCashBalances) &&
     validAutomaticMetadata(archive) &&
     Array.isArray(archive.snapshot) &&
-    archive.snapshot.every((event) => typeof event === 'object' && event !== null)
+    archive.snapshot.every((event) => typeof event === 'object' && event !== null) &&
+    validOperationStatuses(archive)
   );
+}
+
+function validOperationStatuses(archive: Record<string, unknown>): boolean {
+  if (archive.operationStatusesUnavailable !== undefined && archive.operationStatusesUnavailable !== true) return false;
+  if (archive.operationStatusesUnavailable && archive.operationStatuses !== undefined) return false;
+  if (archive.operationStatuses === undefined) return true;
+  if (!archive.operationStatuses || typeof archive.operationStatuses !== 'object' || Array.isArray(archive.operationStatuses)) return false;
+  const ids = new Set((archive.snapshot as Array<{id: string}>).map(event => event.id));
+  return Object.entries(archive.operationStatuses).every(([id, status]) => ids.has(id) && ['cancelled','edited'].includes(status));
 }
 
 function validAutomaticMetadata(archive: Record<string, unknown>): boolean {

@@ -49,11 +49,16 @@ function createFakeFirestore(seed: Record<string, Data>) {
     collection: (name: string) => fakeCollection(name),
     async runTransaction<T>(callback: (transaction: {
       get: (reference: FakeReference | FakeQuery) => Promise<unknown>;
+      getAll: (...references: FakeReference[]) => Promise<unknown[]>;
       create: (reference: FakeReference, data: Data) => void;
       update: (reference: FakeReference, data: Data) => void;
       set: (reference: FakeReference, data: Data) => void;
     }) => Promise<T>): Promise<T> {
       const transaction = {
+        getAll: async (...references: FakeReference[]) => references.map(reference => {
+          const data = documents.get(reference.path);
+          return { exists: Boolean(data), data: () => data ? { ...data } : undefined };
+        }),
         get: async (reference: FakeReference | FakeQuery): Promise<unknown> => {
           if ('query' in reference) {
             const { collectionPath, field, value } = reference.query;

@@ -58,6 +58,7 @@ export default function DashboardScreen() {
   }, [isReady, isAuthenticated, activeSpaceLoading, activeSpaceId, router]);
 
   const getJournalTitle = (event: DailyJournalEvent): string => {
+    if (event.correctionOfPaymentId) return journalEventTitle(event, t);
     if (event.type === 'merchant') return journalEventTitle(event, t);
     if (event.type === 'cash_in') return t('cashIn');
     if (event.type === 'cash_out') return t('cashOut');

@@ -10,6 +10,7 @@ import { useColors } from '@/hooks/useColors';
 import { useI18n } from '@/hooks/useI18n';
 import { useDailyJournalProjection } from '@/hooks/useDailyJournalProjection';
 import type { DailyJournalEvent } from '@/services/storage';
+import { journalEventTitle } from '@/services/journalPresentation';
 
 export default function CashScreen() {
   const colors = useColors();
@@ -23,6 +24,7 @@ export default function CashScreen() {
   } = useDailyJournalProjection(journalRefreshKey);
 
   const getEventTitle = (event: DailyJournalEvent): string => {
+    if (event.correctionOfPaymentId) return journalEventTitle(event, t);
     if (event.type === 'cash_in') {
       return t('cashIn');
     }

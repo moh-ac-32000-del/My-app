@@ -8,11 +8,11 @@ import {
   summarizeMerchantBalances,
   type PartyBalance,
 } from '../../data/merchantAccounting.js';
-import { legacyAmountExact, planCustomerPayment } from '../../data/customerCreditAccounting.js';
+import { addCustomerExact, legacyAmountExact, planCustomerPayment } from '../../data/customerCreditAccounting.js';
 import { readCustomerCredit, writeCustomerCredit } from './customerCreditState.js';
 import { assertWorkspaceAccess } from './workspaceAccess.js';
 import { financialPostingTime } from '../../data/automaticClosing.js';
-import { reverseMerchantOperation } from './merchantReversal.js';
+import { prepareMerchantReversal, reverseMerchantOperation } from './merchantReversal.js';
 import { merchantOperationDate, validateMerchantSettings } from '../../data/merchantSettings.js';
 
 /** Trusted command; source registration does not imply deployment or practical acceptance. */
@@ -45,6 +45,8 @@ type Input = {
   reason?: string;
   lines?: Array<{ name: string; quantity: string; unitPrice: string }>;
   separateLines?: true;
+  replacesOperationId?: string;
+  cancelled?: true;
 };
 const digest = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 function invalid(message: string): never {
@@ -101,6 +103,8 @@ function validate(value: unknown): Input {
   if (!['save', 'opening', 'purchase', 'payment', 'directPayment', 'reverse', 'statement'].includes(action as string))
     invalid('Invalid action');
   const base = ['action', 'spaceId', 'storeId', 'merchantId', 'operationId'];
+  if (['opening', 'purchase', 'payment', 'directPayment'].includes(action as string)) base.push('replacesOperationId');
+  if (action === 'reverse') base.push('cancelled');
   const allowed =
     action === 'statement'
       ? []
@@ -132,6 +136,10 @@ function validate(value: unknown): Input {
     operationId: id(value.operationId),
   };
   if (action === 'statement') return input;
+  if (value.replacesOperationId !== undefined) {
+    input.replacesOperationId = id(value.replacesOperationId);
+    if (input.replacesOperationId === input.operationId || value.separateLines) invalid('Invalid replacement identifier');
+  }
   if (action === 'save') {
     input.name = label(value.name, 200, true);
     input.phone = label(value.phone ?? '', 100);
@@ -162,6 +170,10 @@ function validate(value: unknown): Input {
     input.targetOperationId = id(value.targetOperationId);
     if (input.targetOperationId === input.operationId) invalid('Reversal requires a new operation identifier');
     input.reason = label(value.reason, 2000, true);
+    if (value.cancelled !== undefined) {
+      if (value.cancelled !== true) invalid('Invalid cancellation');
+      input.cancelled = true;
+    }
     return input;
   }
   input.note = label(value.note ?? '', 2000);
@@ -301,7 +313,12 @@ export async function merchantCommandHandler(request: CallableRequest<unknown>, 
       return { ...receipt.result, outcome: 'replayed' };
     }
     const now = financialPostingTime(spaceSnap.data()!, runtime.now());
-    if (input.paymentMethodId) {
+    const replacementOriginal = input.replacesOperationId
+      ? (await tx.get(space.collection('merchantOperations').doc(input.replacesOperationId))).data() : null;
+    const unchangedMethod = replacementOriginal && replacementOriginal.workspaceId === input.spaceId &&
+      replacementOriginal.storeId === input.storeId && replacementOriginal.merchantId === input.merchantId &&
+      replacementOriginal.paymentMethodId === input.paymentMethodId && replacementOriginal.paymentMethodName === input.paymentMethodName;
+    if (input.paymentMethodId && !unchangedMethod) {
       const settingsSnap = await tx.get(space.collection('merchantSettings').doc('config'));
       const settings = settingsSnap.data();
       if (settings?.workspaceId !== input.spaceId || settings.storeId !== input.storeId || settings.version !== 1)
@@ -421,7 +438,7 @@ export async function merchantCommandHandler(request: CallableRequest<unknown>, 
     ) {
       throw new HttpsError('data-loss', 'Merchant balance state is invalid');
     }
-    const balance: PartyBalance = {
+    let balance: PartyBalance = {
       workspaceId: input.spaceId,
       partyId: input.merchantId,
       kind: 'merchant',
@@ -433,7 +450,7 @@ export async function merchantCommandHandler(request: CallableRequest<unknown>, 
     } catch {
       throw new HttpsError('data-loss', 'Merchant balance precision is invalid');
     }
-    if (input.action === 'opening' && balanceSnap.exists)
+    if (input.action === 'opening' && balanceSnap.exists && !input.replacesOperationId)
       throw new HttpsError('failed-precondition', 'Opening must precede all account operations');
     if (input.action === 'reverse') {
       if (!balanceSnap.exists) throw new HttpsError('data-loss', 'Original merchant account balance is missing');
@@ -454,9 +471,28 @@ export async function merchantCommandHandler(request: CallableRequest<unknown>, 
           currency,
           targetOperationId: input.targetOperationId!,
           reason: input.reason!,
+          ...(input.cancelled ? { cancelled: true as const } : {}),
         },
       });
       return finish(result);
+    }
+    let amendment: Awaited<ReturnType<typeof prepareMerchantReversal>> | null = null;
+    if (input.replacesOperationId) {
+      const target = replacementOriginal;
+      // A replacement corrects the same operation type/currency. Never silently convert money or
+      // move a financial operation to a different account. A concurrent edit/cancel wins once only.
+      if (!target || target.action !== input.action || target.currency !== currency)
+        throw new HttpsError('failed-precondition', 'Operation type and currency must match the original');
+      const reversalRef = space.collection('merchantOperations').doc(`edit-offset-${digest(input.operationId)}`);
+      if ((await tx.get(reversalRef)).exists) throw new HttpsError('already-exists', 'Edit offset already exists');
+      if ((state?.revision ?? 0) >= Number.MAX_SAFE_INTEGER - 1)
+        throw new HttpsError('resource-exhausted', 'Balance revision exhausted');
+      amendment = await prepareMerchantReversal({ tx, space, balanceRef, balance,
+        revision: state?.revision ?? 0, operationRef: reversalRef, uid, now,
+        input: { spaceId: input.spaceId, storeId: input.storeId, merchantId: input.merchantId,
+          operationId: reversalRef.id, currency, targetOperationId: input.replacesOperationId,
+          reason: 'Operation edited', replacementOperationId: input.operationId } });
+      balance = { ...balance, balance: amendment.result.balanceExact };
     }
     if (input.action === 'purchase' && input.separateLines) {
       // One receipt seals the entire form. Each material is independently reversible,
@@ -520,7 +556,10 @@ export async function merchantCommandHandler(request: CallableRequest<unknown>, 
     let next = balance.balance;
     let cashDeltaExact = '0.00';
     let details: Record<string, unknown> = {};
-    if (input.action === 'opening') next = input.amountExact!;
+    if (input.action === 'opening') {
+      next = input.replacesOperationId ? addCustomerExact(balance.balance, input.amountExact!) : input.amountExact!;
+      details = { amountExact: input.amountExact! };
+    }
     else if (input.action === 'purchase') {
       const projection = projectMerchantPurchase(
         balance,
@@ -567,7 +606,9 @@ export async function merchantCommandHandler(request: CallableRequest<unknown>, 
         customer?.isActive !== true)
     )
       throw new HttpsError('not-found', 'Active customer not found');
-    const credit = customerRef ? await readCustomerCredit(tx, space, input.storeId, input.customerId!, currency) : null;
+    const preparedCredit = amendment?.customerCredit;
+    const credit = customerRef ? (preparedCredit && preparedCredit.customerId === input.customerId
+      ? preparedCredit : await readCustomerCredit(tx, space, input.storeId, input.customerId!, currency)) : null;
     const debts = customerRef
       ? (await tx.get(space.collection('debts').where('customerId', '==', input.customerId!))).docs
           .map((snapshot) => ({ ref: snapshot.ref, data: snapshot.data() }))
@@ -576,6 +617,9 @@ export async function merchantCommandHandler(request: CallableRequest<unknown>, 
               data.workspaceId === input.spaceId && data.storeId === input.storeId && data.currency === currency,
           )
       : [];
+    const correctionDebt = amendment?.correctionDebt;
+    if (customerRef && correctionDebt && correctionDebt.data.customerId === input.customerId)
+      debts.push(correctionDebt);
     const plan = credit
       ? planCustomerPayment(
           debts.map(({ ref, data }) => ({
@@ -593,6 +637,8 @@ export async function merchantCommandHandler(request: CallableRequest<unknown>, 
     const paymentRef = space.collection('payments').doc(cashId);
     if (plan && (await tx.get(paymentRef)).exists)
       throw new HttpsError('already-exists', 'Linked payment already exists');
+    // Both preparations succeeded: original offset, replacement and all linked parties commit once.
+    amendment?.apply();
     if (plan && credit) {
       const byId = new Map(debts.map((debt) => [debt.ref.id, debt]));
       for (const update of plan.updates) {
@@ -643,7 +689,7 @@ export async function merchantCommandHandler(request: CallableRequest<unknown>, 
       currency,
       version: 1,
       balanceExact: next,
-      revision: (state?.revision ?? 0) + 1,
+      revision: (state?.revision ?? 0) + (amendment ? 2 : 1),
       updatedAt: now,
       updatedByUserId: uid,
     });
@@ -664,6 +710,7 @@ export async function merchantCommandHandler(request: CallableRequest<unknown>, 
       cashDeltaExact,
       ...(cashAmount ? { transactionId: cashId } : {}),
       ...details,
+      ...(input.replacesOperationId ? { replacesOperationId: input.replacesOperationId } : {}),
       createdAt: now,
       createdByUserId: uid,
     });
@@ -692,7 +739,7 @@ export async function merchantCommandHandler(request: CallableRequest<unknown>, 
       merchantId: input.merchantId,
       operationId: input.operationId,
       balanceExact: next,
-      cashDeltaExact,
+      cashDeltaExact: amendment ? addCustomerExact(amendment.result.cashDeltaExact, cashDeltaExact) : cashDeltaExact,
       processedAt: now,
     });
   });

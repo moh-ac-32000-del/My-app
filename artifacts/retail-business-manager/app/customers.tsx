@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { AppShell, EmptyState, GlassCard, PageHeader, SectionTitle } from '@/components/AppShell';
@@ -89,7 +89,13 @@ export default function CustomersScreen() {
   };
 
   return (
-    <AppShell>
+    <AppShell
+      list={{ testID: 'customers-list', data: isLoading || error ? [] : visibleCustomers,
+        keyExtractor: item => item.id,
+        renderItem: ({ item }) => <CustomerCard customer={item} onPress={() => openCustomer(item)} />,
+      }}
+      overlay={<CustomerFormModal visible={isFormVisible} onClose={() => setIsFormVisible(false)} onSave={(draft) => void addCustomer(draft)} />}
+    >
       <PageHeader
         title={t('customers')}
         subtitle={t('customersModuleHint')}
@@ -141,18 +147,7 @@ export default function CustomersScreen() {
         <EmptyState icon="people-outline" title={t('customersEmpty')} hint={t('customersEmptyHint')} />
       ) : visibleCustomers.length === 0 ? (
         <EmptyState icon="search-outline" title={t('customerSearchEmpty')} hint={t('customerSearchEmptyHint')} />
-      ) : (
-        <FlatList
-          testID="customers-list"
-          data={visibleCustomers}
-          keyExtractor={(item) => item.id}
-          renderItem={({ item }) => <CustomerCard customer={item} onPress={() => openCustomer(item)} />}
-          scrollEnabled={false}
-          contentContainerStyle={styles.listContent}
-        />
-      )}
-
-      <CustomerFormModal visible={isFormVisible} onClose={() => setIsFormVisible(false)} onSave={(draft) => void addCustomer(draft)} />
+      ) : null}
     </AppShell>
   );
 }
@@ -172,6 +167,5 @@ const styles = StyleSheet.create({
   customerCopy: { flex: 1, gap: 5 },
   customerName: { fontSize: 15, fontFamily: 'Inter_700Bold' },
   customerPhone: { fontSize: 12, fontFamily: 'Inter_400Regular' },
-  listContent: { paddingBottom: 4 },
   pressed: { opacity: 0.72, transform: [{ scale: 0.985 }] },
 });

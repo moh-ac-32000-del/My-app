@@ -117,6 +117,7 @@ export interface SettlementResult {
 
 export type { DailyJournalEvent, DailyJournalEventType } from '../types/journal';
 import type { DailyJournalEvent } from '../types/journal';
+import { customerPaymentJournalAmount } from '../data/customerPaymentJournal';
 
 export function buildDailyJournalEvents(
   storeId: string,
@@ -156,6 +157,11 @@ export function buildDailyJournalEvents(
       type: transaction.type,
       amount: transaction.amount,
       currency: transaction.currency,
+      ...(transaction.correctionOfPaymentId && transaction.customerId ? {
+        correctionOfPaymentId: transaction.correctionOfPaymentId,
+        customerId: transaction.customerId,
+        customerName: customerNames.get(transaction.customerId),
+      } : {}),
       ...(transaction.note ? { note: transaction.note } : {}),
       occurredAt: transaction.createdAt,
       sourceId: transaction.id,
@@ -190,7 +196,7 @@ export function buildDailyJournalEvents(
       id: `settlement:${payment.id}`,
       storeId,
       type: 'settlement',
-      amount: payment.amount.amount,
+      amount: customerPaymentJournalAmount(payment),
       currency: payment.amount.currency,
       customerId: payment.customerId,
       customerName: customerNames.get(payment.customerId),

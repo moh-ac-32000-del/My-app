@@ -131,6 +131,15 @@ export function normalizeTransactionDocument(
     transaction.merchantOperationId = value.merchantOperationId;
   }
 
+  // Keep attribution only for complete, same-workspace trusted adjustment metadata.
+  // Invalid optional attribution must never hide an otherwise valid cash movement.
+  const validId = (id: unknown): id is string => typeof id === 'string' && !!id.trim() && !id.includes('/');
+  if (!value.merchantOperationId && value.workspaceId === spaceId && validId(value.customerId)
+    && validId(value.correctionOfPaymentId) && validId(value.customerAmendmentId)) {
+    transaction.customerId = value.customerId;
+    transaction.correctionOfPaymentId = value.correctionOfPaymentId;
+    transaction.customerAmendmentId = value.customerAmendmentId;
+  }
   return isValidTransaction(transaction) ? transaction : null;
 }
 
