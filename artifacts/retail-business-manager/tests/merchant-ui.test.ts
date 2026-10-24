@@ -76,7 +76,8 @@ vi.mock('@/context/CustomerContext', () => ({
   }),
 }));
 vi.mock('@/components/AppShell', () => ({
-  AppShell: ({ children }: any) => React.createElement('main', null, children),
+  AppShell: ({ children, list }: any) => React.createElement('main', null, children,
+    list?.data.map((item: any) => React.createElement('div', { key: item.id }, list.renderItem({ item })))),
   GlassCard: ({ children, testID }: any) => React.createElement('section', { 'data-testid': testID }, children),
   PageHeader: ({ title, action }: any) => React.createElement('header', null, title, action),
   EmptyState: ({ title }: any) => React.createElement('aside', null, title),

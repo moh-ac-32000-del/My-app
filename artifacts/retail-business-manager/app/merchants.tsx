@@ -11,6 +11,7 @@ import { useColors } from '@/hooks/useColors';
 import { useI18n } from '@/hooks/useI18n';
 import { summarizeMerchantBalances } from '@/data/merchantAccounting';
 import { formatExactMoney } from '@/data/exactMoneyPresentation';
+import type { Merchant } from '@/types/merchant';
 
 export default function MerchantsScreen() {
   const router = useRouter();
@@ -42,8 +43,47 @@ export default function MerchantsScreen() {
   }, [activeSpaceId, balances]);
   const text = { color: colors.foreground, textAlign: isRTL ? ('right' as const) : ('left' as const) };
   const unavailable = error || totals === null;
+  const visibleMerchants = useMemo(() => {
+    const query = search.toLocaleLowerCase();
+    return merchants.filter(merchant => merchant.isActive === activeOnly && merchant.name.toLocaleLowerCase().includes(query))
+      .sort((a, b) => a.name.localeCompare(b.name, language));
+  }, [merchants, search, activeOnly, language]);
+  const balancesByMerchant = useMemo(() => {
+    const index = new Map<string, typeof balances>();
+    for (const balance of balances) {
+      const rows = index.get(balance.merchantId);
+      if (rows) rows.push(balance); else index.set(balance.merchantId, [balance]);
+    }
+    return index;
+  }, [balances]);
+  const renderMerchant = (merchant: Merchant) => (
+    <Pressable testID={`merchant-card-${merchant.id}`} accessibilityRole="button"
+      onPress={() => router.push({ pathname: '/merchant/[id]' as never, params: { id: merchant.id } })}>
+      <GlassCard style={{ gap: 9, padding: 14, marginBottom: 16 }}>
+        <View style={{ flexDirection: isRTL ? 'row-reverse' : 'row', alignItems: 'center', gap: 11 }}>
+          <View style={{ width: 46, height: 46, borderRadius: 16, borderWidth: 1, borderColor: colors.primary,
+            backgroundColor: colors.input, alignItems: 'center', justifyContent: 'center' }}>
+            <Text style={{ color: colors.primary, fontFamily: 'Inter_700Bold', fontSize: 18 }}>{merchant.name.charAt(0)}</Text>
+          </View>
+          <Text style={{ ...text, flex: 1, fontSize: 15, fontFamily: 'Inter_700Bold' }}>{merchant.name}</Text>
+          <Ionicons name={isRTL ? 'chevron-back' : 'chevron-forward'} size={18} color={colors.mutedForeground} />
+        </View>
+        {merchant.phone ? <Text style={{ ...text, color: colors.mutedForeground }}>{merchant.phone}</Text> : null}
+        {!merchant.isActive ? <Text style={{ ...text, color: colors.warning }}>{t('merchantInactive')}</Text> : null}
+        {(balancesByMerchant.get(merchant.id) ?? []).map(balance => (
+          <Text key={balance.currency} style={text}>
+            {balance.balanceExact.startsWith('-') ? t('merchantCredit') : t('merchantPayable')}:{' '}
+            {formatExactMoney(balance.balanceExact.replace(/^-/, ''), balance.currency, language)}
+          </Text>
+        ))}
+      </GlassCard>
+    </Pressable>
+  );
   return (
-    <AppShell>
+    <AppShell list={{ testID: 'merchants-list', data: isLoading || unavailable ? [] : visibleMerchants,
+      keyExtractor: item => item.id, renderItem: ({ item }) => renderMerchant(item),
+      extraData: balancesByMerchant,
+    }}>
       <PageHeader
         title={t('merchants')}
         action={
@@ -117,63 +157,7 @@ export default function MerchantsScreen() {
           </View>
           {merchants.length === 0 ? (
             <EmptyState icon="storefront-outline" title={t('merchantEmpty')} hint={t('merchantOpeningHint')} />
-          ) : (
-            merchants
-              .filter((merchant) => merchant.name.toLocaleLowerCase().includes(search.toLocaleLowerCase()))
-              .filter((merchant) => merchant.isActive === activeOnly)
-              .sort((a, b) => Number(b.isActive) - Number(a.isActive) || a.name.localeCompare(b.name, language))
-              .map((merchant) => (
-                <Pressable
-                  key={merchant.id}
-                  testID={`merchant-card-${merchant.id}`}
-                  accessibilityRole="button"
-                  onPress={() => router.push({ pathname: '/merchant/[id]' as never, params: { id: merchant.id } })}
-                >
-                  <GlassCard style={{ gap: 9, padding: 14 }}>
-                    <View style={{ flexDirection: isRTL ? 'row-reverse' : 'row', alignItems: 'center', gap: 11 }}>
-                      <View
-                        style={{
-                          width: 46,
-                          height: 46,
-                          borderRadius: 16,
-                          borderWidth: 1,
-                          borderColor: colors.primary,
-                          backgroundColor: colors.input,
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                        }}
-                      >
-                        <Text style={{ color: colors.primary, fontFamily: 'Inter_700Bold', fontSize: 18 }}>
-                          {merchant.name.charAt(0)}
-                        </Text>
-                      </View>
-                      <Text style={{ ...text, flex: 1, fontSize: 15, fontFamily: 'Inter_700Bold' }}>
-                        {merchant.name}
-                      </Text>
-                      <Ionicons
-                        name={isRTL ? 'chevron-back' : 'chevron-forward'}
-                        size={18}
-                        color={colors.mutedForeground}
-                      />
-                    </View>
-                    {merchant.phone ? (
-                      <Text style={{ ...text, color: colors.mutedForeground }}>{merchant.phone}</Text>
-                    ) : null}
-                    {!merchant.isActive ? (
-                      <Text style={{ ...text, color: colors.warning }}>{t('merchantInactive')}</Text>
-                    ) : null}
-                    {balances
-                      .filter((balance) => balance.merchantId === merchant.id)
-                      .map((balance) => (
-                        <Text key={balance.currency} style={text}>
-                          {balance.balanceExact.startsWith('-') ? t('merchantCredit') : t('merchantPayable')}:{' '}
-                          {formatExactMoney(balance.balanceExact.replace(/^-/, ''), balance.currency, language)}
-                        </Text>
-                      ))}
-                  </GlassCard>
-                </Pressable>
-              ))
-          )}
+          ) : null}
         </View>
       )}
     </AppShell>

@@ -96,3 +96,32 @@ source's current edit/cancel status, including unselected same-day closings.
 Long-list rendering and other navigation bottlenecks remain unmeasured on the
 user's device; this targeted fix must be practically checked before claiming the
 app-wide slowness is resolved.
+
+## Party-list rendering follow-up — 2026-10-24
+
+User confirms the archive release is better but requests further speed work.
+Inspection found a customer FlatList with scrolling disabled inside AppShell's
+ScrollView, and merchant cards created with an unbounded map. Both prevent a
+bounded list viewport from doing useful incremental rendering.
+
+- AppShell has an optional single-scroll-owner FlatList path; existing screens
+  retain their original ScrollView path. The header/search/summary scroll with the
+  list, safe-area/footer clearance is preserved, and customer form overlays stay
+  outside the scrolling header. Authorization errors hide both rows and overlays.
+- Customer and merchant directory screens pass their complete filtered datasets,
+  not truncated pages, to the list. Initial render target 12, batch size 8, viewport
+  window 7; no fixed-height assumptions or clipping of variable-height RTL rows.
+  Session-key changes remount the viewport so prior-space cell state is discarded.
+- All existing totals still use complete authoritative snapshots. No changes to
+  Firestore queries, listeners, local business persistence or write acknowledgement.
+- Merchant filtering/sorting is memoized. Balances are grouped by merchant once,
+  rather than scanning the full balance array for each rendered merchant card.
+  Currency order, exact amounts and the full summary calculations are unchanged.
+- A bounded mock-viewport contract with 1,000 records checks full dataset delivery,
+  12 initial cards, access to row 1,000, routing, totals, languages, loading/errors,
+  viewer controls, session key and footer. This verifies wiring/CPU-work counts,
+  NOT actual React Native/Web frame rate, scrolling or phone timing. Practical
+  scrolling, search, keyboard and modal acceptance is still required before merge.
+
+No backend, Rules, index, scheduler, accounting, APK/EAS or paid-resource changes
+are part of this follow-up. It targets list rendering, not proven network latency.
