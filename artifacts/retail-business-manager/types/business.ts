@@ -62,6 +62,10 @@ export interface CashTransactionDraft {
 }
 
 export interface Transaction extends StoreScopedEntity {
+  /** Trusted payment adjustment attribution; cash direction/amount remain unchanged. */
+  customerId?: string;
+  correctionOfPaymentId?: string;
+  customerAmendmentId?: string;
   createdByUserId?: string;
   type: TransactionType;
   amount: number;

@@ -1,10 +1,17 @@
 import { createHash } from 'node:crypto';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+// Client normalizers are pure; never initialize an actual Auth/native session.
+vi.mock('@/services/firebase', () => ({ isFirebaseConfigured: false, getFirebaseApp: () => ({}),
+  getFirebaseAuth: () => ({ currentUser: null }) }));
 import { settleCustomerDebtHandler } from '../functions/src/settleCustomerDebt';
 import { trustedDebtCommandHandler } from '../functions/src/trustedDebtCommand';
 import { workspaceBackend, workspaceTestTime } from './fixtures/workspaceBackend';
 import { customerOperationCommandHandler } from '../functions/src/customerOperationCommand';
 import { buildDailyJournalEvents } from '../services/storage';
+import { calculateVisibleCurrencyBalances } from '../services/storage';
+import { normalizeTransactionDocument } from '../services/transactionFirestore';
+import { normalizePaymentDocument } from '../services/paymentFirestore';
+import { projectDailyJournalEvents } from '../services/dailyJournalProjection';
 
 const creditPath = `spaces/s/customerCredits/${createHash('sha256')
   .update(JSON.stringify(['c', 'TRY']))
@@ -167,5 +174,54 @@ const settlement = { auth: { uid: 'u' }, data: { spaceId: 's', storeId: 'store',
     expect(b.writes).toHaveLength(0);
     delete before['spaces/s/members/u']; const after = structuredClone(b.docs); delete after['spaces/s/members/u'];
     expect(after).toEqual(before);
+  });
+});
+
+describe('customer payment correction through actual client normalizers and dashboard projections', () => {
+  const request = { auth: { uid: 'u' }, data: { spaceId: 's', storeId: 'store', customerId: 'c',
+    operationId: 'original-pay', currency: 'TRY', amount: 30, transactionId: 'original-cash', paymentId: 'original-payment' } };
+  const edit = (revision = 0, amountExact = '40.00', method = 'cash') => ({ auth: { uid: 'u' }, data: {
+    action: 'edit', kind: 'payment', spaceId: 's', storeId: 'store', customerId: 'c', targetId: 'original-payment',
+    operationId: `edit-${revision}`, expectedUpdatedAt: workspaceTestTime, expectedRevision: revision,
+    amountExact, method, operationDate: '2026-09-01', note: 'test correction',
+  } });
+  function dashboard(b: ReturnType<typeof workspaceBackend>) {
+    const records = (collection: string) => Object.entries(b.docs)
+      .filter(([path]) => path.startsWith(`spaces/s/${collection}/`));
+    const transactions = records('transactions').map(([path, row]) => normalizeTransactionDocument(path.split('/').at(-1)!, row, 's'));
+    const payments = records('payments').map(([path, row]) => normalizePaymentDocument(path.split('/').at(-1)!, row, 's'));
+    expect(transactions.every(Boolean)).toBe(true); expect(payments.every(Boolean)).toBe(true);
+    const events = projectDailyJournalEvents('store', { transactions: transactions as any, payments: payments as any,
+      customers: [], debts: [], merchantOperations: [], spaceId: 's' }, [], new Date(workspaceTestTime),
+      { date: '2026-10-19', startAt: '2026-10-19T00:00:00.000Z', endAt: '2026-10-20T00:00:00.000Z', timeZone: 'Europe/Istanbul' });
+    return { balances: calculateVisibleCurrencyBalances(transactions as any, ['TRY']), events };
+  }
+  it.each(['cash', 'card', 'bank-transfer'])('keeps original cash linked when editing amount/date/method to %s', async method => {
+    const b = workspaceBackend();
+    await settleCustomerDebtHandler(request as never, b.runtime);
+    await customerOperationCommandHandler(edit(0, '40.00', method) as never, b.runtime);
+    const result = dashboard(b);
+    expect(result.balances).toEqual([{ currency: 'TRY', amount: 40 }]);
+    expect(result.events.filter(row => row.type === 'settlement').map(row => row.amount)).toEqual([30]);
+    expect(result.events.filter(row => row.type === 'cash_in').map(row => row.amount)).toEqual([10]);
+    expect(b.docs['spaces/s/debts/d'].amount).toBe(60);
+  });
+  it('posts a new settlement after an edit, then cancels the edited payment without losing the new cash', async () => {
+    const b = workspaceBackend();
+    await settleCustomerDebtHandler(request as never, b.runtime);
+    await customerOperationCommandHandler(edit() as never, b.runtime);
+    await settleCustomerDebtHandler({ ...request, data: { ...request.data, operationId: 'new-pay',
+      transactionId: 'new-cash', paymentId: 'new-payment', amount: 20 } } as never, b.runtime);
+    let result = dashboard(b);
+    expect(result.balances).toEqual([{ currency: 'TRY', amount: 60 }]);
+    expect(result.events.some(row => row.id === 'settlement:new-payment' && row.amount === 20)).toBe(true);
+    expect(b.docs['spaces/s/debts/d'].amount).toBe(40);
+    await customerOperationCommandHandler({ auth: { uid: 'u' }, data: { action: 'cancel', kind: 'payment', spaceId: 's',
+      storeId: 'store', customerId: 'c', targetId: 'original-payment', operationId: 'cancel-edited',
+      expectedUpdatedAt: workspaceTestTime, expectedRevision: 1 } } as never, b.runtime);
+    result = dashboard(b);
+    expect(result.balances).toEqual([{ currency: 'TRY', amount: 20 }]);
+    expect(result.events.some(row => row.type === 'cash_out' && row.amount === 40)).toBe(true);
+    expect(result.events.some(row => row.id === 'settlement:new-payment')).toBe(true);
   });
 });

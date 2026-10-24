@@ -30,7 +30,7 @@ export default function ArchiveScreen() {
   );
 
   const getEventTitle = (event: DailyJournalEvent): string => {
-    if (event.type === 'merchant') return journalEventTitle(event, t);
+    if (event.type === 'merchant' || event.correctionOfPaymentId) return journalEventTitle(event, t);
     if (event.type === 'cash_in') return t('cashIn');
     if (event.type === 'cash_out') return t('cashOut');
     const customerName = event.customerName ?? t('unknownCustomer');

@@ -5,6 +5,9 @@ import type { DailyJournalEvent } from '../types/journal';
 
 type Translate = (key: TranslationKey) => string;
 export function journalEventTitle(event: DailyJournalEvent, t: Translate): string {
+  if (event.correctionOfPaymentId && (event.type === 'cash_in' || event.type === 'cash_out')) {
+    return `${t(event.type === 'cash_in' ? 'settlementAdjustmentIncrease' : 'settlementAdjustmentDecrease')} — ${event.customerName ?? t('unknownCustomer')}`;
+  }
   if (event.type === 'merchant') {
     const labels = {
       opening: 'merchantOpening',

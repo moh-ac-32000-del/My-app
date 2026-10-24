@@ -12,7 +12,7 @@ function parseArchiveDate(value: string): Date {
 }
 
 function eventLabel(event: DailyJournalEvent, t: Translate): string {
-  if (event.type === 'merchant') return journalEventTitle(event, t);
+  if (event.type === 'merchant' || event.correctionOfPaymentId) return journalEventTitle(event, t);
   if (event.type === 'cash_in') {
     return t('cashIn');
   }

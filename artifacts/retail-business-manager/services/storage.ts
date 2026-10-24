@@ -157,6 +157,11 @@ export function buildDailyJournalEvents(
       type: transaction.type,
       amount: transaction.amount,
       currency: transaction.currency,
+      ...(transaction.correctionOfPaymentId && transaction.customerId ? {
+        correctionOfPaymentId: transaction.correctionOfPaymentId,
+        customerId: transaction.customerId,
+        customerName: customerNames.get(transaction.customerId),
+      } : {}),
       ...(transaction.note ? { note: transaction.note } : {}),
       occurredAt: transaction.createdAt,
       sourceId: transaction.id,
