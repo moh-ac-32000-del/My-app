@@ -45,12 +45,10 @@ export async function trustedDebtCommandHandler(
 
   try {
     return await db.runTransaction(async (tx) => {
-      const spaceSnap = await tx.get(spaceRef);
-      const memberSnap = await tx.get(memberRef);
-      const profileSnap = await tx.get(profileRef);
-      const customerSnap = await tx.get(customerRef);
-      const debtSnap = await tx.get(debtRef);
-      const receiptSnap = await tx.get(receiptRef);
+      // Same transaction read set, one batch RPC instead of six sequential RPCs.
+      // Authorization, receipt matching and all financial writes remain below.
+      const [spaceSnap, memberSnap, profileSnap, customerSnap, debtSnap, receiptSnap] =
+        await tx.getAll(spaceRef, memberRef, profileRef, customerRef, debtRef, receiptRef);
 
       if (!spaceSnap.exists || spaceSnap.data()?.status !== 'active') {
         throw new HttpsError('failed-precondition', 'Workspace is unavailable', { code: 'SPACE_NOT_FOUND' });

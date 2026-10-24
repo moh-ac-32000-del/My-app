@@ -125,3 +125,35 @@ bounded list viewport from doing useful incremental rendering.
 
 No backend, Rules, index, scheduler, accounting, APK/EAS or paid-resource changes
 are part of this follow-up. It targets list rendering, not proven network latency.
+
+## Debt/settlement save follow-up — 2026-10-24
+
+User reports long confirmation waits for creating debts and settlements. The
+separate 30 + 10 cash entries in the screenshot match the immutable original
+payment plus its current-period correction. A regression now reproduces 100 debt,
+30 payment, edit to 40: remaining debt 60, journal original settlement 30 plus
+cash adjustment 10, total cash 40 (not 50). This is a synthetic test, not proof of
+the user's actual balance; user confirmation was requested.
+
+Read-only metadata confirms database nam5 and deployed functions us-central1.
+Aggregate recent successful POST logs (small last-24h sample, before this change)
+show 2 debt requests ~1.43–3.28s, 4 settlement requests ~0.26–3.98s. These are
+server request timings, not phone end-to-end timings or proof of a sole cause.
+No amounts, identities or raw request payloads were collected into this report.
+
+- Debt creation/update loaded six independent documents with six sequential
+  transaction get RPCs. Use one transaction getAll with exactly the same read set.
+- Settlement already overlapped its reads, but used seven independent document
+  RPCs plus the debt query. Use one getAll alongside the unchanged complete debt
+  query. Customer-credit reads/validation, financial planning, write set, receipts,
+  auth/role/space/customer checks and transaction retries are unchanged.
+- Same number of billed document reads; no financial shortcut, local fallback,
+  optimistic success, region move, paid min-instances, query narrowing or indexes.
+- Existing idempotency/scope/credit/precision/concurrency suites remain required.
+  New tests assert batch membership, unchanged outcomes, replay/conflict rejection,
+  and revoked-membership rejection on a transaction retry. Existing CI demo
+  emulator exercises both real handlers through customer/merchant scenarios.
+
+This reduces demonstrated read-transport overhead only. Cold starts, mobile
+network latency and client subscription/render time may still contribute. Do not
+claim a measured end-to-end speedup until the user repeats practical saves.
