@@ -45,25 +45,13 @@ export async function settleCustomerDebtHandler(
 
   try {
     return await db.runTransaction(async (transaction) => {
-      const [
-        spaceSnap,
-        memberSnap,
-        profileSnap,
-        customerSnap,
-        receiptSnap,
-        debtSnaps,
-        existingTransaction,
-        existingPayment,
-      ] = await Promise.all([
-        transaction.get(spaceRef),
-        transaction.get(memberRef),
-        transaction.get(profileRef),
-        transaction.get(customerRef),
-        transaction.get(receiptRef),
+      // Preserve the complete query and transaction lock/read set. Only combine
+      // independent document RPCs; do not skip current authorization or receipts.
+      const [documents, debtSnaps] = await Promise.all([
+        transaction.getAll(spaceRef, memberRef, profileRef, customerRef, receiptRef, transactionRef, paymentRef),
         transaction.get(debtsQuery),
-        transaction.get(transactionRef),
-        transaction.get(paymentRef),
       ]);
+      const [spaceSnap, memberSnap, profileSnap, customerSnap, receiptSnap, existingTransaction, existingPayment] = documents;
 
       if (!spaceSnap.exists || spaceSnap.data()?.status !== 'active') {
         throw new HttpsError('failed-precondition', 'Workspace is unavailable', { code: 'SPACE_NOT_FOUND' });

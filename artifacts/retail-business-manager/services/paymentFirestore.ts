@@ -1,5 +1,7 @@
 import { observeForLocalExport } from './localExportObservation';
 import { legacyAmountExact } from '@/data/customerCreditAccounting';
+import { operationCorrectionMetadata } from '@/data/operationCorrectionMetadata';
+import { customerPaymentJournalAmount } from '@/data/customerPaymentJournal';
 import {
   collection,
   getDocs,
@@ -125,6 +127,7 @@ export function normalizePaymentDocument(
   }
 
   const payment: Payment = {
+    ...(value.cashBaseAmountExact !== undefined ? { cashBaseAmountExact: value.cashBaseAmountExact } : {}),
     id: documentId,
     storeId: value.storeId as string,
     workspaceId: normalizedSpaceId,
@@ -141,6 +144,8 @@ export function normalizePaymentDocument(
   };
 
   try {
+    if (value.cashBaseAmountExact !== undefined) customerPaymentJournalAmount(payment);
+    Object.assign(payment, operationCorrectionMetadata(value));
     if (value.amountExact !== undefined) payment.amountExact = legacyAmountExact(payment.amount.amount, value.amountExact);
     if (value.source !== undefined) {
       if (value.source !== 'customer-to-merchant' || typeof value.merchantId !== 'string' || !value.merchantId

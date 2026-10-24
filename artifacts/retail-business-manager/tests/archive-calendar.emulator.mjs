@@ -74,6 +74,24 @@ try {
   assert.equal((await base.collection('dailyClosingCounters').get()).size, 0);
   assert.equal((await base.collection('transactions').get()).size, 0);
   console.log('Archive calendar emulator — listing never writes cash, counters, balances or archive snapshots: PASS');
+  // Exercise real transaction.getAll, not just the in-memory fixture.
+  const annotated = { ...archives[0], snapshot: [
+    { id: 'debt:status-debt', sourceId: 'status-debt', type: 'debt', amount: 12.5, currency: 'TRY' },
+    { id: 'payment:status-payment', sourceId: 'status-payment', type: 'settlement', amount: 12.5, currency: 'TRY' },
+  ] };
+  await base.collection('dailyArchives').doc(annotated.id).set(annotated);
+  await base.collection('debts').doc('status-debt').set({ id: 'status-debt', workspaceId: base.id,
+    storeId: 'archive-test-store', cancelled: true });
+  await base.collection('payments').doc('status-payment').set({ id: 'status-payment', workspaceId: base.id,
+    storeId: 'archive-test-store', amendmentRevision: 1 });
+  const statuses = await list('viewer', { includeCurrentStatuses: true });
+  assert.equal(statuses.currentStatusesIncluded, true);
+  assert.deepEqual(statuses.archives.find(row => row.id === annotated.id).operationStatuses,
+    { 'debt:status-debt': 'cancelled', 'payment:status-payment': 'edited' });
+  assert.deepEqual((await base.collection('dailyArchives').doc(annotated.id).get()).data(), annotated);
+  await base.collection('members').doc('viewer').update({ status: 'removed' });
+  await assert.rejects(list('viewer', { includeCurrentStatuses: true }), { code: 'permission-denied' });
+  console.log('Archive performance emulator — batched status reads preserve snapshots and reject revoked access: PASS');
 } finally {
   await db.terminate();
   await deleteApp(app);

@@ -32,10 +32,15 @@ function fakeFirestore(documents: Record<string, Document> = {}) {
     collection: (name: string) => ({ doc: (id: string) => reference(`${name}/${id}`) }),
     async runTransaction<T>(callback: (tx: {
       get: (ref: { path: string }) => Promise<Snapshot>;
+      getAll: (...refs: Array<{ path: string }>) => Promise<Snapshot[]>;
       create: (ref: { path: string }, data: Document) => void;
       set: (ref: { path: string }, data: Document) => void;
     }) => Promise<T>): Promise<T> {
       return callback({
+        getAll: async (...refs) => refs.map(ref => {
+          const value = store[ref.path];
+          return { exists: Boolean(value), data: () => value };
+        }),
         get: async (ref) => {
           const value = store[ref.path];
           return { exists: Boolean(value), data: () => value };

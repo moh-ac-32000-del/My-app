@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActorBadge } from '@/components/ActorBadge';
+import { CustomerOperationEditor, type CustomerOperationSelection } from '@/components/CustomerOperationEditor';
 import { ActivityIndicator, Alert, Linking, Modal, Pressable, Share, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
@@ -54,7 +55,7 @@ function CustomerDetails({ customerId }: { customerId: string }) {
   const colors = useColors();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { profile, isReady, activeSpaceId, addCustomerDebt, settleCustomerDebt, canWriteBusiness } = useStore();
+  const { profile, isReady, activeSpaceId, sessionKey, addCustomerDebt, settleCustomerDebt, canWriteBusiness } = useStore();
   const {
     debts: workspaceDebts,
     credits: workspaceCredits = [],
@@ -78,7 +79,6 @@ function CustomerDetails({ customerId }: { customerId: string }) {
   } = usePayments();
   const { t, language, isRTL } = useI18n();
   const customer = customers.find((item) => item.id === customerId) ?? null;
-  const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isEditVisible, setIsEditVisible] = useState<boolean>(false);
   const [isDeleteDialogVisible, setIsDeleteDialogVisible] = useState<boolean>(false);
   const [isDeleting, setIsDeleting] = useState<boolean>(false);
@@ -86,6 +86,10 @@ function CustomerDetails({ customerId }: { customerId: string }) {
   const [isDebtVisible, setIsDebtVisible] = useState<boolean>(false);
   const [isSavingDebt, setIsSavingDebt] = useState<boolean>(false);
   const payments = useMemo(() => filterPaymentsByCustomer(workspacePayments, customerId), [workspacePayments, customerId]);
+  const [operationEdit, setOperationEdit] = useState<(CustomerOperationSelection & { spaceId: string; sessionKey: string }) | null>(null);
+  const openOperationEdit = (selection: CustomerOperationSelection) => {
+    if (canWriteBusiness && activeSpaceId) setOperationEdit({ ...selection, spaceId: activeSpaceId, sessionKey });
+  };
   const [isSettlementVisible, setIsSettlementVisible] = useState<boolean>(false);
   const [isSavingSettlement, setIsSavingSettlement] = useState<boolean>(false);
   const [settlementAmount, setSettlementAmount] = useState<string>('');
@@ -93,7 +97,19 @@ function CustomerDetails({ customerId }: { customerId: string }) {
   const [isReminderVisible, setIsReminderVisible] = useState<boolean>(false);
   const [isSavingReminder, setIsSavingReminder] = useState<boolean>(false);
   const [reminderDebt, setReminderDebt] = useState<Debt | null>(null);
-  const [reminders, setReminders] = useState<Reminder[]>([]);
+  const reminderScope = JSON.stringify([sessionKey, activeSpaceId, profile.id, customerId]);
+  const currentReminderScope = useRef(reminderScope);
+  currentReminderScope.current = reminderScope;
+  const [reminderState, setReminderState] = useState<{
+    scope: string; rows: Reminder[]; status: 'loading' | 'ready' | 'error';
+  }>({ scope: reminderScope, rows: [], status: 'loading' });
+  const [reminderRetry, setReminderRetry] = useState(0);
+  const reminderStatus = reminderState.scope === reminderScope ? reminderState.status : 'loading';
+  const reminders = useMemo(() => {
+    if (reminderState.scope !== reminderScope || reminderState.status !== 'ready') return [];
+    const ids = new Set(debts.map(debt => debt.id));
+    return reminderState.rows.filter(reminder => ids.has(reminder.debtId));
+  }, [reminderState, reminderScope, debts]);
   const settlementInFlightRef = useRef<boolean>(false);
   const settlementIntentRef = useRef<SettlementDraft | null>(null);
   const [settlementUncertain, setSettlementUncertain] = useState(false);
@@ -112,42 +128,31 @@ function CustomerDetails({ customerId }: { customerId: string }) {
   );
   useFocusEffect(
     useCallback(() => {
-      if (!isReady || !customerId || areCustomersLoading || customerError || areDebtsLoading || arePaymentsLoading) {
-        return undefined;
-      }
-      if (debtError || paymentError) {
-        setIsLoading(false);
+      if (!isReady || !customerId || !activeSpaceId) {
         return undefined;
       }
       let active = true;
-      setIsLoading(true);
+      setReminderState({ scope: reminderScope, rows: [], status: 'loading' });
       void (async () => {
-        if (!activeSpaceId) throw new Error('cloudSpaceUnavailable');
         const storedReminders = await loadCloudReminders(activeSpaceId, profile.id, await loadNotificationTime());
-        if (active) {
-          const customerDebtIds = new Set(workspaceDebts.filter((debt) => debt.customerId === customerId).map((debt) => debt.id));
-          setReminders(storedReminders.filter((reminder) => customerDebtIds.has(reminder.debtId)));
-          setIsLoading(false);
+        if (active && currentReminderScope.current === reminderScope) {
+          setReminderState({ scope: reminderScope, rows: storedReminders, status: 'ready' });
         }
       })().catch(() => {
-        if (active) setIsLoading(false);
+        if (active && currentReminderScope.current === reminderScope) {
+          setReminderState({ scope: reminderScope, rows: [], status: 'error' });
+        }
       });
       return () => {
         active = false;
       };
     }, [
       activeSpaceId,
-      areCustomersLoading,
-      areDebtsLoading,
-      arePaymentsLoading,
-      customerError,
       customerId,
-      debtError,
       isReady,
-      paymentError,
       profile.id,
-      workspaceDebts,
-      workspacePayments,
+      reminderScope,
+      reminderRetry,
     ]),
   );
 
@@ -213,8 +218,8 @@ function CustomerDetails({ customerId }: { customerId: string }) {
       });
       if (!activeSpaceId) throw new Error('cloudSpaceUnavailable');
       const updated = await createCloudReminder(activeSpaceId, reminder, await loadNotificationTime());
-      const customerDebtIds = new Set(workspaceDebts.filter((item) => item.customerId === customerId).map((item) => item.id));
-      setReminders(updated.filter((item) => customerDebtIds.has(item.debtId)));
+      if (!alive.current || currentReminderScope.current !== reminderScope) return;
+      setReminderState({ scope: reminderScope, rows: updated, status: 'ready' });
       setIsReminderVisible(false);
       setReminderDebt(null);
     } finally {
@@ -309,7 +314,7 @@ function CustomerDetails({ customerId }: { customerId: string }) {
     }
   };
 
-  if (!isReady || areCustomersLoading || isLoading) {
+  if (!isReady || areCustomersLoading || areDebtsLoading || arePaymentsLoading) {
     return (
       <AppShell>
         <PageHeader title={t('customerDetails')} showBack />
@@ -475,13 +480,21 @@ function CustomerDetails({ customerId }: { customerId: string }) {
                   {t('customerCreditUsed')}: {formatExactMoney(debt.creditAppliedExact, debt.currency, language)}
                 </Text> : null}
                 <ActorBadge userId={debt.createdByUserId} />
+                {debt.cancelled ? <Text style={{ color: colors.mutedForeground }}>{t('operationCancelled')}</Text> : null}
+                {debt.correctionOfPaymentId ? <Text style={{ color: colors.mutedForeground }}>{t('paymentAdjustmentDebt')}</Text> : null}
+                {debt.operationDate ? <Text style={{ color: colors.mutedForeground }}>{debt.operationDate}</Text> : null}
                 {debt.note ? <Text style={{ color: colors.mutedForeground }}>{debt.note}</Text> : null}
                 <Text style={[styles.debtHistoryDate, { color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' }]}>
                   {formatLocalizedDateTime(new Date(debt.createdAt), language)}
                 </Text>
               </View>
             </View>
-            {debt.amount > 0 ? (
+            {canWriteBusiness && customer.isActive && !debt.cancelled && !debt.merchantOperationId && !debt.correctionOfMerchantOperationId && !debt.correctionOfPaymentId ? (
+              <Pressable testID={`edit-debt-${debt.id}`} accessibilityRole="button" onPress={() => openOperationEdit({ kind: 'debt', target: debt })} style={{ paddingVertical: 6 }}>
+                <Text style={{ color: colors.primary, textAlign: isRTL ? 'right' : 'left' }}>{t('operationEdit')}</Text>
+              </Pressable>
+            ) : null}
+            {debt.amount > 0 && !debt.cancelled ? (
               <Pressable
                 testID={`create-reminder-${debt.id}`}
                 accessibilityRole="button"
@@ -504,7 +517,17 @@ function CustomerDetails({ customerId }: { customerId: string }) {
       )}
 
       <SectionTitle title={t('reminders')} />
-      {reminders.length > 0 ? (
+      {reminderStatus === 'loading' ? (
+        <ActivityIndicator testID="customer-reminders-loading" color={colors.primary} />
+      ) : reminderStatus === 'error' ? (
+        <View>
+          <EmptyState icon="cloud-offline-outline" title={t('somethingWentWrong')} hint={t('reloadToContinue')} />
+          <Pressable testID="retry-customer-reminders" onPress={() => setReminderRetry(value => value + 1)}
+            style={[styles.retryButton, { borderColor: colors.border }]}>
+            <Text style={[styles.retryButtonText, { color: colors.primary }]}>{t('reloadToContinue')}</Text>
+          </Pressable>
+        </View>
+      ) : reminders.length > 0 ? (
         reminders.map((reminder) => {
           const reminderDebtRecord = debts.find((debt) => debt.id === reminder.debtId);
           const statusKey: TranslationKey = reminder.status === 'completed'
@@ -555,12 +578,19 @@ function CustomerDetails({ customerId }: { customerId: string }) {
                   {t('merchantDirect')} · {payment.merchantName ?? ''} · {t('merchantNoncash')}
                 </Text> : null}
                 <ActorBadge userId={payment.createdByUserId} />
+                {payment.cancelled ? <Text style={{ color: colors.mutedForeground }}>{t('operationCancelled')}</Text> : null}
+                {payment.operationDate ? <Text style={{ color: colors.mutedForeground }}>{payment.operationDate}</Text> : null}
                 {payment.note ? <Text style={{ color: colors.mutedForeground }}>{payment.note}</Text> : null}
                 <Text style={[styles.debtHistoryDate, { color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' }]}>
                   {formatLocalizedDateTime(new Date(payment.paidAt), language)}
                 </Text>
               </View>
             </View>
+            {canWriteBusiness && customer.isActive && !payment.cancelled ? <Pressable testID={`edit-payment-${payment.id}`} accessibilityRole="button"
+              style={{ paddingVertical: 6 }} onPress={() => {
+                if (payment.merchantId && payment.merchantOperationId) router.push({ pathname: '/merchant/[id]', params: { id: payment.merchantId, operationId: payment.merchantOperationId } });
+                else openOperationEdit({ kind: 'payment', target: payment });
+              }}><Text style={{ color: colors.primary, textAlign: isRTL ? 'right' : 'left' }}>{t('operationEdit')}</Text></Pressable> : null}
           </GlassCard>
         ))
       ) : (
@@ -583,6 +613,9 @@ function CustomerDetails({ customerId }: { customerId: string }) {
       </View> : null}
 
       <CustomerFormModal visible={canWriteBusiness && isEditVisible} initialCustomer={customer} onClose={() => setIsEditVisible(false)} onSave={(draft) => void updateCustomer(draft)} />
+      {canWriteBusiness && operationEdit && operationEdit.spaceId === activeSpaceId && operationEdit.sessionKey === sessionKey ?
+        <CustomerOperationEditor key={`${sessionKey}:${activeSpaceId}:${operationEdit.kind}:${operationEdit.target.id}`}
+          selection={operationEdit} onClose={() => setOperationEdit(null)} /> : null}
 
       <Modal
         visible={isDebtVisible}

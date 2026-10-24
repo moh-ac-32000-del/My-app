@@ -8,29 +8,26 @@ import { useI18n } from '@/hooks/useI18n';
 import { formatExactMoney } from '@/data/exactMoneyPresentation';
 import { subtractCustomerExact } from '@/data/customerCreditAccounting';
 import type { MerchantOperation } from '@/types/merchant';
+import { merchantOperationTone } from '@/data/merchantOperationPresentation';
 
 /** One compact ledger row: balances belong to the account header, never to the row. */
 export function MerchantOperationCard({ operation, onPress }: { operation: MerchantOperation; onPress?: () => void }) {
   const colors = useColors();
   const { t, language, isRTL } = useI18n();
-  const accent =
-    operation.action === 'directPayment'
-      ? '#eab308'
-      : operation.action === 'payment'
-        ? '#ef4444'
-        : operation.action === 'purchase'
-          ? '#3b82f6'
-          : colors.mutedForeground;
+  const accent = merchantOperationTone(operation.action) ?? colors.mutedForeground;
   const text = { color: colors.foreground, textAlign: isRTL ? ('right' as const) : ('left' as const) };
   const rawAmount = operation.totalExact ?? operation.amountExact ?? '0.00';
   const amount = operation.action === 'reverse' ? subtractCustomerExact('0.00', rawAmount) : rawAmount;
   return (
     <Pressable accessibilityRole="button" accessibilityLabel={t('merchantDetails')} onPress={onPress}>
-      <GlassCard testID={`merchant-operation-${operation.id}`} style={{ gap: 8, padding: 14, borderColor: accent }}>
+      <GlassCard testID={`merchant-operation-${operation.id}`} style={{ gap: 8, padding: 14, borderColor: colors.border }}>
         <View style={{ flexDirection: isRTL ? 'row-reverse' : 'row', justifyContent: 'space-between', gap: 10 }}>
-          <Text style={{ ...text, color: accent, fontFamily: 'Inter_700Bold', flexShrink: 1 }}>
-            {t(merchantActionLabels[operation.action])}
-          </Text>
+          <View style={{ flexDirection: isRTL ? 'row-reverse' : 'row', alignItems: 'center', gap: 7, flexShrink: 1 }}>
+            <View testID="merchant-operation-tone" accessible={false} style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: accent }} />
+            <Text style={{ ...text, fontFamily: 'Inter_700Bold', flexShrink: 1 }}>
+              {t(merchantActionLabels[operation.action])}
+            </Text>
+          </View>
           <Text style={{ ...text, fontFamily: 'Inter_700Bold' }}>
             {formatExactMoney(amount, operation.currency, language)}
           </Text>
@@ -63,7 +60,7 @@ export function MerchantOperationCard({ operation, onPress }: { operation: Merch
           <Text style={{ ...text, color: colors.mutedForeground }}>{t('merchantNoncash')}</Text>
         ) : null}
         {operation.reversedByOperationId ? (
-          <Text style={{ ...text, color: colors.warning }}>{t('merchantReversed')}</Text>
+          <Text style={{ ...text, color: colors.mutedForeground }}>{t(operation.replacementOperationId ? 'operationSuperseded' : 'operationCancelled')}</Text>
         ) : null}
       </GlassCard>
     </Pressable>

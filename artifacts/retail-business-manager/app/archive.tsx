@@ -21,7 +21,7 @@ export default function ArchiveScreen() {
   const clock = useFinancialWindow();
   const { t, language, isRTL } = useI18n();
   const [date, setDate] = useState(() => clock.window?.date ?? getLocalDateKey(new Date()));
-  const { archives, isLoading, error: archiveError, retry } = useArchiveDay(date);
+  const { archives, isLoading, error: archiveError, retry, statusesPending, statusesError } = useArchiveDay(date);
   const [selectedArchiveId, setSelectedArchiveId] = useState<string | null>(null);
   const [isSharing, setIsSharing] = useState(false);
   const selectedArchive = useMemo(
@@ -158,6 +158,10 @@ export default function ArchiveScreen() {
                 )}
                 <Text style={[styles.shareButtonText, { color: colors.primaryForeground }]}>{t('shareArchive')}</Text>
               </Pressable>
+              {statusesPending || statusesError || selectedArchive.operationStatusesUnavailable ?
+                <Text testID="archive-status-notice" style={{ color: colors.mutedForeground }}>
+                  {t(statusesPending ? 'archiveStatusesPending' : statusesError ? 'archiveStatusesError' : 'archiveStatusesUnavailable')}
+                </Text> : null}
               {selectedArchive.snapshot.length === 0 ? (
                 <EmptyState icon="receipt-outline" title={t('archiveNoEvents')} hint={selectedArchive.date} />
               ) : (
@@ -184,6 +188,9 @@ export default function ArchiveScreen() {
                               {getEventTitle(event)} — {journalEventMoney(event, language)}
                             </Text>
                             <ActorBadge userId={event.createdByUserId} />
+                            {selectedArchive.operationStatuses?.[event.id] ? <Text style={[styles.eventNote, { color: colors.mutedForeground }]}>
+                              {t('archiveCurrentStatus')}: {t(selectedArchive.operationStatuses[event.id] === 'cancelled' ? 'operationCancelled' : 'operationSuperseded')}
+                            </Text> : null}
                             {journalEventDetails(event, language, t).map((detail, index) => (
                               <Text
                                 key={`${event.id}:${index}`}

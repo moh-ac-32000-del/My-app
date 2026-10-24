@@ -1,3 +1,5 @@
+import { dateTimeFormatter } from '../data/intlFormatters';
+
 export type Language = 'ar' | 'en' | 'tr';
 
 const ar = {
@@ -48,6 +50,22 @@ const ar = {
   merchantDirect: 'دفعة من عميل إلى تاجر',
   merchantOpening: 'رصيد افتتاحي',
   merchantReverse: 'تصحيح تسجيل خاطئ',
+  operationEdit: 'تعديل العملية',
+  operationDebtPrincipal: 'مبلغ الدين الأصلي',
+  archiveCurrentStatus: 'الحالة الحالية',
+  archiveStatusesPending: 'بيانات الإغلاق كما حُفظت. جارٍ التحقق من حالات التعديل والإلغاء الحالية…',
+  archiveStatusesError: 'بيانات الإغلاق كما حُفظت. تعذر التحقق من حالات التعديل والإلغاء الحالية؛ أعد فتح اليوم للمحاولة.',
+  archiveStatusesUnavailable: 'تُعرض بيانات الإغلاق كما حُفظت. الحالات الحالية للعمليات غير متاحة لهذا اليوم الكبير؛ لم نغيّر الأرشيف.',
+  paymentMethodCash: 'نقدي',
+  paymentMethodCard: 'بطاقة',
+  paymentMethodBankTransfer: 'تحويل بنكي',
+  paymentMethodOther: 'أخرى',
+  paymentAdjustmentDebt: 'رصيد مستعاد بعد تصحيح سداد',
+  operationCancel: 'إلغاء العملية',
+  operationCancelConfirm: 'هل تريد إلغاء هذه العملية وأثرها المالي؟ ستبقى في السجل بعلامة ملغاة.',
+  operationKeep: 'الاحتفاظ بالعملية',
+  operationCancelled: 'ملغاة',
+  operationSuperseded: 'تم تعديلها',
   merchantCorrectionHint: 'لتصحيح تسجيل خاطئ فقط، وليس لتسجيل مرتجع بضاعة أو رد أموال فعلي. سيُحفظ الأصل مع قيد عكسي جديد بتاريخ اليوم، دون تعديل الأرشيفات السابقة.',
   merchantReason: 'سبب التصحيح (مطلوب)',
   merchantCash: 'من الصندوق',
@@ -509,6 +527,22 @@ const en: Record<TranslationKey, string> = {
   merchantDirect: 'Customer → merchant payment',
   merchantOpening: 'Opening balance',
   merchantReverse: 'Correct an erroneous entry',
+  operationEdit: 'Edit operation',
+  operationDebtPrincipal: 'Original debt amount',
+  archiveCurrentStatus: 'Current status',
+  archiveStatusesUnavailable: 'Closing values are shown as saved. Current operation statuses are unavailable for this large day; the archive is unchanged.',
+  archiveStatusesPending: 'Closing values are shown as saved. Checking current edit and cancellation statuses…',
+  archiveStatusesError: 'Closing values are shown as saved. Current edit and cancellation statuses could not be verified; reopen the day to retry.',
+  paymentMethodCash: 'Cash',
+  paymentMethodCard: 'Card',
+  paymentMethodBankTransfer: 'Bank transfer',
+  paymentMethodOther: 'Other',
+  paymentAdjustmentDebt: 'Balance restored after payment correction',
+  operationCancel: 'Cancel operation',
+  operationCancelConfirm: 'Cancel this operation and its financial effect? It will remain in history marked cancelled.',
+  operationKeep: 'Keep operation',
+  operationCancelled: 'Cancelled',
+  operationSuperseded: 'Edited',
   merchantCorrectionHint: 'Only correct an erroneous entry, not a goods return or an actual refund. The original is retained with a new reversal dated today; previous archives are not rewritten.',
   merchantReason: 'Correction reason (required)',
   merchantCash: 'From cash drawer',
@@ -968,6 +1002,22 @@ const tr: Record<TranslationKey, string> = {
   merchantDirect: 'Müşteri → tedarikçi ödemesi',
   merchantOpening: 'Açılış bakiyesi',
   merchantReverse: 'Hatalı kaydı düzelt',
+  operationEdit: 'İşlemi düzenle',
+  operationDebtPrincipal: 'İlk borç tutarı',
+  archiveCurrentStatus: 'Güncel durum',
+  archiveStatusesUnavailable: 'Kapanış değerleri kaydedildiği gibi gösterilir. Bu yoğun gün için güncel işlem durumları kullanılamıyor; arşiv değiştirilmedi.',
+  archiveStatusesPending: 'Kapanış değerleri kaydedildiği gibi gösterilir. Güncel düzenleme ve iptal durumları kontrol ediliyor…',
+  archiveStatusesError: 'Kapanış değerleri kaydedildiği gibi gösterilir. Güncel düzenleme ve iptal durumları doğrulanamadı; tekrar denemek için günü yeniden açın.',
+  paymentMethodCash: 'Nakit',
+  paymentMethodCard: 'Kart',
+  paymentMethodBankTransfer: 'Banka havalesi',
+  paymentMethodOther: 'Diğer',
+  paymentAdjustmentDebt: 'Ödeme düzeltmesi sonrası geri yüklenen bakiye',
+  operationCancel: 'İşlemi iptal et',
+  operationCancelConfirm: 'İşlem ve mali etkisi iptal edilsin mi? Geçmişte iptal edildi olarak kalır.',
+  operationKeep: 'İşlemi koru',
+  operationCancelled: 'İptal edildi',
+  operationSuperseded: 'Düzenlendi',
   merchantCorrectionHint: 'Yalnızca hatalı kaydı düzeltir; mal iadesi veya gerçek para iadesi değildir. Asıl kayıt korunur ve bugünün tarihli ters kaydı eklenir; eski arşivler değiştirilmez.',
   merchantReason: 'Düzeltme nedeni (zorunlu)',
   merchantCash: 'Kasadan',
@@ -1397,12 +1447,12 @@ export function isRTL(language: Language): boolean {
 
 export function formatLocalizedDate(date: Date, language: Language): string {
   const locale = language === 'ar' ? 'ar' : language === 'tr' ? 'tr-TR' : 'en-US';
-  return new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'long', year: 'numeric' }).format(date);
+  return dateTimeFormatter(locale, { day: 'numeric', month: 'long', year: 'numeric' }).format(date);
 }
 
 export function formatLocalizedDateTime(date: Date, language: Language, timeZone?: string): string {
   const locale = language === 'ar' ? 'ar' : language === 'tr' ? 'tr-TR' : 'en-US';
-  return new Intl.DateTimeFormat(locale, {
+  return dateTimeFormatter(locale, {
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
@@ -1414,7 +1464,7 @@ export function formatLocalizedDateTime(date: Date, language: Language, timeZone
 
 export function formatLocalizedTime(date: Date, language: Language, timeZone?: string): string {
   const locale = language === 'ar' ? 'ar' : language === 'tr' ? 'tr-TR' : 'en-US';
-  return new Intl.DateTimeFormat(locale, {
+  return dateTimeFormatter(locale, {
     hour: '2-digit',
     minute: '2-digit',
     ...(timeZone ? { timeZone } : {}),

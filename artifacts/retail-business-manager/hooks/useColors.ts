@@ -1,4 +1,5 @@
 import { useColorScheme } from 'react-native';
+import { useMemo } from 'react';
 import colors from '@/constants/colors';
 import { createTheme } from '@/constants/colors';
 import { useStore } from '@/context/StoreContext';
@@ -21,6 +22,5 @@ export function useColors() {
   // The surface system stays dark in every appearance mode; only the accent
   // tone is user-configurable.
   const palette = scheme === 'dark' ? colors.dark : colors.light;
-  const theme = createTheme(profile.accent);
-  return { ...palette, ...theme, radius: colors.radius };
+  return useMemo(() => ({ ...palette, ...createTheme(profile.accent), radius: colors.radius }), [palette, profile.accent]);
 }

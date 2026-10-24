@@ -12,11 +12,11 @@ import type { MerchantOperation } from '@/types/merchant';
 export function MerchantOperationDetails({
   operation,
   onClose,
-  onReverse,
+  onEdit,
 }: {
   operation: MerchantOperation;
   onClose: () => void;
-  onReverse?: () => void;
+  onEdit?: () => void;
 }) {
   const colors = useColors(),
     { t, language, isRTL } = useI18n(),
@@ -87,17 +87,17 @@ export function MerchantOperationDetails({
             </Text>
           ) : null}
           {operation.reversedByOperationId ? (
-            <Text style={{ ...text, color: colors.warning }}>{t('merchantReversed')}</Text>
+            <Text style={{ ...text, color: colors.mutedForeground }}>{t(operation.replacementOperationId ? 'operationSuperseded' : 'operationCancelled')}</Text>
           ) : null}
-          {onReverse && !operation.reversedByOperationId && operation.action !== 'reverse' ? (
+          {onEdit && !operation.reversedByOperationId && operation.action !== 'reverse' ? (
             <Pressable
-              testID="merchant-correction-link"
+              testID="merchant-edit-link"
               accessibilityRole="button"
-              onPress={onReverse}
+              onPress={onEdit}
               style={{ paddingVertical: 8 }}
             >
               <Text style={{ ...text, color: colors.warning, textDecorationLine: 'underline' }}>
-                {t('merchantReverse')}
+                {t('operationEdit')}
               </Text>
             </Pressable>
           ) : null}

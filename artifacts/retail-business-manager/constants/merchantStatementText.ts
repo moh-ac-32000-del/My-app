@@ -38,7 +38,7 @@ export const merchantStatementText = {
     error: 'تعذر تجهيز الكشف الكامل أو تأكيد صلاحية التصدير. أعد تحميل السجلات وحاول مجددًا.',
     saved: 'تم حفظ الملف',
     shared: 'فُتحت نافذة المشاركة؛ اختر مكان الحفظ أو المستلم.',
-    note: 'الأرصدة موجبة: علينا للتاجر. الأرصدة سالبة: لنا عند التاجر. الفترة محسوبة بتاريخ التسجيل الفعلي، لا بتاريخ المستند المعدّل.',
+    note: 'الأرصدة موجبة: علينا للتاجر. الأرصدة سالبة: لنا عند التاجر. يعرض الكشف العمليات السارية حتى نهاية الفترة، ويُعاد احتساب رصيد بدايتها دون العمليات الملغاة. الفترة حسب تاريخ التسجيل الفعلي.',
   },
   en: {
     title: 'Merchant PDF statement',
@@ -80,7 +80,7 @@ export const merchantStatementText = {
       'The complete statement or current export authorization could not be verified. Reload the records and retry.',
     saved: 'File saved',
     shared: 'Share sheet opened; choose a destination or recipient.',
-    note: 'Positive balance: payable to merchant. Negative: credit with merchant. Periods use actual recording dates, not edited documentary dates.',
+    note: 'Positive balance: payable to merchant. Negative: credit with merchant. Only entries effective at the period end are shown; the opening balance is restated without cancelled entries. Periods use actual recording dates.',
   },
   tr: {
     title: 'Tedarikçi PDF hesap özeti',
@@ -121,6 +121,6 @@ export const merchantStatementText = {
     error: 'Tam hesap özeti veya güncel dışa aktarma yetkisi doğrulanamadı. Kayıtları yeniden yükleyip deneyin.',
     saved: 'Dosya kaydedildi',
     shared: 'Paylaşım penceresi açıldı; hedef veya alıcı seçin.',
-    note: 'Pozitif bakiye: tedarikçiye borç. Negatif: tedarikçide alacak. Dönemler değiştirilen belge tarihine değil gerçek kayıt tarihine dayanır.',
+    note: 'Pozitif bakiye: tedarikçiye borç. Negatif: tedarikçide alacak. Dönem sonundaki geçerli işlemler gösterilir; açılış bakiyesi iptal edilen işlemler hariç yeniden hesaplanır. Dönemler gerçek kayıt tarihine dayanır.',
   },
 } as const;

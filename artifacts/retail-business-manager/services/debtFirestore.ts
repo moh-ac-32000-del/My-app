@@ -18,6 +18,7 @@ import { validateDebtInput } from '@/services/storage';
 import type { Debt } from '@/types/business';
 import { createTrustedDebt, updateTrustedDebt } from '@/services/trustedDebtFirestore';
 import { canonicalCredit, legacyAmountExact } from '@/data/customerCreditAccounting';
+import { operationCorrectionMetadata } from '@/data/operationCorrectionMetadata';
 
 type DebtSnapshot = {
   id: string;
@@ -141,9 +142,10 @@ export function normalizeDebtDocument(
   };
 
   try {
+    Object.assign(debt, operationCorrectionMetadata(value));
     if (value.amountExact !== undefined) debt.amountExact = legacyAmountExact(value.amount, value.amountExact);
     if (value.creditAppliedExact !== undefined) debt.creditAppliedExact = canonicalCredit(value.creditAppliedExact);
-    for (const key of ['merchantOperationId', 'correctionOfMerchantOperationId', 'note'] as const) {
+    for (const key of ['merchantOperationId', 'correctionOfMerchantOperationId', 'correctionOfPaymentId', 'note'] as const) {
       if (value[key] !== undefined) {
         if (typeof value[key] !== 'string') return null;
         debt[key] = value[key];

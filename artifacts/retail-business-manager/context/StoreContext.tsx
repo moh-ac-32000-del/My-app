@@ -621,6 +621,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const language = preferredLanguage ?? profile.language;
   const rtl = isRTL(language);
+  const t = useMemo(() => (key: TranslationKey) => translate(key, language), [language]);
   const value = useMemo(
     () => ({
       profile,
@@ -628,7 +629,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setLanguage,
       isRTL: rtl,
       direction: (rtl ? 'rtl' : 'ltr') as 'rtl' | 'ltr',
-      t: (key: TranslationKey) => translate(key, language),
+      t,
       isAuthenticated,
       isReady,
       activeSpaceId,
@@ -667,6 +668,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       isAuthenticated,
       isReady,
       language,
+      t,
       setLanguage,
       profile,
       retryActiveSpace,

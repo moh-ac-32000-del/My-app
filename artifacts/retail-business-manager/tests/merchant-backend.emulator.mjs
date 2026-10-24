@@ -6,6 +6,7 @@ import { merchantSettingsCommandHandler } from '../functions/lib/functions/src/m
 import { settleCustomerDebtHandler } from '../functions/lib/functions/src/settleCustomerDebt.js';
 import { trustedDebtCommandHandler } from '../functions/lib/functions/src/trustedDebtCommand.js';
 import { dailyArchiveCommandHandler } from '../functions/lib/functions/src/dailyArchiveCommand.js';
+import { customerOperationCommandHandler } from '../functions/lib/functions/src/customerOperationCommand.js';
 import { initializeTestEnvironment } from '@firebase/rules-unit-testing';
 import {
   collection as clientCollection,
@@ -90,6 +91,100 @@ async function fixture(suffix) {
   };
 }
 try {
+  const customerEdit = await fixture('customer-operation-editor');
+  const customerData = { kind: 'debt', spaceId: customerEdit.space.id, storeId: customerEdit.base.storeId,
+    customerId: customerEdit.base.customerId, targetId: 'old-debt', expectedUpdatedAt: '2026-10-18T10:00:00.000Z', expectedRevision: 0 };
+  const customerCommand = data => customerOperationCommandHandler(request(data), runtime);
+  const customerInput = { ...customerData, action: 'edit', operationId: 'principal-edit', amountExact: '100.00',
+    operationDate: '2026-09-01', note: 'Corrected principal' };
+  const customerResults = await Promise.all([customerCommand(customerInput), customerCommand(customerInput)]);
+  assert.deepEqual(customerResults.map(row => row.outcome).sort(), ['completed','replayed']);
+  const editedDebt = (await customerEdit.space.collection('debts').doc('old-debt').get()).data();
+  assert.equal(editedDebt.amountExact, '80.00');
+  assert.equal(editedDebt.originalAmount, 100);
+  await assert.rejects(customerCommand({ ...customerInput, operationId: 'stale-edit' }), { code: 'failed-precondition' });
+  await customerCommand({ ...customerData, action: 'cancel', operationId: 'cancel-charge', expectedUpdatedAt: editedDebt.updatedAt, expectedRevision: 1 });
+  assert.equal((await customerEdit.credit()).data().creditExact, '20.00');
+  const archived = { id: 'immutable', workspaceId: customerEdit.space.id, storeId: customerEdit.base.storeId,
+    date: '2026-10-18', closedAt: '2026-10-18T15:00:00Z', closingNumber: 1, closingCashBalances: [{ currency: 'TRY', amount: 300 }],
+    snapshot: [{ id: 'debt:old-debt', sourceId: 'old-debt', storeId: customerEdit.base.storeId, type: 'debt', amount: 120, currency: 'TRY', occurredAt: '2026-10-18T10:00:00Z' }] };
+  await customerEdit.space.collection('dailyArchives').doc(archived.id).set(archived);
+  const annotated = await dailyArchiveCommandHandler(request({ action: 'list', spaceId: customerEdit.space.id,
+    storeId: customerEdit.base.storeId, date: archived.date, includeCurrentStatuses: true }), runtime);
+  assert.equal(annotated.archives[0].operationStatuses['debt:old-debt'], 'cancelled');
+  assert.deepEqual(annotated.archives[0].snapshot, archived.snapshot);
+  assert.deepEqual((await customerEdit.space.collection('dailyArchives').doc(archived.id).get()).data(), archived);
+  console.log('Customer debt editor emulator — concurrent replay, stale edit rejection, credit refund and immutable archive annotations: PASS');
+
+  const customerPayment = await fixture('customer-payment-editor');
+  await settleCustomerDebtHandler(request({ ...customerPayment.base, operationId: 'settlement', transactionId: 'cash', paymentId: 'payment', amount: 80 }), runtime);
+  const paymentRef = customerPayment.space.collection('payments').doc('payment');
+  const originalPayment = (await paymentRef.get()).data();
+  const paymentInput = { action: 'edit', kind: 'payment', operationId: 'payment-edit', spaceId: customerPayment.space.id,
+    storeId: customerPayment.base.storeId, customerId: customerPayment.base.customerId, targetId: 'payment',
+    expectedUpdatedAt: originalPayment.updatedAt, expectedRevision: 0, amountExact: '50.00', method: 'card', operationDate: '2026-09-01', note: 'Corrected payment' };
+  await customerCommand(paymentInput);
+  const currentPayment = (await paymentRef.get()).data();
+  assert.equal(currentPayment.amountExact, '50.00');
+  assert.equal(currentPayment.paidAt, originalPayment.paidAt);
+  assert.equal((await customerPayment.space.collection('debts').get()).docs.reduce((sum,doc) => sum + doc.data().amount, 0), 50);
+  await customerCommand({ action: 'cancel', kind: 'payment', operationId: 'payment-cancel', spaceId: customerPayment.space.id,
+    storeId: customerPayment.base.storeId, customerId: customerPayment.base.customerId, targetId: 'payment',
+    expectedUpdatedAt: currentPayment.updatedAt, expectedRevision: 1 });
+  assert.equal((await paymentRef.get()).data().cancelled, true);
+  assert.equal((await customerPayment.space.collection('debts').get()).docs.reduce((sum,doc) => sum + doc.data().amount, 0), 100);
+  assert.equal((await customerPayment.space.collection('transactions').get()).docs.reduce((sum,doc) => sum + (doc.data().type === 'cash_in' ? doc.data().amount : -doc.data().amount), 0), 0);
+  const paymentDay = originalPayment.paidAt.slice(0, 10);
+  const paymentEnd = new Date(Date.parse(`${paymentDay}T00:00:00.000Z`) + 86400000).toISOString();
+  const paymentArchive = await dailyArchiveCommandHandler(request({ action: 'close', spaceId: customerPayment.space.id,
+    storeId: customerPayment.base.storeId, date: paymentDay, startAt: `${paymentDay}T00:00:00.000Z`, endAt: paymentEnd }), runtime);
+  const cashEvents = paymentArchive.created.snapshot.filter(row => ['settlement','cash_in','cash_out'].includes(row.type));
+  assert.equal(cashEvents.find(row => row.type === 'settlement').amount, 80);
+  assert.equal(cashEvents.reduce((sum, row) => sum + (row.type === 'cash_out' ? -row.amount : row.amount), 0), 0);
+  console.log('Customer payment editor emulator — provenance, current-period cash adjustment, cancelled payment retention and unduplicated closing journal: PASS');
+
+  const amend = await fixture('atomic-edit');
+  await amend.space.collection('debts').doc('old-debt').delete();
+  await amend.merchant('directPayment', 'old-direct', { customerId: amend.base.customerId, amountExact: '300.00' });
+  const editInput = { customerId: amend.base.customerId, amountExact: '100.00', replacesOperationId: 'old-direct' };
+  const edited = await Promise.all([
+    amend.merchant('directPayment', 'new-direct', editInput),
+    amend.merchant('directPayment', 'new-direct', editInput),
+  ]);
+  assert.deepEqual(edited.map(row => row.outcome).sort(), ['completed', 'replayed']);
+  assert.equal((await amend.credit()).data().creditExact, '100.00');
+  assert.equal((await amend.credit()).data().revision, 3);
+  assert.equal((await amend.balance()).data().balanceExact, '-100.00');
+  assert.equal((await amend.balance()).data().revision, 3);
+  assert.equal((await amend.space.collection('merchantOperations').get()).size, 3);
+  assert.equal((await amend.space.collection('transactions').get()).size, 0);
+  await assert.rejects(amend.merchant('directPayment', 'new-direct', { ...editInput, amountExact: '101.00' }), { code: 'already-exists' });
+  await assert.rejects(amend.merchant('directPayment', 'other-edit', editInput), { code: 'failed-precondition' });
+  const cancelInput = { targetOperationId: 'new-direct', cancelled: true, reason: 'Operation cancelled' };
+  const cancelled = await Promise.all([
+    amend.merchant('reverse', 'cancel-direct', cancelInput),
+    amend.merchant('reverse', 'cancel-direct', cancelInput),
+  ]);
+  assert.deepEqual(cancelled.map(row => row.outcome).sort(), ['completed', 'replayed']);
+  assert.equal((await amend.credit()).data().creditExact, '0.00');
+  assert.equal((await amend.balance()).data().balanceExact, '0.00');
+  assert.equal((await amend.space.collection('merchantOperations').doc('new-direct').get()).data().cancelled, true);
+  console.log('Merchant edit/cancel emulator — atomic shared-credit preparation, concurrent replay, stale edit rejection and no cash: PASS');
+
+  // A prior partial debt means preparation creates a positive correction debt,
+  // which the replacement may consume in this SAME transaction (create + update).
+  const partialEdit = await fixture('edit-partial-customer-debt');
+  await partialEdit.merchant('directPayment', 'old-direct', { customerId: partialEdit.base.customerId, amountExact: '300.00' });
+  assert.equal((await partialEdit.credit()).data().creditExact, '200.00');
+  await partialEdit.merchant('directPayment', 'new-direct', { customerId: partialEdit.base.customerId,
+    amountExact: '100.00', replacesOperationId: 'old-direct' });
+  assert.equal((await partialEdit.credit()).data().creditExact, '0.00');
+  const partialDebts = await partialEdit.space.collection('debts').get();
+  assert.equal(partialDebts.docs.reduce((sum, doc) => sum + doc.data().amount, 0), 0);
+  assert.equal((await partialEdit.balance()).data().balanceExact, '-100.00');
+  assert.equal((await partialEdit.space.collection('transactions').get()).size, 0);
+  console.log('Merchant edit emulator — prepared positive correction debt and replacement consume together without residual customer debt: PASS');
+
   const materials = await fixture('separate-materials');
   const materialInput = { separateLines: true, paidExact: '0.00', source: 'cash', lines: [
     { name: 'Screens', quantity: '2', unitPrice: '100.0050' },

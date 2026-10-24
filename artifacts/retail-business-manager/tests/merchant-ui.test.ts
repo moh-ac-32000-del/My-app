@@ -76,7 +76,8 @@ vi.mock('@/context/CustomerContext', () => ({
   }),
 }));
 vi.mock('@/components/AppShell', () => ({
-  AppShell: ({ children }: any) => React.createElement('main', null, children),
+  AppShell: ({ children, list }: any) => React.createElement('main', null, children,
+    list?.data.map((item: any) => React.createElement('div', { key: item.id }, list.renderItem({ item })))),
   GlassCard: ({ children, testID }: any) => React.createElement('section', { 'data-testid': testID }, children),
   PageHeader: ({ title, action }: any) => React.createElement('header', null, title, action),
   EmptyState: ({ title }: any) => React.createElement('aside', null, title),
@@ -120,6 +121,7 @@ import { useMerchantAccounts } from '@/hooks/useMerchantAccounts';
 import MerchantSettingsScreen from '@/app/merchant-settings';
 import { MerchantStatementModal } from '@/components/MerchantStatementModal';
 import { merchantStatementText } from '@/constants/merchantStatementText';
+import { CustomerOperationEditor } from '@/components/CustomerOperationEditor';
 function card() {
   return renderToStaticMarkup(
     React.createElement(MerchantOperationCard, { operation: useMerchantAccounts().operations[0] }),
@@ -136,6 +138,34 @@ beforeEach(() => {
   state.limited = false;
 });
 describe('merchant screens (server-rendered, not device acceptance)', () => {
+  it.each(['ar','tr','en'] as const)('provides the same single editor and nested cancellation for customers in %s', language => {
+    state.language = language;
+    const props = { selection: { kind: 'debt', target: { id: 'd', customerId: 'c', currency: 'TRY',
+      amount: 40, originalAmount: 100, note: 'Original note', createdAt: '2026-10-19T12:00:00Z', updatedAt: '2026-10-19T12:00:00Z' } }, onClose: vi.fn() };
+    const html = renderToStaticMarkup(React.createElement(CustomerOperationEditor, props as never));
+    expect(html).toContain('value="100.00"');
+    expect(html).toContain(translate('operationDebtPrincipal', language));
+    expect(html).toContain('customer-operation-cancel');
+    expect(html).not.toContain(translate('merchantReverse', language));
+    state.role = 'viewer';
+    expect(renderToStaticMarkup(React.createElement(CustomerOperationEditor, props as never))).toBe('');
+  });
+  it.each(['ar', 'tr', 'en'] as const)('prefills edit fields and nests cancellation in %s', (language) => {
+    state.language = language;
+    const markup = renderToStaticMarkup(React.createElement(MerchantCommandForm, {
+      action: 'purchase', merchant: useMerchantAccounts().merchants[0] as never,
+      target: { id: 'old', currency: 'TRY', createdAt: '2026-10-19T12:00:00Z',
+        operationDate: '2026-10-12', note: 'Original note', paidExact: '0.00',
+        lines: [{ name: 'Original item', quantity: '2.5', unitPrice: '19.12', totalExact: '47.80' }] } as never,
+      command: vi.fn(), onDone: vi.fn(), onCancel: vi.fn(),
+    }));
+    expect(markup).toContain(translate('operationEdit', language));
+    expect(markup).toContain('merchant-cancel-operation');
+    expect(markup).toContain('Original item');
+    expect(markup).toContain('value="2.5"');
+    expect(markup).toContain('value="2026-10-12"');
+    expect(markup).not.toContain(translate('merchantReverse', language));
+  });
   it('blocks the PDF component itself for Viewer and asks explicit consent to load missing history', () => {
     const props = { merchant: useMerchantAccounts().merchants[0], operations: [], operationsLimited: true,
       historyLoading: false, loadMore: vi.fn(), onClose: vi.fn() };
@@ -205,7 +235,7 @@ describe('merchant screens (server-rendered, not device acceptance)', () => {
   it('does not show a second reversal action after an operation has been corrected', () => {
     state.reversed = true;
     const markup = card();
-    expect(markup).toContain(translate('merchantReversed', 'ar'));
+    expect(markup).toContain(translate('operationCancelled', 'ar'));
     expect(markup).not.toContain(translate('merchantReverse', 'ar'));
   });
   it('does not replace unavailable accounts with an empty or zero-success state', () => {

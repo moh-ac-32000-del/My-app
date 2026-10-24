@@ -48,6 +48,9 @@ export interface MerchantOperation {
   customerId?: string;
   customerName?: string;
   reversedByOperationId?: string;
+  cancelled?: boolean;
+  replacementOperationId?: string;
+  replacesOperationId?: string;
   reversesOperationId?: string;
   reason?: string;
   transactionId?: string;
@@ -74,7 +77,7 @@ export interface MerchantSnapshot {
   operationsLimited: boolean;
 }
 type Financial = { currency: CurrencyCode; note?: string };
-export type MerchantDraftCommand = { operationId: string; merchantId: string } & (
+export type MerchantDraftCommand = { operationId: string; merchantId: string; replacesOperationId?: string } & (
   | {
       action: 'save';
       name: string;
@@ -109,5 +112,5 @@ export type MerchantDraftCommand = { operationId: string; merchantId: string } &
       paymentMethodId?: string;
       paymentMethodName?: string;
     })
-  | { action: 'reverse'; currency: CurrencyCode; targetOperationId: string; reason: string }
+  | { action: 'reverse'; currency: CurrencyCode; targetOperationId: string; reason: string; cancelled?: true }
 );

@@ -1,5 +1,5 @@
 import React, { ReactNode } from 'react';
-import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Platform, Pressable, ScrollView, StyleSheet, Text, View, type FlatListProps } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { usePathname, useRouter } from 'expo-router';
@@ -38,18 +38,21 @@ export function AppBackground({ children }: { children: ReactNode }) {
   );
 }
 
-export function AppShell({ children, scroll = true }: { children: ReactNode; scroll?: boolean }) {
+type ShellList<T> = Pick<FlatListProps<T>, 'data' | 'renderItem' | 'keyExtractor' | 'ListEmptyComponent' | 'extraData'> & { testID: string };
+
+export function AppShell<T>({ children, scroll = true, list, overlay }: {
+  children: ReactNode; scroll?: boolean; list?: ShellList<T>; overlay?: ReactNode;
+}) {
   const colors = useColors();
   const { isRTL, direction, t } = useI18n();
   const insets = useSafeAreaInsets();
   const pathname = usePathname();
   const router = useRouter();
-  const { profile, workspaceRole, activeSpaceError, isAuthenticated, retryActiveSpace } = useStore();
+  const { profile, workspaceRole, activeSpaceError, isAuthenticated, retryActiveSpace, sessionKey } = useStore();
   const bottomInset = Platform.OS === 'web' ? 34 : insets.bottom;
-
-  const content = (
-    <View style={[styles.content, { direction, paddingTop: Platform.OS === 'web' ? 67 : insets.top + 8 }]}>
-      {isAuthenticated && (activeSpaceError || !workspaceRole) && pathname !== '/workspaces' && pathname !== '/settings' ? (
+  const blocked = isAuthenticated && (activeSpaceError || !workspaceRole) && pathname !== '/workspaces' && pathname !== '/settings';
+  const body = <>
+      {blocked ? (
         <View style={{ gap: 18 }}>
           <Text style={{ color: colors.foreground }}>{t('workspaceUnavailable')}</Text>
           <Pressable accessibilityRole="button" onPress={retryActiveSpace} style={{ padding: 16 }}><Text style={{ color: colors.primary }}>{t('tryAgain')}</Text></Pressable>
@@ -59,13 +62,36 @@ export function AppShell({ children, scroll = true }: { children: ReactNode; scr
         {workspaceRole === 'viewer' ? <Text testID="workspace-read-only" style={{ color: colors.primary, marginBottom: 16, textAlign: isRTL ? 'right' : 'left' }}>{t('workspaceReadOnly')}</Text> : null}
         {children}
       </>}
-      <View style={{ height: 112 + bottomInset }} />
+    </>;
+  const contentStyle = [styles.content, { direction, paddingTop: Platform.OS === 'web' ? 67 : insets.top + 8 }];
+  const footer = <View style={{ height: 112 + bottomInset }} />;
+  const content = (
+    <View style={contentStyle}>
+      {body}
+      {footer}
     </View>
   );
 
   return (
     <AppBackground>
-      {scroll ? (
+      {list ? (
+        <FlatList
+          key={sessionKey}
+          {...list}
+          data={blocked ? [] : list.data}
+          ListEmptyComponent={blocked ? null : list.ListEmptyComponent}
+          style={{ flex: 1 }}
+          contentContainerStyle={contentStyle}
+          ListHeaderComponent={body}
+          ListFooterComponent={footer}
+          initialNumToRender={12}
+          maxToRenderPerBatch={8}
+          windowSize={7}
+          removeClippedSubviews={false}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        />
+      ) : scroll ? (
         <ScrollView
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scrollContent}
@@ -76,6 +102,7 @@ export function AppShell({ children, scroll = true }: { children: ReactNode; scr
       ) : (
         content
       )}
+      {!blocked ? overlay : null}
       <View style={[styles.navWrap, { paddingBottom: bottomInset }]}>
         <BlurView intensity={55} tint="dark" style={[StyleSheet.absoluteFill, styles.blurNav]} />
         <View style={[styles.nav, { backgroundColor: colors.glassStrong, borderColor: colors.border, flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
@@ -86,7 +113,7 @@ export function AppShell({ children, scroll = true }: { children: ReactNode; scr
               <Pressable
                 key={item.path}
                 testID={`nav-${item.label}`}
-                  onPress={() => router.replace(item.path as never)}
+                  onPress={() => { if (pathname !== item.path) router.replace(item.path as never); }}
                 style={({ pressed }) => [styles.navItem, pressed && styles.pressed]}
               >
                 <View style={[styles.navIcon, active && { backgroundColor: colors.accent }]}>

@@ -117,6 +117,7 @@ export interface SettlementResult {
 
 export type { DailyJournalEvent, DailyJournalEventType } from '../types/journal';
 import type { DailyJournalEvent } from '../types/journal';
+import { customerPaymentJournalAmount } from '../data/customerPaymentJournal';
 
 export function buildDailyJournalEvents(
   storeId: string,
@@ -190,7 +191,7 @@ export function buildDailyJournalEvents(
       id: `settlement:${payment.id}`,
       storeId,
       type: 'settlement',
-      amount: payment.amount.amount,
+      amount: customerPaymentJournalAmount(payment),
       currency: payment.amount.currency,
       customerId: payment.customerId,
       customerName: customerNames.get(payment.customerId),

@@ -131,10 +131,16 @@ export function merchantOperationFromDocument(
     'debtId',
     'paymentMethodId',
     'paymentMethodName',
+    'replacementOperationId',
+    'replacesOperationId',
   ] as const) {
     if (record[key] !== undefined) result[key] = text(record[key], key !== 'customerName');
   }
   if ((record.paymentMethodId === undefined) !== (record.paymentMethodName === undefined)) invalid();
+  if (record.cancelled !== undefined) {
+    if (typeof record.cancelled !== 'boolean') invalid();
+    result.cancelled = record.cancelled;
+  }
   if (record.operationDate !== undefined) result.operationDate = merchantOperationDate(record.operationDate);
   if (record.reversedAction !== undefined) {
     if (!['opening', 'purchase', 'payment', 'directPayment'].includes(String(record.reversedAction))) invalid();

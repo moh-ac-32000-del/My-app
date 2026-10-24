@@ -5,6 +5,7 @@ import { useColors } from '@/hooks/useColors';
 import { useI18n } from '@/hooks/useI18n';
 import { formatExactMoney } from '@/data/exactMoneyPresentation';
 import type { CurrencyCode } from '@/constants/currencies';
+import { merchantOperationTone } from '@/data/merchantOperationPresentation';
 
 export function MerchantButton({
   title,
@@ -22,8 +23,7 @@ export function MerchantButton({
   tone?: 'primary' | 'payment' | 'purchase' | 'direct';
 }) {
   const colors = useColors();
-  const accent =
-    tone === 'payment' ? '#ef4444' : tone === 'purchase' ? '#3b82f6' : tone === 'direct' ? '#eab308' : colors.primary;
+  const accent = tone === 'primary' ? colors.primary : merchantOperationTone(tone === 'direct' ? 'directPayment' : tone);
   return (
     <Pressable
       testID={testID}
@@ -33,30 +33,27 @@ export function MerchantButton({
       onPress={onPress}
       style={{
         borderWidth: 1,
-        borderColor: tone !== 'primary' ? accent : colors.border,
+        borderColor: colors.border,
         borderRadius: 14,
         paddingHorizontal: 16,
         paddingVertical: 13,
         opacity: disabled ? 0.45 : 1,
-        backgroundColor: selected ? accent : colors.input,
+        backgroundColor: selected ? colors.primary : colors.input,
         minHeight: 46,
       }}
     >
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7 }}>
+      {tone !== 'primary' ? <View testID="merchant-action-tone" accessible={false} style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: accent }} /> : null}
       <Text
         style={{
-          color: selected
-            ? tone === 'direct'
-              ? '#111827'
-              : tone === 'primary'
-                ? colors.primaryForeground
-                : '#ffffff'
-            : colors.foreground,
+          color: selected ? colors.primaryForeground : colors.foreground,
           textAlign: 'center',
           fontWeight: '600',
         }}
       >
         {title}
       </Text>
+      </View>
     </Pressable>
   );
 }

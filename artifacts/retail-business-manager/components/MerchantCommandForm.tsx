@@ -61,13 +61,16 @@ export function MerchantCommandForm({
   const [notes, setNotes] = useState(merchant?.notes ?? '');
   const [openings, setOpenings] = useState<Array<{ currency: CurrencyCode; amount: string; credit: boolean }>>([]);
   const [currency, setCurrency] = useState<CurrencyCode>(target?.currency ?? profile.currency);
-  const [amount, setAmount] = useState('');
-  const [operationDate, setOperationDate] = useState(() => localMerchantDate());
-  const [paymentMethodId, setPaymentMethodId] = useState('');
-  const [note, setNote] = useState('');
-  const [customerId, setCustomerId] = useState('');
+  const editing = !!target && action !== 'reverse';
+  const [cancelConfirm, setCancelConfirm] = useState(false);
+  const [amount, setAmount] = useState(editing ? target.amountExact ?? '' : '');
+  const [paid, setPaid] = useState(editing ? target.paidExact ?? '0.00' : '0.00');
+  const [operationDate, setOperationDate] = useState(() => editing ? target.operationDate ?? localMerchantDate(new Date(target.createdAt)) : localMerchantDate());
+  const [paymentMethodId, setPaymentMethodId] = useState(editing ? target.paymentMethodId ?? '' : '');
+  const [note, setNote] = useState(editing ? target.note : '');
+  const [customerId, setCustomerId] = useState(editing ? target.customerId ?? '' : '');
   const [search, setSearch] = useState('');
-  const [lines, setLines] = useState([{ name: '', quantity: '1', unitPrice: '' }]);
+  const [lines, setLines] = useState(editing && target.lines ? target.lines.map(({ name, quantity, unitPrice }) => ({ name, quantity, unitPrice })) : [{ name: '', quantity: '1', unitPrice: '' }]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<'invalid' | 'uncertain' | null>(null);
   const pending = useRef<MerchantDraftCommand | null>(null);
@@ -96,18 +99,26 @@ export function MerchantCommandForm({
       quantity: exactMoneyEntry(line.quantity, 3),
       unitPrice: exactMoneyEntry(line.unitPrice, 4),
     }));
+  const selectedMethod = () => settings.data?.paymentMethods.find(row => row.id === paymentMethodId && row.isActive)
+    ?? (editing && target.paymentMethodId === paymentMethodId && target.paymentMethodName
+      ? { id: paymentMethodId, name: target.paymentMethodName } : undefined);
   let total: string | null = null;
   try {
     if (action === 'purchase') total = calculateMerchantPurchase(normalizedLines(), currency).total.amount;
   } catch {
     /* incomplete draft */
   }
-  const submit = async () => {
+  const submit = async (cancelOperation = false) => {
     if (busy || !canWriteBusiness) return;
     if (!pending.current) {
       try {
-        const base = { operationId: merchantDraftId(), merchantId: merchant?.id ?? merchantDraftId() };
-        if (action === 'save') {
+        const base = { operationId: merchantDraftId(), merchantId: merchant?.id ?? merchantDraftId(),
+          ...(editing && !cancelOperation ? { replacesOperationId: target.id } : {}) };
+        if (cancelOperation) {
+          if (!editing) throw new Error('target');
+          pending.current = { ...base, action: 'reverse', currency: target.currency,
+            targetOperationId: target.id, reason: 'Operation cancelled', cancelled: true };
+        } else if (action === 'save') {
           if (!name.trim()) throw new Error('name');
           pending.current = {
             ...base,
@@ -134,9 +145,9 @@ export function MerchantCommandForm({
             action,
             currency,
             lines: items,
-            source: 'cash',
-            paidExact: '0.00',
-            separateLines: true,
+            source: editing && target.source === 'external' ? 'external' : 'cash',
+            paidExact: editing ? exactMoneyEntry(paid, 2) : '0.00',
+            ...(!editing ? { separateLines: true as const } : {}),
             operationDate: merchantOperationDate(operationDate),
             note: note.trim(),
           };
@@ -160,8 +171,8 @@ export function MerchantCommandForm({
               )
             )
               throw new Error('customer');
-            const method = settings.data?.paymentMethods.find((row) => row.id === paymentMethodId && row.isActive);
-            if (!method) throw new Error('paymentMethod');
+            const method = selectedMethod();
+            if (!method && !(editing && !paymentMethodId && !target.paymentMethodId)) throw new Error('paymentMethod');
             pending.current = {
               ...base,
               action,
@@ -170,21 +181,20 @@ export function MerchantCommandForm({
               customerId,
               note: note.trim(),
               operationDate: merchantOperationDate(operationDate),
-              paymentMethodId: method.id,
-              paymentMethodName: method.name,
+              ...(method ? { paymentMethodId: method.id, paymentMethodName: method.name } : {}),
             };
           } else if (action === 'payment') {
-            const method = settings.data?.paymentMethods.find((row) => row.id === paymentMethodId && row.isActive);
-            if (!method) throw new Error('paymentMethod');
+            const external = editing && target.source === 'external';
+            const method = external ? undefined : selectedMethod();
+            if (!external && !method && !(editing && !paymentMethodId && !target.paymentMethodId)) throw new Error('paymentMethod');
             pending.current = {
               ...base,
               action,
               currency,
               amountExact,
-              source: 'cash',
+              source: editing && target.source === 'external' ? 'external' : 'cash',
               operationDate: merchantOperationDate(operationDate),
-              paymentMethodId: method.id,
-              paymentMethodName: method.name,
+              ...(method ? { paymentMethodId: method.id, paymentMethodName: method.name } : {}),
               note: note.trim(),
             };
           } else pending.current = { ...base, action: 'opening', currency, amountExact, note: note.trim() };
@@ -248,7 +258,7 @@ export function MerchantCommandForm({
             <Text
               style={{ color: colors.foreground, fontSize: 20, fontWeight: '700', textAlign: isRTL ? 'right' : 'left' }}
             >
-              {t(merchantActionLabels[action])}
+              {t(editing ? 'operationEdit' : merchantActionLabels[action])}
             </Text>
             {action === 'purchase' || action === 'payment' ? (
               <>
@@ -371,7 +381,7 @@ export function MerchantCommandForm({
                     title={t('currency')}
                     value={currency}
                     options={CURRENCY_OPTIONS.map((item) => ({ id: item.code, name: item.code }))}
-                    disabled={locked}
+                    disabled={locked || editing}
                     onChange={(value) => {
                       setCurrency(value as CurrencyCode);
                     }}
@@ -406,7 +416,7 @@ export function MerchantCommandForm({
                     value={paymentMethodId}
                     options={(settings.data?.paymentMethods ?? []).filter((row) => row.isActive)}
                     onChange={setPaymentMethodId}
-                    disabled={locked || !settings.data}
+                    disabled={locked || !settings.data || (editing && target.source === 'external')}
                   />
                 ) : null}
                 {action === 'purchase' ? (
@@ -463,6 +473,7 @@ export function MerchantCommandForm({
                 ) : action !== 'reverse' ? (
                   field(t('amount'), amount, setAmount, action !== 'opening')
                 ) : null}
+                {editing && action === 'purchase' ? field(t('merchantPaid'), paid, setPaid, true) : null}
                 {action === 'payment' || action === 'purchase' || action === 'directPayment' ? (
                   <MerchantDateField value={operationDate} onChange={setOperationDate} disabled={locked} />
                 ) : null}
@@ -482,13 +493,18 @@ export function MerchantCommandForm({
             ) : null}
             <MerchantButton
               testID="merchant-confirm"
-              title={t(error === 'uncertain' ? 'merchantRetrySame' : 'confirm')}
+              title={t(error === 'uncertain' ? 'merchantRetrySame' : cancelConfirm ? 'operationCancel' : editing ? 'saveChanges' : 'confirm')}
               selected
               tone={action === 'payment' ? 'payment' : 'primary'}
               disabled={busy || !canWriteBusiness}
-              onPress={submit}
+              onPress={() => void submit(cancelConfirm)}
             />
-            <MerchantButton title={t('cancel')} disabled={busy || error === 'uncertain'} onPress={onCancel} />
+            {editing ? <>
+              {cancelConfirm ? <Text style={{ color: colors.foreground }}>{t('operationCancelConfirm')}</Text> : null}
+              <MerchantButton testID="merchant-cancel-operation" title={t(cancelConfirm ? 'operationKeep' : 'operationCancel')}
+                disabled={locked} onPress={() => setCancelConfirm(value => !value)} />
+            </> : null}
+            <MerchantButton title={t('close')} disabled={busy || error === 'uncertain'} onPress={onCancel} />
           </GlassCard>
         </KeyboardAwareScrollViewCompat>
       </View>
