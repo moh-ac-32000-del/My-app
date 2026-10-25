@@ -10,6 +10,8 @@ import { getFirebaseAuth, isFirebaseConfigured } from '@/services/firebase';
 import { FollowUpSettings } from '@/components/FollowUpSettings';
 import { AndroidPushSettings } from '@/components/AndroidPushSettings';
 import { SpreadsheetExportSettings } from '@/components/SpreadsheetExportSettings';
+import { AppearanceSettings } from '@/components/AppearanceSettings';
+import { SettingsGroup } from '@/components/SettingsGroup';
 import { useColors } from '@/hooks/useColors';
 import { languageOptions, type Language } from '@/constants/i18n';
 import { accentOptions, type AccentColor } from '@/constants/colors';
@@ -194,6 +196,8 @@ export default function SettingsScreen() {
   return (
     <AppShell>
       <PageHeader title={t('settings')} subtitle={t('storeIdentityHint')} />
+      <AppearanceSettings />
+      <SettingsGroup title={t('storeIdentity')} icon="storefront-outline">
       <SectionTitle title={t('storeIdentity')} />
       <GlassCard style={styles.card}>
         <View style={[styles.logoRow, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
@@ -319,6 +323,8 @@ export default function SettingsScreen() {
         </View>
       </GlassCard>
 
+      </SettingsGroup>
+      <SettingsGroup title={t('accentColor')} icon="color-palette-outline">
       <SectionTitle title={t('accentColor')} />
       <GlassCard style={styles.card}>
         <View style={[styles.colorRow, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
@@ -329,7 +335,8 @@ export default function SettingsScreen() {
           ))}
         </View>
       </GlassCard>
-
+      </SettingsGroup>
+      <SettingsGroup title={t('preferences')} icon="options-outline">
       <SectionTitle title={t('preferences')} />
       <GlassCard style={styles.card}>
         <Pressable
@@ -397,12 +404,14 @@ export default function SettingsScreen() {
 
       <AndroidPushSettings />
       <FollowUpSettings scope={followUpUid && activeSpaceId ? { uid: followUpUid, spaceId: activeSpaceId, storeId: profile.id } : null} />
+      </SettingsGroup>
 
       <GlassCard style={[styles.cloudCard, { borderColor: colors.primary, flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
         <View style={[styles.cloudIcon, { backgroundColor: colors.accent }]}><Ionicons name="cloud-done-outline" size={22} color={colors.primary} /></View>
         <View style={[styles.cloudCopy, { alignItems: isRTL ? 'flex-end' : 'flex-start' }]}><Text style={[styles.cloudTitle, { color: colors.foreground, textAlign: isRTL ? 'right' : 'left' }]}>{t('cloudReady')}</Text><Text style={[styles.cloudHint, { color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' }]}>{t('cloudReadyHint')}</Text></View>
       </GlassCard>
 
+      <SettingsGroup title={t('backupRestore')} icon="download-outline">
       <SectionTitle title={t('backupRestore')} />
       <SpreadsheetExportSettings />
       <GlassCard testID="backup-restore-section" style={styles.card}>
@@ -416,7 +425,7 @@ export default function SettingsScreen() {
           </Text>
         </View>
       </GlassCard>
-
+      </SettingsGroup>
       <Pressable testID="save-settings" disabled={!canManageSpace} onPress={() => void save()} style={({ pressed }) => [styles.saveButton, { backgroundColor: colors.primary, flexDirection: isRTL ? 'row-reverse' : 'row' }, pressed && styles.pressed]}>
         <Ionicons name="checkmark-circle-outline" size={19} color={colors.primaryForeground} />
         <Text style={[styles.saveText, { color: colors.primaryForeground }]}>{t('saveChanges')}</Text>

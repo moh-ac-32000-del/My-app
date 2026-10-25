@@ -1,4 +1,5 @@
 import React from 'react';
+import { Ionicons } from '@expo/vector-icons';
 import { ActorBadge } from './ActorBadge';
 import { Pressable, Text, View } from 'react-native';
 import { GlassCard } from './AppShell';
@@ -11,7 +12,7 @@ import type { MerchantOperation } from '@/types/merchant';
 import { merchantOperationTone } from '@/data/merchantOperationPresentation';
 
 /** One compact ledger row: balances belong to the account header, never to the row. */
-export function MerchantOperationCard({ operation, onPress }: { operation: MerchantOperation; onPress?: () => void }) {
+export function MerchantOperationCard({ operation, onPress, onEdit }: { operation: MerchantOperation; onPress?: () => void; onEdit?: () => void }) {
   const colors = useColors();
   const { t, language, isRTL } = useI18n();
   const accent = merchantOperationTone(operation.action) ?? colors.mutedForeground;
@@ -35,6 +36,12 @@ export function MerchantOperationCard({ operation, onPress }: { operation: Merch
         <Text style={{ ...text, color: colors.mutedForeground }}>
           {operation.operationDate ?? new Date(operation.createdAt).toLocaleDateString(language)}
         </Text>
+        {onEdit && !operation.reversedByOperationId ? <Pressable
+          testID={`edit-merchant-operation-${operation.id}`} accessibilityRole="button" accessibilityLabel={t('operationEdit')}
+          onPress={press => { press.stopPropagation(); onEdit(); }}
+          style={{ alignSelf: isRTL ? 'flex-start' : 'flex-end', minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' }}>
+          <Ionicons name="pencil-outline" size={17} color={colors.mutedForeground} />
+        </Pressable> : null}
         {operation.lines?.map((line, index) => (
           <Text key={index} style={text}>
             {line.name}

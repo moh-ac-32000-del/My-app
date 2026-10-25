@@ -1,0 +1,5 @@
+export const journalDetailText = {
+  ar: { title: 'تفاصيل العملية', before: 'رصيد الصندوق قبل العملية', effect: 'أثر العملية على الصندوق', after: 'رصيد الصندوق بعد العملية', unavailable: 'الرصيد السابق غير متاح بدقة لهذه العملية', noncash: 'لا تؤثر في الصندوق', source: 'بالعملة نفسها، حسب وقت التسجيل المالي، وليس التاريخ الوصفي المعدّل.' },
+  en: { title: 'Operation details', before: 'Drawer balance before', effect: 'Effect on drawer', after: 'Drawer balance after', unavailable: 'The prior balance cannot be established precisely for this operation', noncash: 'No drawer effect', source: 'Same currency, by financial posting time, not an edited documentary date.' },
+  tr: { title: 'İşlem ayrıntıları', before: 'İşlem öncesi kasa bakiyesi', effect: 'Kasaya etkisi', after: 'İşlem sonrası kasa bakiyesi', unavailable: 'Bu işlem için önceki bakiye kesin olarak belirlenemiyor', noncash: 'Kasayı etkilemez', source: 'Aynı para biriminde, değiştirilen belge tarihine değil mali kayıt zamanına göre.' },
+};

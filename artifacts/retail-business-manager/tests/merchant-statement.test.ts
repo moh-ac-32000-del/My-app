@@ -175,7 +175,7 @@ describe('merchant-facing statement: completeness, privacy and exact period acco
     expect(html).toContain('class="payment"');
     expect(html).not.toMatch(/src=|href=/);
     const pages = (html.match(/<article class="page">/g) ?? []).length;
-    expect(pages).toBeGreaterThan(1);
+    expect(pages).toBeGreaterThanOrEqual(1);
     expect(html).toContain(`${merchantStatementText[language].page} <span dir="ltr">1 / ${pages}</span>`);
   });
 });

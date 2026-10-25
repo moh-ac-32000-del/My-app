@@ -1,5 +1,15 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { languageOptions, type Language } from '@/constants/i18n';
+import { normalizeAppearance, type AppearancePreference } from '@/data/appearance';
+
+const APPEARANCE_KEY = '@retail-business-manager/ui-appearance';
+export async function loadUiAppearance(): Promise<AppearancePreference> {
+  return normalizeAppearance(await AsyncStorage.getItem(APPEARANCE_KEY));
+}
+export async function saveUiAppearance(value: AppearancePreference): Promise<void> {
+  if (!['system', 'light', 'dark'].includes(value)) throw new Error('appearanceInvalid');
+  await AsyncStorage.setItem(APPEARANCE_KEY, value);
+}
 
 export const DEFAULT_NOTIFICATION_TIME = '09:00';
 const NOTIFICATION_TIME_KEY = '@retail-business-manager/notification-time';

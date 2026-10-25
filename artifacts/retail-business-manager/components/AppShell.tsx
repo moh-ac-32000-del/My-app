@@ -1,7 +1,5 @@
 import React, { ReactNode } from 'react';
 import { FlatList, Platform, Pressable, ScrollView, StyleSheet, Text, View, type FlatListProps } from 'react-native';
-import { BlurView } from 'expo-blur';
-import { LinearGradient } from 'expo-linear-gradient';
 import { usePathname, useRouter } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -25,14 +23,6 @@ export function AppBackground({ children }: { children: ReactNode }) {
   const { direction } = useI18n();
   return (
     <View style={[styles.background, { backgroundColor: colors.background, direction }]}>
-      <LinearGradient
-        colors={[colors.glow, 'transparent', 'transparent']}
-        start={{ x: 0.9, y: 0 }}
-        end={{ x: 0.1, y: 0.7 }}
-        style={StyleSheet.absoluteFill}
-      />
-      <View style={[styles.orb, styles.orbTop, { backgroundColor: colors.glow }]} />
-      <View style={[styles.orb, styles.orbBottom, { backgroundColor: colors.accent }]} />
       {children}
     </View>
   );
@@ -104,7 +94,6 @@ export function AppShell<T>({ children, scroll = true, list, overlay }: {
       )}
       {!blocked ? overlay : null}
       <View style={[styles.navWrap, { paddingBottom: bottomInset }]}>
-        <BlurView intensity={55} tint="dark" style={[StyleSheet.absoluteFill, styles.blurNav]} />
         <View style={[styles.nav, { backgroundColor: colors.glassStrong, borderColor: colors.border, flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
           {primaryNav.map((item) => {
             const active = item.path === '/' ? pathname === '/' : item.path === '/merchants'
@@ -213,15 +202,15 @@ const styles = StyleSheet.create({
   orbBottom: { bottom: -180, left: -150 },
   scrollContent: { flexGrow: 1 },
   content: { flexGrow: 1, paddingHorizontal: 18 },
-  header: { marginBottom: 24 },
+  header: { marginBottom: 18 },
   headerRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   headerText: { flex: 1, alignItems: 'flex-end' },
-  brandMark: { width: 44, height: 44, borderRadius: 16, alignItems: 'center', justifyContent: 'center', borderWidth: 1 },
+  brandMark: { width: 38, height: 38, borderRadius: 12, alignItems: 'center', justifyContent: 'center', borderWidth: 0 },
   eyebrow: { fontSize: 12, fontFamily: 'Inter_600SemiBold', marginBottom: 3 },
-  pageTitle: { fontSize: 27, fontFamily: 'Inter_700Bold', textAlign: 'right' },
+  pageTitle: { fontSize: 23, fontFamily: 'Inter_700Bold', textAlign: 'right' },
   pageSubtitle: { fontSize: 13, fontFamily: 'Inter_400Regular', marginTop: 5, textAlign: 'right' },
   iconButton: { width: 42, height: 42, borderRadius: 15, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
-  card: { borderRadius: 24, borderWidth: 1, padding: 16, overflow: 'hidden' },
+  card: { borderRadius: 16, borderWidth: StyleSheet.hairlineWidth, padding: 14, overflow: 'hidden' },
   sectionTitleRow: { flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
   sectionTitle: { fontSize: 17, fontFamily: 'Inter_700Bold', textAlign: 'right' },
   sectionAction: { fontSize: 12, fontFamily: 'Inter_600SemiBold' },
@@ -231,8 +220,8 @@ const styles = StyleSheet.create({
   emptyHint: { fontSize: 13, fontFamily: 'Inter_400Regular', textAlign: 'center', lineHeight: 21, marginTop: 7, maxWidth: 260 },
   navWrap: { position: 'absolute', left: 12, right: 12, bottom: 0, paddingTop: 8 },
   blurNav: { borderRadius: 28 },
-  nav: { height: 72, borderRadius: 28, borderWidth: 1, flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-around', paddingHorizontal: 7, overflow: 'hidden' },
-  navItem: { alignItems: 'center', justifyContent: 'center', width: 61, gap: 3 },
+  nav: { height: 66, borderRadius: 18, borderWidth: StyleSheet.hairlineWidth, flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-around', paddingHorizontal: 4, overflow: 'hidden' },
+  navItem: { alignItems: 'center', justifyContent: 'center', flex: 1, minHeight: 48, gap: 3 },
   navIcon: { width: 35, height: 29, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   navLabel: { fontSize: 10, fontFamily: 'Inter_500Medium' },
   pressed: { opacity: 0.7 },

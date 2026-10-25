@@ -1,0 +1,5 @@
+export const customerStatementText = {
+  ar: { title: 'كشف حساب العميل', purchases: 'الديون المسجلة', payments: 'السداد والدفعات', purchase: 'دين', note: 'الموجب: مستحق على العميل. السالب: رصيد للعميل. كشف بالحالة الحالية، دون العمليات الملغاة. كل عملة مستقلة.', incomplete: 'تعذر تأكيد كشف كامل ومتوازن. أعد تحميل الحساب؛ لا يُصدَّر كشف ناقص أو رصيد تخميني.' },
+  en: { title: 'Customer statement', purchases: 'Recorded debts', payments: 'Repayments', purchase: 'Debt', note: 'Positive: due from customer. Negative: customer credit. Current-state statement excluding cancelled operations. Currencies are independent.', incomplete: 'A complete reconciled statement could not be confirmed. Reload the account; no partial or estimated statement is exported.' },
+  tr: { title: 'Müşteri hesap özeti', purchases: 'Kaydedilen borçlar', payments: 'Tahsilatlar', purchase: 'Borç', note: 'Pozitif: müşteriden alacak. Negatif: müşteri alacağı. İptal edilen işlemler hariç güncel hesap özeti. Para birimleri bağımsızdır.', incomplete: 'Eksiksiz ve mutabık hesap özeti doğrulanamadı. Hesabı yeniden yükleyin; eksik veya tahmini bakiye dışa aktarılmaz.' },
+};

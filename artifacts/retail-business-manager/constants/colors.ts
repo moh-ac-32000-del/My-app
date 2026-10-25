@@ -54,6 +54,20 @@ const darkGlassBase: ThemeColors = {
   glow: 'rgba(105, 199, 255, 0.16)',
 };
 
+const lightBase: ThemeColors = {
+  ...darkGlassBase,
+  text: '#18202B', foreground: '#18202B', background: '#F4F5F7',
+  card: '#FFFFFF', cardForeground: '#18202B', secondary: '#E9EDF2', secondaryForeground: '#334155',
+  muted: '#EDF0F4', mutedForeground: '#566375', border: '#D7DDE5', input: '#FFFFFF',
+  destructive: '#B42338', destructiveForeground: '#FFFFFF', success: '#176846', warning: '#805700',
+  overlay: 'rgba(16, 24, 40, 0.45)', glass: '#FFFFFF', glassStrong: '#FFFFFF', glow: 'transparent',
+};
+
+// Every existing accent remains selectable. Light variants preserve contrast on white.
+const lightAccents: Record<AccentColor, string> = {
+  silver: '#475569', white: '#334155', gold: '#805B08', blue: '#076AA6', violet: '#6542BD', green: '#176846',
+};
+
 const accentTones: Record<AccentColor, Pick<ThemeColors, 'primary' | 'primaryForeground' | 'tint' | 'accent' | 'accentForeground' | 'glow'>> = {
   silver: {
     primary: '#C6D0DA',
@@ -126,16 +140,19 @@ export function normalizeAccent(value: unknown): AccentColor {
   return typeof value === 'string' ? legacyAccentMap[value] ?? 'blue' : 'blue';
 }
 
-export function createTheme(accent: AccentColor = 'blue'): ThemeColors & { radius: number } {
+export function createTheme(accent: AccentColor = 'blue', appearance: 'light' | 'dark' = 'dark'): ThemeColors & { radius: number } {
   return {
-    ...darkGlassBase,
+    ...(appearance === 'light' ? lightBase : darkGlassBase),
     ...(accentTones[accent] ?? accentTones.blue),
-    radius: 22,
+    ...(appearance === 'light' ? { primary: lightAccents[accent] ?? lightAccents.blue,
+      tint: lightAccents[accent] ?? lightAccents.blue, primaryForeground: '#FFFFFF',
+      accent: '#E9EDF4', accentForeground: lightAccents[accent] ?? lightAccents.blue, glow: 'transparent' } : {}),
+    radius: 16,
   };
 }
 
 const colors = {
-  light: createTheme('blue'),
+  light: createTheme('blue', 'light'),
   dark: createTheme('blue'),
   radius: 22,
 };

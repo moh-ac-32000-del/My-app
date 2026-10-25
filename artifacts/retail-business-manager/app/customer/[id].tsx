@@ -1,5 +1,4 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActorBadge } from '@/components/ActorBadge';
 import { CustomerOperationEditor, type CustomerOperationSelection } from '@/components/CustomerOperationEditor';
 import { ActivityIndicator, Alert, Linking, Modal, Pressable, Share, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -27,6 +26,10 @@ import { createOperationId } from '@/services/operationId';
 import type { SettlementDraft } from '@/services/storage';
 import { loadNotificationTime } from '@/services/preferences';
 import { buildCustomerStatement } from '@/services/customerSharing';
+import { CustomerLedger } from '@/components/CustomerLedger';
+import { CustomerStatementModal } from '@/components/CustomerStatementModal';
+import { customerStatementText } from '@/constants/customerStatementText';
+import { AccountBalanceList } from '@/components/AccountBalanceList';
 import type { Customer, Debt, Payment, Reminder } from '@/types/business';
 
 function DetailRow({ icon, label, value }: { icon: React.ComponentProps<typeof Ionicons>['name']; label: string; value: string }) {
@@ -80,6 +83,8 @@ function CustomerDetails({ customerId }: { customerId: string }) {
   const { t, language, isRTL } = useI18n();
   const customer = customers.find((item) => item.id === customerId) ?? null;
   const [isEditVisible, setIsEditVisible] = useState<boolean>(false);
+  const [statementOpen, setStatementOpen] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const [isDeleteDialogVisible, setIsDeleteDialogVisible] = useState<boolean>(false);
   const [isDeleting, setIsDeleting] = useState<boolean>(false);
   const debts = useMemo(() => filterDebtsByCustomer(workspaceDebts, customerId), [workspaceDebts, customerId]);
@@ -384,22 +389,20 @@ function CustomerDetails({ customerId }: { customerId: string }) {
 
   return (
     <AppShell>
-      <PageHeader title={t('customerDetails')} subtitle={customer.name} showBack />
-      <GlassCard style={styles.identityCard}>
-        <View style={[styles.identityAvatar, { backgroundColor: colors.accent }]}>
-          <Ionicons name="person-outline" size={28} color={colors.primary} />
-        </View>
-        <Text style={[styles.identityName, { color: colors.foreground }]}>{customer.name}</Text>
-        <Text style={[styles.identityHint, { color: colors.mutedForeground }]}>{customer.phone || t('customerNoPhone')}</Text>
-      </GlassCard>
+      <PageHeader title={customer.name} subtitle={t('customerDetails')} showBack
+        action={canWriteBusiness ? <Pressable testID="customer-pdf" accessibilityRole="button" accessibilityLabel={customerStatementText[language].title}
+          onPress={() => setStatementOpen(true)} style={{ padding: 10 }}><Ionicons name="document-text-outline" size={22} color={colors.primary} /></Pressable> : null} />
+      <AccountBalanceList kind="customer" balances={accountBalances.length ? accountBalances : [{ currency: profile.currency, balanceExact: '0.00' }]} />
 
-      <SectionTitle title={t('customerDetails')} />
-      <GlassCard style={styles.detailsCard}>
+      <Pressable accessibilityRole="button" accessibilityState={{ expanded: detailsOpen }} onPress={() => setDetailsOpen(value => !value)} style={{ paddingVertical: 10 }}>
+        <Text style={{ color: colors.primary, textAlign: isRTL ? 'right' : 'left' }}>{t('customerDetails')}</Text>
+      </Pressable>
+      {detailsOpen ? <GlassCard style={styles.detailsCard}>
         <DetailRow icon="call-outline" label={t('customerPhone')} value={customer.phone || t('customerNoPhone')} />
         <DetailRow icon="location-outline" label={t('customerAddress')} value={customer.address || t('customerNoAddress')} />
         <DetailRow icon="document-text-outline" label={t('customerNotes')} value={customer.notes || t('customerNoNotes')} />
         <DetailRow icon="calendar-outline" label={t('customerCreatedAt')} value={formatLocalizedDate(new Date(customer.createdAt), language)} />
-      </GlassCard>
+      </GlassCard> : null}
 
       <Pressable
         testID="share-customer-statement"
@@ -411,6 +414,7 @@ function CustomerDetails({ customerId }: { customerId: string }) {
         <Text style={[styles.shareText, { color: colors.primaryForeground }]}>{t('shareCustomerStatement')}</Text>
       </Pressable>
 
+      <View style={{ flexDirection: isRTL ? 'row-reverse' : 'row', gap: 8 }}>
       {canWriteBusiness ? (
         <Pressable
           testID="add-settlement-button"
@@ -440,81 +444,15 @@ function CustomerDetails({ customerId }: { customerId: string }) {
         <Ionicons name="add-circle-outline" size={19} color={colors.primary} />
         <Text style={[styles.addDebtText, { color: colors.foreground }]}>{t('addDebt')}</Text>
       </Pressable> : null}
+      </View>
 
-      <SectionTitle title={t('debtTotals')} />
-      {accountBalances.some(account => account.balanceExact !== '0.00') ? (
-        <GlassCard style={styles.debtTotalsCard}>
-          <View style={styles.debtTotalsGrid}>
-            {accountBalances.filter(account => account.balanceExact !== '0.00').map(account => (
-              <View key={account.currency} style={[styles.debtTotalItem, { backgroundColor: colors.input, borderColor: colors.border }]}>
-                <Text style={[styles.debtCurrencyCode, { color: colors.primary }]}>{account.currency} · {t(account.balanceExact.startsWith('-') ? 'customerCreditBalance' : 'remainingDebt')}</Text>
-                <Text style={[styles.debtTotalAmount, { color: account.balanceExact.startsWith('-') ? colors.success : colors.foreground }]}>{formatExactMoney(account.balanceExact.replace(/^-/, ''), account.currency, language)}</Text>
-              </View>
-            ))}
-          </View>
-        </GlassCard>
-      ) : (
-        <EmptyState icon="wallet-outline" title={t('noDebts')} hint={t('noDebtsHint')} />
-      )}
-
-      <SectionTitle title={t('debtHistory')} />
-      {debts.length > 0 ? (
-        debts.map((debt) => (
-          <GlassCard key={debt.id} style={styles.debtHistoryCard}>
-            <View style={[styles.debtHistoryRow, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
-              <View style={[styles.debtHistoryIcon, { backgroundColor: colors.accent }]}>
-                <Ionicons name="document-text-outline" size={19} color={colors.primary} />
-              </View>
-              <View style={[styles.debtHistoryCopy, { alignItems: isRTL ? 'flex-end' : 'flex-start' }]}>
-                <Text style={[styles.debtHistoryAmount, { color: colors.foreground, textAlign: isRTL ? 'right' : 'left' }]}>
-                  {formatExactMoney(debt.originalAmount !== undefined ? legacyAmountExact(debt.originalAmount) : legacyAmountExact(debt.amount, debt.amountExact), debt.currency, language)}
-                </Text>
-                {debt.originalAmount !== undefined ? (
-                  <Text style={[styles.debtHistoryDate, { color: colors.primary, textAlign: isRTL ? 'right' : 'left' }]}>
-                    {legacyAmountExact(debt.amount, debt.amountExact) === '0.00'
-                      ? t('debtSettled')
-                      : `${t('remainingDebt')}: ${formatExactMoney(legacyAmountExact(debt.amount, debt.amountExact), debt.currency, language)}`}
-                  </Text>
-                ) : null}
-                {debt.creditAppliedExact && debt.creditAppliedExact !== '0.00' ? <Text style={{ color: colors.success }}>
-                  {t('customerCreditUsed')}: {formatExactMoney(debt.creditAppliedExact, debt.currency, language)}
-                </Text> : null}
-                <ActorBadge userId={debt.createdByUserId} />
-                {debt.cancelled ? <Text style={{ color: colors.mutedForeground }}>{t('operationCancelled')}</Text> : null}
-                {debt.correctionOfPaymentId ? <Text style={{ color: colors.mutedForeground }}>{t('paymentAdjustmentDebt')}</Text> : null}
-                {debt.operationDate ? <Text style={{ color: colors.mutedForeground }}>{debt.operationDate}</Text> : null}
-                {debt.note ? <Text style={{ color: colors.mutedForeground }}>{debt.note}</Text> : null}
-                <Text style={[styles.debtHistoryDate, { color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' }]}>
-                  {formatLocalizedDateTime(new Date(debt.createdAt), language)}
-                </Text>
-              </View>
-            </View>
-            {canWriteBusiness && customer.isActive && !debt.cancelled && !debt.merchantOperationId && !debt.correctionOfMerchantOperationId && !debt.correctionOfPaymentId ? (
-              <Pressable testID={`edit-debt-${debt.id}`} accessibilityRole="button" onPress={() => openOperationEdit({ kind: 'debt', target: debt })} style={{ paddingVertical: 6 }}>
-                <Text style={{ color: colors.primary, textAlign: isRTL ? 'right' : 'left' }}>{t('operationEdit')}</Text>
-              </Pressable>
-            ) : null}
-            {debt.amount > 0 && !debt.cancelled ? (
-              <Pressable
-                testID={`create-reminder-${debt.id}`}
-                accessibilityRole="button"
-                disabled={!canWriteBusiness}
-                onPress={() => { if (canWriteBusiness) openReminderForm(debt); }}
-                style={({ pressed }) => [
-                  styles.reminderButton,
-                  { borderColor: colors.border, backgroundColor: colors.input, flexDirection: isRTL ? 'row-reverse' : 'row' },
-                  pressed && styles.pressed,
-                ]}
-              >
-                <Ionicons name="alarm-outline" size={17} color={colors.primary} />
-                <Text style={[styles.reminderButtonText, { color: colors.primary }]}>{t('createReminder')}</Text>
-              </Pressable>
-            ) : null}
-          </GlassCard>
-        ))
-      ) : (
-        <EmptyState icon="document-text-outline" title={t('debtHistoryEmpty')} hint={t('debtHistoryEmptyHint')} />
-      )}
+      <SectionTitle title={t('merchantHistory')} />
+      <CustomerLedger debts={debts} payments={payments} canEdit={canWriteBusiness && customer.isActive}
+        onReminder={openReminderForm} onEdit={selection => {
+          if (selection.kind === 'payment' && selection.target.merchantId && selection.target.merchantOperationId)
+            router.push({ pathname: '/merchant/[id]', params: { id: selection.target.merchantId, operationId: selection.target.merchantOperationId } });
+          else openOperationEdit(selection);
+        }} />
 
       <SectionTitle title={t('reminders')} />
       {reminderStatus === 'loading' ? (
@@ -562,44 +500,6 @@ function CustomerDetails({ customerId }: { customerId: string }) {
         <EmptyState icon="alarm-outline" title={t('remindersEmpty')} hint={t('remindersEmptyHint')} />
       )}
 
-      <SectionTitle title={t('paymentHistory')} />
-      {payments.length > 0 ? (
-        payments.map((payment) => (
-          <GlassCard key={payment.id} style={styles.debtHistoryCard}>
-            <View style={[styles.debtHistoryRow, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
-              <View style={[styles.debtHistoryIcon, { backgroundColor: colors.accent }]}>
-                <Ionicons name="checkmark-done-circle-outline" size={19} color={colors.primary} />
-              </View>
-              <View style={[styles.debtHistoryCopy, { alignItems: isRTL ? 'flex-end' : 'flex-start' }]}>
-                <Text style={[styles.debtHistoryAmount, { color: colors.foreground, textAlign: isRTL ? 'right' : 'left' }]}>
-                  {t('payment')} · {formatExactMoney(legacyAmountExact(payment.amount.amount, payment.amountExact), payment.amount.currency, language)}
-                </Text>
-                {payment.source === 'customer-to-merchant' ? <Text style={{ color: colors.primary }}>
-                  {t('merchantDirect')} · {payment.merchantName ?? ''} · {t('merchantNoncash')}
-                </Text> : null}
-                <ActorBadge userId={payment.createdByUserId} />
-                {payment.cancelled ? <Text style={{ color: colors.mutedForeground }}>{t('operationCancelled')}</Text> : null}
-                {payment.operationDate ? <Text style={{ color: colors.mutedForeground }}>{payment.operationDate}</Text> : null}
-                {payment.note ? <Text style={{ color: colors.mutedForeground }}>{payment.note}</Text> : null}
-                <Text style={[styles.debtHistoryDate, { color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' }]}>
-                  {formatLocalizedDateTime(new Date(payment.paidAt), language)}
-                </Text>
-              </View>
-            </View>
-            {canWriteBusiness && customer.isActive && !payment.cancelled ? <Pressable testID={`edit-payment-${payment.id}`} accessibilityRole="button"
-              style={{ paddingVertical: 6 }} onPress={() => {
-                if (payment.merchantId && payment.merchantOperationId) router.push({ pathname: '/merchant/[id]', params: { id: payment.merchantId, operationId: payment.merchantOperationId } });
-                else openOperationEdit({ kind: 'payment', target: payment });
-              }}><Text style={{ color: colors.primary, textAlign: isRTL ? 'right' : 'left' }}>{t('operationEdit')}</Text></Pressable> : null}
-          </GlassCard>
-        ))
-      ) : (
-        <EmptyState
-          icon="card-outline"
-          title={t('paymentHistoryEmpty')}
-          hint={t('paymentHistoryEmptyHint')}
-        />
-      )}
 
       {canWriteBusiness ? <View style={[styles.actions, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
         <Pressable testID="edit-customer-button" onPress={() => setIsEditVisible(true)} style={({ pressed }) => [styles.editButton, { backgroundColor: colors.primary }, pressed && styles.pressed]}>
@@ -613,6 +513,7 @@ function CustomerDetails({ customerId }: { customerId: string }) {
       </View> : null}
 
       <CustomerFormModal visible={canWriteBusiness && isEditVisible} initialCustomer={customer} onClose={() => setIsEditVisible(false)} onSave={(draft) => void updateCustomer(draft)} />
+      {statementOpen && canWriteBusiness ? <CustomerStatementModal key={sessionKey} customer={customer} onClose={() => setStatementOpen(false)} /> : null}
       {canWriteBusiness && operationEdit && operationEdit.spaceId === activeSpaceId && operationEdit.sessionKey === sessionKey ?
         <CustomerOperationEditor key={`${sessionKey}:${activeSpaceId}:${operationEdit.kind}:${operationEdit.target.id}`}
           selection={operationEdit} onClose={() => setOperationEdit(null)} /> : null}
@@ -861,10 +762,10 @@ const styles = StyleSheet.create({
   detailCopy: { flex: 1, gap: 4 },
   detailLabel: { fontSize: 11, fontFamily: 'Inter_500Medium' },
   detailValue: { fontSize: 14, fontFamily: 'Inter_600SemiBold' },
-  shareButton: { minHeight: 51, borderRadius: 16, alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 20 },
+  shareButton: { minHeight: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 12 },
   shareText: { fontSize: 13, fontFamily: 'Inter_700Bold' },
-  addDebtButton: { minHeight: 51, borderRadius: 16, borderWidth: 1, alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 20 },
-  settlementButton: { minHeight: 51, borderRadius: 16, alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: -10, marginBottom: 20 },
+  addDebtButton: { flex: 1, minHeight: 48, borderRadius: 12, borderWidth: 1, alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 18 },
+  settlementButton: { flex: 1, minHeight: 48, borderRadius: 12, alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 18 },
   addDebtText: { fontSize: 13, fontFamily: 'Inter_700Bold' },
   debtTotalsCard: { marginBottom: 18 },
   debtTotalsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },

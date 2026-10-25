@@ -86,4 +86,10 @@ export function readLocalExportData(scope: LocalExportScope) {
 }
 
 export function subscribeLocalExportCache(listener: () => void) { listeners.add(listener); return () => { listeners.delete(listener); }; }
+/** A complete, server-confirmed snapshot already received in this session. No I/O. */
+export function readConfirmedCollection(scope: LocalExportScope, collection: LocalExportCollection): StoredExportDocument[] | null {
+  const entry = cache.get(key(scope.uid, scope.spaceId, collection));
+  if (!entry?.capturedAt || entry.tooLarge || (entry.coveredStoreId && entry.coveredStoreId !== scope.storeId)) return null;
+  return JSON.parse(JSON.stringify(entry.documents.filter(row => row.data.storeId === scope.storeId)));
+}
 export function clearLocalExportCache() { epoch += 1; cache.clear(); listeners.forEach((listener) => listener()); }

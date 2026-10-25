@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
 import { languageOptions, type Language, type TranslationKey } from '@/constants/i18n';
+import { AppearanceSettings } from '@/components/AppearanceSettings';
 import { useI18n } from '@/hooks/useI18n';
 import { GlassCard } from '@/components/AppShell';
 import { isFirebaseConfigured } from '@/services/firebase';
@@ -80,7 +80,6 @@ export default function LoginScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background, direction, paddingTop: insets.top + 20, paddingBottom: Math.max(insets.bottom, 20) }]}>
-      <LinearGradient colors={[colors.glow, 'transparent', 'transparent']} style={StyleSheet.absoluteFill} />
       <View style={[styles.orb, { backgroundColor: colors.accent }]} />
       <View style={[styles.languageRow, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
         {languageOptions.map((option) => (
@@ -112,6 +111,7 @@ export default function LoginScreen() {
         <Text style={[styles.brandSubtitle, { color: colors.mutedForeground }]}>{t('appSubtitle')}</Text>
       </View>
       <View style={styles.formWrap}>
+        <AppearanceSettings />
         <Text style={[styles.title, { color: colors.foreground, textAlign: isRTL ? 'right' : 'left' }]}>{t('welcomeBack')}</Text>
         <Text style={[styles.hint, { color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' }]}>{t('loginHint')}</Text>
         <GlassCard style={styles.formCard}>

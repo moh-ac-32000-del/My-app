@@ -4,7 +4,6 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppShell, GlassCard, PageHeader, SectionTitle } from '@/components/AppShell';
-import { AmountMetric } from '@/components/MetricCard';
 import { DailyClosingAction } from '@/components/DailyClosingAction';
 import { SplashView } from '@/components/SplashView';
 import { formatMoney } from '@/constants/currencies';
@@ -15,6 +14,7 @@ import { useI18n } from '@/hooks/useI18n';
 import { calculateVisibleCurrencyBalances } from '@/services/storage';
 import { useDailyJournalProjection } from '@/hooks/useDailyJournalProjection';
 import { ActorBadge } from '@/components/ActorBadge';
+import { JournalEventDetails } from '@/components/JournalEventDetails';
 import type { DailyJournalEvent } from '@/services/storage';
 import { journalEventTitle, journalEventMoney, journalEventDetails } from '@/services/journalPresentation';
 import { useFinancialWindow } from '@/hooks/useFinancialWindow';
@@ -41,12 +41,12 @@ export default function DashboardScreen() {
     [transactions, profile.visibleCurrencies],
   );
   const [journalRefreshKey, setJournalRefreshKey] = useState(0);
+  const [selectedEvent, setSelectedEvent] = useState<DailyJournalEvent | null>(null);
   const {
     events: journalEvents,
     isLoading: journalLoading,
     error: journalError,
   } = useDailyJournalProjection(journalRefreshKey);
-  const currencyCardWidth = balances.length === 1 ? '100%' : '48%';
 
   useEffect(() => {
     if (isReady && !isAuthenticated) {
@@ -142,18 +142,14 @@ export default function DashboardScreen() {
       ) : null}
 
       <SectionTitle title={t('cashBalance')} />
-      <View style={[styles.metricRow, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
+      <GlassCard style={{ marginBottom: 18, paddingVertical: 4 }}>
         {balances.map(({ currency, amount }) => (
-          <View key={currency} style={[styles.metricCell, { width: currencyCardWidth }]}>
-            <AmountMetric
-              label={`${t('cashBalance')} ${currency}`}
-              value={amount}
-              icon="wallet-outline"
-              currency={currency}
-            />
+          <View key={currency} style={{ flexDirection: isRTL ? 'row-reverse' : 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, paddingVertical: 14, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: colors.border }}>
+            <Text style={{ color: colors.mutedForeground, fontSize: 14 }}>{currency}</Text>
+            <Text style={{ color: colors.foreground, fontSize: 23, fontWeight: '700', writingDirection: 'ltr' }}>{formatMoney(amount, currency, language)}</Text>
           </View>
         ))}
-      </View>
+      </GlassCard>
 
       <SectionTitle title={t('recentActivity')} />
       <DailyClosingAction
@@ -191,8 +187,11 @@ export default function DashboardScreen() {
               const isCashIn = event.type === 'cash_in';
               const isCashOut = event.type === 'cash_out';
               return (
-                <View
+                <Pressable
                   key={event.id}
+                  accessibilityRole="button"
+                  accessibilityLabel={getJournalTitle(event)}
+                  onPress={() => setSelectedEvent(event)}
                   style={[
                     styles.activityRow,
                     { flexDirection: isRTL ? 'row-reverse' : 'row', borderBottomColor: colors.border },
@@ -239,12 +238,13 @@ export default function DashboardScreen() {
                       {formatLocalizedDateTime(new Date(event.occurredAt), language)}
                     </Text>
                   </View>
-                </View>
+                </Pressable>
               );
             })}
           </View>
         )}
       </GlassCard>
+      {selectedEvent ? <JournalEventDetails key={selectedEvent.id} event={selectedEvent} onClose={() => setSelectedEvent(null)} /> : null}
       <View style={{ height: Math.max(insets.bottom, 8) }} />
     </AppShell>
   );

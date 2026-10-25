@@ -34,6 +34,8 @@ vi.mock('@/components/AppShell', () => ({
 }));
 vi.mock('@/components/ActorBadge', () => ({ ActorBadge: () => null }));
 vi.mock('@/components/CustomerOperationEditor', () => ({ CustomerOperationEditor: () => null }));
+// This navigation contract does not open export or exercise native print modules.
+vi.mock('@/components/CustomerStatementModal', () => ({ CustomerStatementModal: () => null }));
 vi.mock('@/components/CustomerFormModal', () => ({ CustomerFormModal: () => null }));
 vi.mock('@/components/DebtForm', () => ({ DebtForm: () => null }));
 vi.mock('@/components/ReminderForm', () => ({ ReminderForm: () => null }));

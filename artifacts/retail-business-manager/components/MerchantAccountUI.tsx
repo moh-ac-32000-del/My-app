@@ -1,11 +1,10 @@
 import React from 'react';
 import { Pressable, Text, TextInput, View } from 'react-native';
-import { GlassCard } from '@/components/AppShell';
 import { useColors } from '@/hooks/useColors';
 import { useI18n } from '@/hooks/useI18n';
-import { formatExactMoney } from '@/data/exactMoneyPresentation';
 import type { CurrencyCode } from '@/constants/currencies';
 import { merchantOperationTone } from '@/data/merchantOperationPresentation';
+import { AccountBalanceList } from './AccountBalanceList';
 
 export function MerchantButton({
   title,
@@ -140,27 +139,5 @@ export function MerchantBalanceCards({
 }: {
   balances: Array<{ currency: CurrencyCode; balanceExact: string }>;
 }) {
-  const colors = useColors();
-  const { t, language, isRTL } = useI18n();
-  return (
-    <View style={{ gap: 10 }}>
-      {balances.map((balance) => (
-        <GlassCard key={balance.currency} style={{ gap: 8 }}>
-          <Text style={{ color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' }}>
-            {balance.balanceExact.startsWith('-') ? t('merchantCredit') : t('merchantPayable')} · {balance.currency}
-          </Text>
-          <Text
-            style={{
-              color: balance.balanceExact.startsWith('-') ? colors.success : colors.foreground,
-              fontSize: 23,
-              fontWeight: '700',
-              textAlign: isRTL ? 'right' : 'left',
-            }}
-          >
-            {formatExactMoney(balance.balanceExact.replace(/^-/, ''), balance.currency, language)}
-          </Text>
-        </GlassCard>
-      ))}
-    </View>
-  );
+  return <AccountBalanceList balances={balances} kind="merchant" />;
 }
