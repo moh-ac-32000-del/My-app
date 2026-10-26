@@ -11,6 +11,11 @@ import {
   getDoc,
   getDocFromServer,
   getDocs,
+  getDocsFromServer,
+  documentId,
+  limit,
+  orderBy,
+  startAfter,
   query,
   where,
   setDoc,
@@ -896,6 +901,47 @@ try {
       for (const name of merchantCollections) await runCase(`Merchant rules — removed member cannot read ${name}`,
         () => getDocFromServer(doc(removedMerchantEditor.firestore(), 'spaces', 'merchant-read-space', name, 'history')), 'DENY');
     } finally { await removedMerchantEditor.cleanup(); }
+
+    // Exact export-preparation query shapes; no new write permission or Rules change.
+    await seedMultiSpace('export-preparation-space', 'export-owner', [
+      { uid: 'export-owner', role: 'owner' }, { uid: 'export-editor', role: 'editor' },
+      { uid: 'export-viewer', role: 'viewer' },
+    ]);
+    const exportCollections = ['customers', 'debts', 'payments', 'transactions', 'dailyArchives',
+      'customerCredits', 'merchants', 'merchantBalances', 'merchantOperations'];
+    await testEnvironment.withSecurityRulesDisabled(async context => {
+      for (const name of exportCollections) await setDoc(doc(context.firestore(), 'spaces', 'export-preparation-space', name, 'record'), {
+        id: 'record', workspaceId: 'export-preparation-space', storeId: 'export-store',
+        merchantId: 'merchant', createdAt: '2026-10-26T10:00:00Z',
+      });
+    });
+    const exportQueries = context => exportCollections.map(name => query(
+      collection(context.firestore(), 'spaces', 'export-preparation-space', name),
+      where('storeId', '==', 'export-store'), limit(1001),
+    ));
+    const historyQuery = context => query(collection(context.firestore(), 'spaces', 'export-preparation-space', 'merchantOperations'),
+      where('merchantId', '==', 'merchant'), orderBy('createdAt', 'desc'), orderBy(documentId(), 'desc'),
+      startAfter('2026-10-27T10:00:00Z', 'newer-record'), limit(100));
+    for (const role of ['owner', 'editor', 'viewer']) {
+      const context = testEnvironment.authenticatedContext(`export-${role}`);
+      try {
+        for (const [index, request] of exportQueries(context).entries()) await runCase(
+          `Export preparation — ${role} scoped ${exportCollections[index]}`, () => getDocsFromServer(request), 'ALLOW');
+        await runCase(`Export preparation — ${role} cursor history`, () => getDocsFromServer(historyQuery(context)), 'ALLOW');
+      } finally { await context.cleanup(); }
+    }
+    for (const context of [userA, anonymous]) {
+      for (const [index, request] of exportQueries(context).entries()) await runCase(
+        `Export preparation — unauthorized ${exportCollections[index]}`, () => getDocsFromServer(request), 'DENY');
+      await runCase('Export preparation — unauthorized cursor history', () => getDocsFromServer(historyQuery(context)), 'DENY');
+    }
+    await testEnvironment.withSecurityRulesDisabled(context => deleteDoc(doc(context.firestore(), 'spaces', 'export-preparation-space', 'members', 'export-editor')));
+    const removedExporter = testEnvironment.authenticatedContext('export-editor');
+    try {
+      for (const [index, request] of exportQueries(removedExporter).entries()) await runCase(
+        `Export preparation — revoked ${exportCollections[index]}`, () => getDocsFromServer(request), 'DENY');
+      await runCase('Export preparation — revoked cursor history', () => getDocsFromServer(historyQuery(removedExporter)), 'DENY');
+    } finally { await removedExporter.cleanup(); }
 
     for (const collectionName of [
       'customers',

@@ -1,0 +1,32 @@
+export const spreadsheetPreparationText = {
+  ar: {
+    scope: 'يستخدم التصدير البيانات المحمّلة، ويجهّز الناقص من Firebase بعد موافقتك فقط. الحد الحالي 1000 سجل لكل قسم. لا تُحمّل بيانات التصدير أثناء التنقل.',
+    hint: 'لا تحتاج إلى فتح الحسابات أو تحميل صفحاتها يدويًا. اضغط تصدير ليجهّز التطبيق الملف.',
+    confirm: 'سيجلب التطبيق البيانات الناقصة من Firebase، وقد يعيد قراءة جزء من سجل التجار للتحقق من اكتماله. توجد أيضًا قراءات للتحقق من صلاحية الوصول. هذه القراءات قد تُحتسب ضمن استخدام Firebase. هل تتابع؟',
+    localConfirm: 'الأقسام المطلوبة محمّلة في هذه الجلسة؛ سيُنشأ الملف دون جلب سجلات مالية جديدة.',
+    action: 'تصدير ملف Excel', confirmAction: 'تجهيز وحفظ الملف', progress: 'جارٍ تجهيز', received: 'سجلات مستلمة',
+    changed: 'تغيّرت البيانات أثناء التجهيز. أعد المحاولة للحصول على ملف كامل، دون الكتابة فوق البيانات الأحدث.',
+    tooLarge: 'تجاوزت البيانات حد التصدير الحالي: 1000 سجل لكل قسم. لم يُحفظ ملف ناقص.',
+    cancelled: 'أُلغي التجهيز، ولم يُحفظ ملف. قد يكتمل طلب القراءة الجاري، لكن لن تبدأ طلبات أخرى.',
+  },
+  en: {
+    scope: 'Export reuses loaded data and prepares missing Firebase records only after your consent. Current limit: 1,000 records per section. Export data is not loaded during navigation.',
+    hint: 'You do not need to open accounts or load their pages manually. Choose Export and the app prepares the file.',
+    confirm: 'The app will fetch missing Firebase records and may reread part of merchant history to verify completeness. Access checks also require document reads. These reads may count toward Firebase usage. Continue?',
+    localConfirm: 'Required sections are loaded in this session. The file will be created without fetching new financial records.',
+    action: 'Export Excel file', confirmAction: 'Prepare and save file', progress: 'Preparing', received: 'Records received',
+    changed: 'Data changed during preparation. Try again for a complete file; newer data was not overwritten.',
+    tooLarge: 'Data exceeds the current export limit of 1,000 records per section. No partial file was saved.',
+    cancelled: 'Preparation cancelled; no file was saved. An in-flight read may finish, but no further requests will start.',
+  },
+  tr: {
+    scope: 'Dışa aktarma, yüklenen verileri kullanır ve eksik Firebase kayıtlarını yalnızca onayınızla hazırlar. Güncel sınır bölüm başına 1.000 kayıttır. Gezinirken dışa aktarma verisi yüklenmez.',
+    hint: 'Hesapları açmanız veya sayfaları elle yüklemeniz gerekmez. Dışa aktar seçeneği dosyayı hazırlar.',
+    confirm: 'Uygulama eksik Firebase kayıtlarını alır ve eksiksizliği doğrulamak için tedarikçi geçmişinin bir bölümünü yeniden okuyabilir. Erişim kontrolleri de belge okur. Bu okumalar Firebase kullanımına sayılabilir. Devam edilsin mi?',
+    localConfirm: 'Gerekli bölümler bu oturumda yüklendi. Dosya, yeni mali kayıtlar alınmadan oluşturulur.',
+    action: 'Excel dosyasını dışa aktar', confirmAction: 'Dosyayı hazırla ve kaydet', progress: 'Hazırlanıyor', received: 'Alınan kayıtlar',
+    changed: 'Hazırlık sırasında veriler değişti. Eksiksiz dosya için yeniden deneyin; yeni verilerin üzerine yazılmadı.',
+    tooLarge: 'Veriler bölüm başına 1.000 kayıt sınırını aşıyor. Eksik dosya kaydedilmedi.',
+    cancelled: 'Hazırlık iptal edildi; dosya kaydedilmedi. Devam eden okuma bitebilir, ancak başka istek başlatılmaz.',
+  },
+};

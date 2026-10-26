@@ -1,4 +1,4 @@
-/** Session-only copies of snapshots already delivered to normal screens. No I/O or SDK imports. */
+/** Session-only confirmed receipts from screens or explicit export preparation. No persistent I/O or SDK imports. */
 import { merchantExportCoverage } from '../data/merchantExportCoverage';
 import { merchantOperationFromDocument } from '../data/merchantDocuments';
 import { mergeMerchantHistory } from '../data/merchantHistory';
@@ -7,10 +7,11 @@ export const LOCAL_EXPORT_COLLECTIONS = ['customers', 'debts', 'payments', 'tran
 export type LocalExportCollection = typeof LOCAL_EXPORT_COLLECTIONS[number];
 export interface LocalExportScope { uid: string; spaceId: string; storeId: string }
 export interface StoredExportDocument { id: string; data: Record<string, unknown> }
-interface Entry { documents: StoredExportDocument[]; capturedAt: string | null; tooLarge: boolean; coveredStoreId?: string }
+interface Entry { documents: StoredExportDocument[]; capturedAt: string | null; tooLarge: boolean; coveredStoreId?: string; revision: number }
 const cache = new Map<string, Entry>();
 const listeners = new Set<() => void>();
 let epoch = 0;
+let revision = 0;
 export function localExportEpoch() { return epoch; }
 const key = (uid: string, spaceId: string, collection: LocalExportCollection) => JSON.stringify([uid, spaceId, collection]);
 
@@ -18,7 +19,7 @@ export function rememberLocalExportCollection(uid: string, spaceId: string, coll
   if (!uid || !spaceId) return;
   const tooLarge = documents.length > 1000;
   // Deep copy prevents later UI mutations from changing an already received source.
-  cache.set(key(uid, spaceId, collection), { documents: serverConfirmed && !tooLarge ? JSON.parse(JSON.stringify(documents)) : [], capturedAt: serverConfirmed && !tooLarge ? now : null, tooLarge, coveredStoreId });
+  cache.set(key(uid, spaceId, collection), { documents: serverConfirmed && !tooLarge ? JSON.parse(JSON.stringify(documents)) : [], capturedAt: serverConfirmed && !tooLarge ? now : null, tooLarge, coveredStoreId, revision: ++revision });
   listeners.forEach((listener) => listener());
 }
 
@@ -54,7 +55,7 @@ export function rememberLocalMerchantOperations(uid: string, spaceId: string, st
   documents: StoredExportDocument[], serverConfirmed: boolean, now = new Date().toISOString()) {
   const previous = cache.get(key(uid, spaceId, 'merchantOperations'));
   if (!serverConfirmed) {
-    cache.set(key(uid, spaceId, 'merchantOperations'), { documents: previous?.documents ?? [], capturedAt: null, tooLarge: previous?.tooLarge ?? false, coveredStoreId: storeId });
+    cache.set(key(uid, spaceId, 'merchantOperations'), { documents: previous?.documents ?? [], capturedAt: null, tooLarge: previous?.tooLarge ?? false, coveredStoreId: storeId, revision: ++revision });
     listeners.forEach((listener) => listener()); return;
   }
   try {
@@ -88,8 +89,15 @@ export function readLocalExportData(scope: LocalExportScope) {
 export function subscribeLocalExportCache(listener: () => void) { listeners.add(listener); return () => { listeners.delete(listener); }; }
 /** A complete, server-confirmed snapshot already received in this session. No I/O. */
 export function readConfirmedCollection(scope: LocalExportScope, collection: LocalExportCollection): StoredExportDocument[] | null {
+  return readReceivedExportCollection(scope, collection)?.documents ?? null;
+}
+/** Receipt metadata may describe partial merchant history; coverage must still be proved. */
+export function readReceivedExportCollection(scope: LocalExportScope, collection: LocalExportCollection) {
   const entry = cache.get(key(scope.uid, scope.spaceId, collection));
   if (!entry?.capturedAt || entry.tooLarge || (entry.coveredStoreId && entry.coveredStoreId !== scope.storeId)) return null;
-  return JSON.parse(JSON.stringify(entry.documents.filter(row => row.data.storeId === scope.storeId)));
+  return { documents: JSON.parse(JSON.stringify(entry.documents.filter(row => row.data.storeId === scope.storeId))) as StoredExportDocument[], capturedAt: entry.capturedAt };
+}
+export function exportCollectionRevision(scope: LocalExportScope, collection: LocalExportCollection): number | null {
+  return cache.get(key(scope.uid, scope.spaceId, collection))?.revision ?? null;
 }
 export function clearLocalExportCache() { epoch += 1; cache.clear(); listeners.forEach((listener) => listener()); }
