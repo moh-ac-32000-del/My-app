@@ -30,7 +30,7 @@ export function AutomaticClosingNotice({ compact = false }: { compact?: boolean 
         gap: 6,
         marginBottom: compact ? 0 : 12,
         borderRadius: 14,
-        backgroundColor: colors.accent,
+        backgroundColor: colors.card,
         maxWidth: compact ? 170 : undefined,
       }}
     >
@@ -41,11 +41,6 @@ export function AutomaticClosingNotice({ compact = false }: { compact?: boolean 
       <Text style={{ color: colors.foreground, fontSize: compact ? 9 : 12, textAlign: isRTL ? 'right' : 'left' }}>
         {detail}
       </Text>
-      {!compact ? (
-        <Text style={{ color: colors.mutedForeground, fontSize: 11, textAlign: isRTL ? 'right' : 'left' }}>
-          {t('automaticClosingScheduleHint')}
-        </Text>
-      ) : null}
     </View>
   );
 }

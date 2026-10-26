@@ -1,8 +1,8 @@
-import { useColorScheme } from 'react-native';
 import { useMemo } from 'react';
 import colors from '@/constants/colors';
 import { createTheme } from '@/constants/colors';
 import { useStore } from '@/context/StoreContext';
+import { useAppearance } from '@/context/AppearanceContext';
 
 /**
  * Returns the design tokens for the current color scheme.
@@ -10,17 +10,11 @@ import { useStore } from '@/context/StoreContext';
  * The returned object contains all color tokens for the active palette
  * plus scheme-independent values like `radius`.
  *
- * Falls back to the light palette when no dark key is defined in
- * constants/colors.ts (the scaffold ships light-only by default).
- * When a sibling web artifact's dark tokens are synced into a `dark`
- * key, this hook will automatically switch palettes based on the
- * device's appearance setting.
+ * Uses this application's saved appearance preference and existing accent.
  */
 export function useColors() {
-  const scheme = useColorScheme();
+  const { scheme } = useAppearance();
   const { profile } = useStore();
-  // The surface system stays dark in every appearance mode; only the accent
-  // tone is user-configurable.
   const palette = scheme === 'dark' ? colors.dark : colors.light;
-  return useMemo(() => ({ ...palette, ...createTheme(profile.accent), radius: colors.radius }), [palette, profile.accent]);
+  return useMemo(() => ({ ...palette, ...createTheme(profile.accent, scheme), radius: 16 }), [palette, profile.accent, scheme]);
 }

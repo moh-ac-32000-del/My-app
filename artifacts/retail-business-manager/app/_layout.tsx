@@ -23,19 +23,26 @@ import { FloatingQuickActions } from '@/components/FloatingQuickActions';
 import { AndroidPushObserver } from '@/components/AndroidPushObserver';
 import { MemberNamesProvider } from '@/context/MemberNamesContext';
 import { MemberNamePrompt } from '@/components/MemberNamePrompt';
+import { AppearanceProvider } from '@/context/AppearanceContext';
+import { useAppearance } from '@/context/AppearanceContext';
+import { StatusBar } from 'expo-status-bar';
+import { useColors } from '@/hooks/useColors';
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
 
 function RootLayoutNav() {
+  const { scheme } = useAppearance();
+  const colors = useColors();
   const pathname = usePathname();
   const { isAuthenticated, isReady, canWriteBusiness, sessionKey } = useStore();
   const showQuickActions = isReady && isAuthenticated && canWriteBusiness && pathname === '/';
   return (
-    <View style={{ flex: 1 }}>
+    <View style={{ flex: 1, backgroundColor: colors.background }}>
+      <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
       <AndroidPushObserver />
       <MemberNamePrompt key={sessionKey} />
-      <Stack screenOptions={{ headerShown: false, animation: 'fade' }} />
+      <Stack screenOptions={{ headerShown: false, animation: 'fade', contentStyle: { backgroundColor: colors.background } }} />
       {showQuickActions ? <FloatingQuickActions /> : null}
     </View>
   );
@@ -59,11 +66,11 @@ export default function RootLayout() {
 
   return (
     <SafeAreaProvider>
-      <StoreProvider>
+      <AppearanceProvider><StoreProvider>
         <ErrorBoundary>
           <ScopedBusinessProviders />
         </ErrorBoundary>
-      </StoreProvider>
+      </StoreProvider></AppearanceProvider>
     </SafeAreaProvider>
   );
 }

@@ -59,9 +59,9 @@ export default function MerchantsScreen() {
   const renderMerchant = (merchant: Merchant) => (
     <Pressable testID={`merchant-card-${merchant.id}`} accessibilityRole="button"
       onPress={() => router.push({ pathname: '/merchant/[id]' as never, params: { id: merchant.id } })}>
-      <GlassCard style={{ gap: 9, padding: 14, marginBottom: 16 }}>
+      <GlassCard style={{ gap: 8, padding: 14, marginBottom: 2, borderRadius: 8 }}>
         <View style={{ flexDirection: isRTL ? 'row-reverse' : 'row', alignItems: 'center', gap: 11 }}>
-          <View style={{ width: 46, height: 46, borderRadius: 16, borderWidth: 1, borderColor: colors.primary,
+          <View style={{ width: 38, height: 38, borderRadius: 19, borderWidth: 0, borderColor: colors.primary,
             backgroundColor: colors.input, alignItems: 'center', justifyContent: 'center' }}>
             <Text style={{ color: colors.primary, fontFamily: 'Inter_700Bold', fontSize: 18 }}>{merchant.name.charAt(0)}</Text>
           </View>

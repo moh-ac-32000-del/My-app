@@ -178,6 +178,8 @@ function MerchantDetail({ id, operationId }: { id: string; operationId?: string 
               key={operation.id}
               operation={operation}
               onPress={() => setSelectedId(operation.id)}
+              onEdit={canWriteBusiness && merchant.isActive && !form && operation.action !== 'reverse'
+                ? () => open(operation.action, operation) : undefined}
             />
           ))}
           {selected ? (

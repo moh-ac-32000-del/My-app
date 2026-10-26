@@ -7,8 +7,8 @@ export function memberDisplayName(value: unknown): string {
   return name;
 }
 
-export function memberColor(spaceId: string, userId: string): string {
+export function memberColor(spaceId: string, userId: string, appearance: 'light' | 'dark' = 'dark'): string {
   let hash = 2166136261;
   for (const char of `${spaceId}/${userId}`) hash = Math.imul(hash ^ char.codePointAt(0)!, 16777619) >>> 0;
-  return `hsl(${(hash % 36000) / 100}, 70%, 72%)`;
+  return `hsl(${(hash % 36000) / 100}, 70%, ${appearance === 'light' ? 25 : 72}%)`;
 }

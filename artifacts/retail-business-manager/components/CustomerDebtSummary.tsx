@@ -53,7 +53,7 @@ const styles = StyleSheet.create({
   title: { fontSize: 15, fontFamily: 'Inter_700Bold' },
   hint: { fontSize: 12, lineHeight: 20, fontFamily: 'Inter_400Regular' },
   balances: { flexWrap: 'wrap', gap: 10 },
-  balance: { flexGrow: 1, flexBasis: '45%', minWidth: 120, padding: 12, borderRadius: 14, gap: 6 },
-  amount: { fontSize: 22, fontFamily: 'Inter_700Bold' },
+  balance: { flexGrow: 1, flexBasis: '45%', minWidth: 120, padding: 10, borderRadius: 10, gap: 6 },
+  amount: { fontSize: 19, fontFamily: 'Inter_700Bold' },
   retry: { paddingVertical: 12, minHeight: 44 },
 });

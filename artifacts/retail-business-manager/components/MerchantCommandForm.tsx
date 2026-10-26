@@ -436,9 +436,10 @@ export function MerchantCommandForm({
                             )
                           }
                         />
+                        <View style={{ flexDirection: isRTL ? 'row-reverse' : 'row', gap: 10, flexWrap: 'wrap' }}>
                         {(['quantity', 'unitPrice'] as const).map((key) => (
+                          <View key={key} style={{ flex: 1, minWidth: 115 }}>
                           <MerchantField
-                            key={key}
                             title={t(key === 'quantity' ? 'merchantQuantity' : 'merchantPrice')}
                             value={line[key]}
                             disabled={locked}
@@ -451,7 +452,9 @@ export function MerchantCommandForm({
                               )
                             }
                           />
+                          </View>
                         ))}
+                        </View>
                         {lines.length > 1 ? (
                           <MerchantButton
                             title={t('merchantRemoveLine')}
