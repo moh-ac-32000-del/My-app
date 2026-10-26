@@ -65,3 +65,10 @@ attached_assets/
 .firebase/
 **/firebase-debug.log
 
+project-backups/
+.git
+.replit
+.replitignore
+**/.replit-artifact/
+replit.md
+

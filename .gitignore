@@ -57,3 +57,11 @@ Thumbs.db
 # Replit
 .cache/
 .local/
+
+# Historical handoff material remains in Git history, outside release source.
+attached_assets/
+project-backups/
+.replit
+.replitignore
+**/.replit-artifact/
+replit.md
