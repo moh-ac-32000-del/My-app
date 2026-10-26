@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useStore } from '@/context/StoreContext';
+import { useSessionLiveReads } from '@/context/SessionLiveReadsContext';
 import { loadMerchantHistoryPage, sendMerchantCommand, subscribeMerchantAccounts } from '@/services/merchantFirestore';
 import { createMerchantHistorySession } from '@/data/merchantHistory';
 import type { MerchantDraftCommand, MerchantSnapshot } from '@/types/merchant';
 
 const empty: MerchantSnapshot = { merchants: [], balances: [], operations: [], operationsLimited: false };
 export function useMerchantAccounts(merchantId?: string) {
+  const reads = useSessionLiveReads();
   const {
     profile,
     activeSpaceId,
@@ -14,6 +16,7 @@ export function useMerchantAccounts(merchantId?: string) {
     isReady,
     activeSpaceLoading,
     activeSpaceError,
+    initializationError,
     workspaceRole,
     canWriteBusiness,
     assertBusinessAccess,
@@ -55,20 +58,20 @@ export function useMerchantAccounts(merchantId?: string) {
       });
     };
     publish(empty, true, null);
-    if (activeSpaceError) {
-      publish(empty, false, activeSpaceError);
+    if (activeSpaceError || initializationError) {
+      publish(empty, false, activeSpaceError || initializationError);
       return;
     }
     if (!isAuthenticated || !isReady || activeSpaceLoading || !activeSpaceId || !workspaceRole || !profile.id) return;
     let unsubscribe: (() => void) | undefined;
     try {
-      unsubscribe = subscribeMerchantAccounts(
-        activeSpaceId,
-        profile.id,
-        (data) => publish(data, false, null),
-        (error) => publish(empty, false, error.message),
-        merchantId,
-      );
+      const start = (next: (data: MerchantSnapshot) => void, fail: (error: Error) => void) =>
+        subscribeMerchantAccounts(activeSpaceId, profile.id, next, fail, merchantId);
+      const next = (data: MerchantSnapshot) => publish(data, false, null);
+      const fail = (error: Error) => publish(empty, false, error.message);
+      unsubscribe = reads && !merchantId
+        ? reads.subscribe('merchantDirectory', JSON.stringify([key, retry]), start, next, fail)
+        : start(next, fail);
       stopRef.current = { key, stop: unsubscribe };
     } catch (error) {
       publish(empty, false, error instanceof Error ? error.message : 'merchantLoadFailed');
@@ -87,9 +90,11 @@ export function useMerchantAccounts(merchantId?: string) {
     isReady,
     activeSpaceLoading,
     activeSpaceError,
+    initializationError,
     workspaceRole,
     retry,
     merchantId,
+    reads,
   ]);
   const command = useCallback(
     async (input: MerchantDraftCommand) => {
@@ -106,11 +111,11 @@ export function useMerchantAccounts(merchantId?: string) {
     [activeSpaceId, canWriteBusiness, sessionKey, profile.id, key, assertBusinessAccess, merchantId],
   );
   const usable =
-    isAuthenticated && isReady && !activeSpaceLoading && activeSpaceId && workspaceRole && !activeSpaceError;
+    isAuthenticated && isReady && !activeSpaceLoading && activeSpaceId && workspaceRole && !activeSpaceError && !initializationError;
   const visible =
     usable && state.key === key
       ? state
-      : { key, data: empty, loading: !activeSpaceError, historyLoading: false, error: activeSpaceError };
+      : { key, data: empty, loading: !(activeSpaceError || initializationError), historyLoading: false, error: activeSpaceError || initializationError };
   const loadMore = async () => {
     if (
       !usable ||

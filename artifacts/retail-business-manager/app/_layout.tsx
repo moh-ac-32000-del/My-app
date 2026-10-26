@@ -22,6 +22,7 @@ import { PaymentProvider } from '@/context/PaymentContext';
 import { FloatingQuickActions } from '@/components/FloatingQuickActions';
 import { AndroidPushObserver } from '@/components/AndroidPushObserver';
 import { MemberNamesProvider } from '@/context/MemberNamesContext';
+import { SessionLiveReadsProvider } from '@/context/SessionLiveReadsContext';
 import { MemberNamePrompt } from '@/components/MemberNamePrompt';
 import { AppearanceProvider } from '@/context/AppearanceContext';
 import { useAppearance } from '@/context/AppearanceContext';
@@ -86,7 +87,7 @@ function ScopedBusinessProviders() {
           <QueryClientProvider client={queryClient}>
             <GestureHandlerRootView>
               <KeyboardProvider>
-                <MemberNamesProvider><RootLayoutNav /></MemberNamesProvider>
+                <SessionLiveReadsProvider><MemberNamesProvider><RootLayoutNav /></MemberNamesProvider></SessionLiveReadsProvider>
               </KeyboardProvider>
             </GestureHandlerRootView>
           </QueryClientProvider>

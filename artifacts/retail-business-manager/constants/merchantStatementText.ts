@@ -7,7 +7,7 @@ export const merchantStatementText = {
     to: 'إلى',
     preview: 'معاينة الكشف',
     consent:
-      'الكشف غير مكتمل في هذه الجلسة. يمكنك تحميل الصفحة التالية من السجلات من Firebase. ستُستهلك قراءات للسجلات الناقصة فقط؛ لا يمكن تصدير كشف جزئي.',
+      'الكشف غير مكتمل في هذه الجلسة. يمكنك تحميل الصفحة التالية من سجلات الحساب. تحميل السجلات الناقصة يزيد استخدام الخدمة؛ لا يمكن تصدير كشف جزئي.',
     save: 'حفظ PDF على الجهاز',
     share: 'مشاركة PDF',
     web: 'على الويب تُفتح نافذة الطباعة؛ اختر حفظ بصيغة PDF. لا يُعد فتحها تأكيدًا على حفظ الملف.',
@@ -48,7 +48,7 @@ export const merchantStatementText = {
     to: 'To',
     preview: 'Preview statement',
     consent:
-      'This session does not contain the complete statement. You may load the next page from Firebase. Missing records incur reads; partial statements cannot be exported.',
+      'This session does not contain the complete statement. You may load the next page of account records. Loading missing records adds to service usage; partial statements cannot be exported.',
     save: 'Save PDF to device',
     share: 'Share PDF',
     web: 'On web, the print dialog opens. Choose Save as PDF. Opening the dialog does not confirm a file was saved.',
@@ -90,7 +90,7 @@ export const merchantStatementText = {
     to: 'Bitiş',
     preview: 'Önizleme',
     consent:
-      'Bu oturumda hesap özeti eksik. Sonraki sayfayı Firebase üzerinden yükleyebilirsiniz. Eksik kayıtlar okuma tüketir; eksik hesap özeti dışa aktarılamaz.',
+      'Bu oturumda hesap özeti eksik. Hesap kayıtlarının sonraki sayfasını yükleyebilirsiniz. Eksik kayıtları yüklemek hizmet kullanımını artırır; eksik hesap özeti dışa aktarılamaz.',
     save: 'PDF dosyasını cihaza kaydet',
     share: 'PDF paylaş',
     web: 'Web sürümünde yazdırma penceresi açılır. PDF olarak kaydet seçin. Pencerenin açılması dosyanın kaydedildiğini göstermez.',

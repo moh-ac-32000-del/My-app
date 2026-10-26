@@ -5,6 +5,7 @@ const state = vi.hoisted(() => ({
   cursor: 0, slots: [] as any[], effects: [] as Array<() => void>, result: null as any, refresh: 0,
   store: {} as any, debts: [] as any[], callbacks: [] as Array<{ next: (rows: any[]) => void; error: (e: Error) => void }>,
   subscribe: vi.fn(), stop: vi.fn(),
+  reads: null as ReturnType<typeof import('../data/sessionLiveReads').createSessionLiveReads> | null,
 }));
 // Bounded hook lifecycle harness: tests subscription counts and late-response isolation,
 // not native rendering speed or a live network connection.
@@ -27,12 +28,14 @@ vi.mock('react', async importOriginal => {
 vi.mock('@/services/firebase', () => ({ isFirebaseConfigured: true }));
 vi.mock('@/services/journalArchiveFirestore', () => ({ subscribeJournalArchives: (...args: any[]) => state.subscribe(...args) }));
 vi.mock('@/context/StoreContext', () => ({ useStore: () => state.store }));
+vi.mock('@/context/SessionLiveReadsContext', () => ({ useSessionLiveReads: () => state.reads }));
 vi.mock('@/context/CustomerContext', () => ({ useCustomers: () => ({ customers: [], canonicalSpaceId: state.store.activeSpaceId, isLoading: false }) }));
 vi.mock('@/context/DebtContext', () => ({ useDebts: () => ({ debts: state.debts, canonicalSpaceId: state.store.activeSpaceId, isLoading: false }) }));
 vi.mock('@/context/PaymentContext', () => ({ usePayments: () => ({ payments: [], canonicalSpaceId: state.store.activeSpaceId, isLoading: false }) }));
 vi.mock('@/hooks/useMerchantJournal', () => ({ useMerchantJournal: () => ({ operations: [], loading: false, error: null, key: 'day',
   window: { date: '2026-10-23', startAt: '2026-10-23T00:00:00Z', endAt: '2026-10-24T00:00:00Z', timeZone: 'UTC' } }) }));
 import { useDailyJournalProjection } from '../hooks/useDailyJournalProjection';
+import { createSessionLiveReads } from '../data/sessionLiveReads';
 function Probe() { state.result = useDailyJournalProjection(state.refresh); return null; }
 function render() {
   state.cursor = 0; state.effects = [];
@@ -40,12 +43,26 @@ function render() {
   for (const effect of state.effects) effect();
 }
 beforeEach(() => {
+  state.reads?.clear(); state.reads = null;
   vi.clearAllMocks(); state.cursor = 0; state.slots = []; state.effects = []; state.callbacks = []; state.refresh = 0; state.debts = [];
   state.store = { isReady: true, isAuthenticated: true, activeSpaceId: 's', profile: { id: 'store' }, workspaceRole: 'owner',
     sessionKey: 'session-s', transactions: [] };
   state.subscribe.mockImplementation((_space, _store, next, error) => { state.callbacks.push({ next, error }); return state.stop; });
 });
 describe('journal recomputation is independent of archive I/O', () => {
+  it('reopens Home with the current live archives without another source request', () => {
+    state.reads = createSessionLiveReads();
+    render(); state.callbacks[0].next([]); render();
+    expect(state.result.isLoading).toBe(false);
+    // Simulate route disposal while its root-owned session provider stays alive.
+    for (const slot of state.slots) slot?.cleanup?.();
+    state.slots = [];
+    state.callbacks[0].next([{ date: '2026-10-23', snapshot: [{ id: 'transaction:cash' }] }]);
+    render(); render();
+    expect(state.result).toMatchObject({ isLoading: false, error: null });
+    expect(state.subscribe).toHaveBeenCalledOnce(); expect(state.stop).not.toHaveBeenCalled();
+    state.reads.clear(); expect(state.stop).toHaveBeenCalledOnce();
+  });
   it('uses one subscription across 100 financial-source updates and reacts to new closings', () => {
     render(); state.callbacks[0].next([]); render();
     expect(state.result).toMatchObject({ isLoading: false, error: null });
