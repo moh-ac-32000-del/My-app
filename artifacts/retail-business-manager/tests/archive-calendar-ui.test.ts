@@ -18,6 +18,8 @@ const state = vi.hoisted(() => ({
   emitArchive: null as null | ((rows: DailyArchive[]) => void),
   failArchive: null as null | ((error: Error) => void),
   share: vi.fn(),
+  savePdf: vi.fn(),
+  authorizePdf: vi.fn(),
   store: {
     profile: { id: 'store', name: 'Test' },
     isReady: true,
@@ -33,6 +35,7 @@ const state = vi.hoisted(() => ({
 // Bounded handler/race harness, not a browser, native calendar or live Firebase test.
 vi.mock('react', async (original) => ({
   ...(await original<typeof import('react')>()),
+  useRef: (initial: unknown) => { const index = state.cursor++; return state.slots[index] ?? (state.slots[index] = { current: initial }); },
   useState: (initial: unknown) => {
     const index = state.cursor++;
     if (!(index in state.slots)) state.slots[index] = typeof initial === 'function' ? initial() : initial;
@@ -86,6 +89,8 @@ vi.mock('@/components/WebDebtDateInput', () => ({
 }));
 vi.mock('@/context/StoreContext', () => ({ useStore: () => state.store }));
 vi.mock('@/services/cloudDailyArchives', () => ({ loadCloudDailyArchivesForDate: state.statuses }));
+vi.mock('@/services/archivePdfAccess', () => ({ authorizeArchivePdf: state.authorizePdf }));
+vi.mock('@/services/saveMerchantStatement', () => ({ saveMerchantStatement: state.savePdf }));
 vi.mock('@/services/archiveDayFirestore', () => ({
   subscribeArchiveDay: (space: string, store: string, date: string, publish: any, fail: any) => {
     let active = true;
@@ -178,6 +183,8 @@ beforeEach(() => {
   state.load.mockReset().mockResolvedValue([archive]);
   state.statuses.mockReset().mockImplementation(async () => [archive]);
   state.share.mockReset().mockResolvedValue({});
+  state.authorizePdf.mockReset().mockResolvedValue(undefined);
+  state.savePdf.mockReset().mockImplementation(async (_html, _mode, isCurrent, authorize) => { await authorize(); if (!isCurrent()) throw new Error('exportScopeChanged'); return 'shared'; });
 });
 
 describe('archive calendar controls', () => {
@@ -395,6 +402,13 @@ describe('archive screen reuses separate immutable closings', () => {
     await settle();
     expect(state.share).toHaveBeenCalledWith({ message: expect.stringContaining('First closing note') });
     expect(state.share.mock.calls[0][0].message).not.toContain('Second closing note');
+    render(element);
+    await state.buttons['share-archive-pdf-button']();
+    await settle();
+    expect(state.authorizePdf).toHaveBeenCalledWith('s', 'store', archive);
+    expect(state.savePdf.mock.calls[0][0]).toContain('First closing note');
+    expect(state.savePdf.mock.calls[0][0]).not.toContain('Second closing note');
+    expect(state.savePdf.mock.calls[0][1]).toBe('share');
     expect(saved).toEqual(before);
   });
   it.each(['ar', 'en', 'tr'] as const)(

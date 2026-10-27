@@ -71,9 +71,9 @@ describe('exact localized presentation', () => {
   it('formats large and fractional legacy amounts exactly', () => {
     expect(formatExactMoney('9007199254740993.00', 'USD', 'en')).toBe('$ 9,007,199,254,740,993.00');
     expect(formatExactMoney('-100.005', 'TRY', 'tr')).toBe('₺ −100,005');
-    // Follow the application's Intl locale policy; CLDR may choose Latin or Arabic digits for `ar`.
+    // Language changes labels, never the selected Latin digit system.
     expect(formatExactMoney('1250.50', 'TRY', 'ar')).toContain(
-      new Intl.NumberFormat('ar', { minimumFractionDigits: 2 }).format(1250.5),
+      new Intl.NumberFormat('ar', { minimumFractionDigits: 2, numberingSystem: 'latn' }).format(1250.5),
     );
   });
 });

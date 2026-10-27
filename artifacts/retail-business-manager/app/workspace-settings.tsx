@@ -11,6 +11,7 @@ import { ActorBadge } from '@/components/ActorBadge';
 import { getFirebaseAuth } from '@/services/firebase';
 import { useColors } from '@/hooks/useColors';
 import { useI18n } from '@/hooks/useI18n';
+import { formatLocalizedDateTime } from '@/constants/i18n';
 import {
   workspaceCommand,
   workspaceInvitationLink,
@@ -257,7 +258,7 @@ export default function WorkspaceSettingsScreen() {
                   <GlassCard key={invite.invitationId} style={{ gap: 12, marginBottom: 14 }}>
                     <Text style={text}>
                       {t(invite.role === 'editor' ? 'workspaceEditor' : 'workspaceViewer')} ·{' '}
-                      {new Date(invite.expiresAt).toLocaleString(language)}
+                      {formatLocalizedDateTime(new Date(invite.expiresAt), language)}
                     </Text>
                     <WorkspaceButton
                       label={t('workspaceRevoke')}

@@ -63,7 +63,7 @@ vi.mock('@/hooks/useI18n', () => ({
 vi.mock('@/context/StoreContext', () => ({
   useStore: () => ({
     activeSpaceId: 's',
-    profile: { id: 'store', currency: 'TRY' },
+    profile: { id: 'store', currency: 'TRY', visibleCurrencies: ['TRY', 'USD'] },
     canWriteBusiness: state.role === 'owner' || state.role === 'editor',
   }),
 }));

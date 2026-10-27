@@ -3,6 +3,11 @@ import type { Language } from '@/constants/i18n';
 import { numberFormatter } from './intlFormatters';
 
 const localeTokens = new Map<string, { group: string; separator: string; digits: string[] }>();
+/** Display only: remove insignificant padding without rounding or Number conversion. */
+export function formatExactDecimal(value: string): string {
+  if (!/^-?(0|[1-9]\d*)(?:\.\d+)?$/.test(value) || value.length > 500) throw new Error('invalidExactMoney');
+  return value.includes('.') ? value.replace(/0+$/, '').replace(/\.$/, '') : value;
+}
 function moneyTokens(language: Language) {
   const locale = language === 'tr' ? 'tr-TR' : language === 'ar' ? 'ar' : 'en-US';
   const existing = localeTokens.get(locale);

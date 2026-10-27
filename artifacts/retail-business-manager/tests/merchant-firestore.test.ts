@@ -10,6 +10,7 @@ const state = vi.hoisted(() => ({
   syncStop: vi.fn(),
   call: vi.fn(),
   constraints: [] as unknown[],
+  queries: [] as unknown[][],
   read: vi.fn(),
 }));
 vi.mock('@/services/firebase', () => ({ isFirebaseConfigured: true, getFirebaseApp: () => ({}), getFirebaseAuth: () => ({ currentUser: { uid: 'u' } }) }));
@@ -19,6 +20,7 @@ vi.mock('firebase/firestore', () => ({
   collection: (_db: unknown, path: string) => ({ path }),
   query: (ref: unknown, ...constraints: unknown[]) => {
     state.constraints = constraints;
+    state.queries.push(constraints);
     return ref;
   },
   where: (...values: unknown[]) => ({ where: values }),
@@ -38,7 +40,7 @@ vi.mock('firebase/firestore', () => ({
   },
 }));
 import { loadMerchantHistoryPage, sendMerchantCommand, subscribeMerchantAccounts } from '@/services/merchantFirestore';
-import { clearLocalExportCache, LOCAL_EXPORT_COLLECTIONS, readLocalExportData, rememberLocalExportCollection } from '@/services/localExportCache';
+import { clearLocalExportCache, LOCAL_EXPORT_COLLECTIONS, readConfirmedCollection, readLocalExportData, rememberLocalExportCollection } from '@/services/localExportCache';
 const snapshot = (values: unknown[] = [], fromCache = false, hasPendingWrites = false) => ({
   docs: values.map((value: any) => ({ id: value.id, data: () => value })),
   metadata: { fromCache, hasPendingWrites },
@@ -83,6 +85,8 @@ describe('scoped merchant observations', () => {
       rememberLocalExportCollection('u', 's', name, [], true);
     const publish = vi.fn();
     const stop = subscribeMerchantAccounts('s', 'store', publish, vi.fn(), 'm');
+    rememberLocalExportCollection('u', 's', 'merchants', [{ id: merchant.id, data: merchant }], true);
+    rememberLocalExportCollection('u', 's', 'merchantBalances', [{ id: balance.id, data: { ...balance, revision: 101 } }], true);
     state.listeners[0].next(snapshot([merchant]));
     state.listeners[1].next(snapshot([{ ...balance, revision: 101 }]));
     state.listeners[2].next(snapshot(Array.from({ length: 101 }, (_, index) => historyRow(index))));
@@ -133,7 +137,9 @@ describe('scoped merchant observations', () => {
     expect(state.syncStop).toHaveBeenCalledOnce();
   });
   it('bounds detail history by merchant and date, without scanning all workspace operations', () => {
+    state.queries = [];
     subscribeMerchantAccounts('s', 'store', vi.fn(), vi.fn(), 'm');
+    expect(state.queries.slice(0, 2)).toEqual([[{ where: ['id', '==', 'm'] }], [{ where: ['merchantId', '==', 'm'] }]]);
     expect(state.listeners[2].path).toBe('spaces/s/merchantOperations');
     expect(state.constraints).toEqual([
       { where: ['merchantId', '==', 'm'] },
@@ -141,6 +147,18 @@ describe('scoped merchant observations', () => {
       { orderBy: ['__name__', 'desc'] },
       { limit: 101 },
     ]);
+  });
+  it('does not replace full export coverage with one account detail', () => {
+    const scope = { uid: 'u', spaceId: 's', storeId: 'store' };
+    const directory = [merchant, { ...merchant, id: 'other' }];
+    rememberLocalExportCollection('u','s','merchants',directory.map(row => ({ id: row.id, data: row })),true);
+    rememberLocalExportCollection('u','s','merchantBalances',[{ id: balance.id, data: balance }],true);
+    const stop = subscribeMerchantAccounts('s','store',vi.fn(),vi.fn(),'m');
+    state.listeners[0].next(snapshot([merchant])); state.listeners[1].next(snapshot([balance]));
+    state.listeners[2].next(snapshot([])); state.sync();
+    expect(readConfirmedCollection(scope,'merchants')?.map(row => row.id)).toEqual(['m','other']);
+    expect(readConfirmedCollection(scope,'merchantBalances')?.map(row => row.id)).toEqual([balance.id]);
+    stop();
   });
   it('does not publish local pending writes or cache-only initial financial values', () => {
     const publish = vi.fn();

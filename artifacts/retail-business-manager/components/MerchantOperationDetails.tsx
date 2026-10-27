@@ -6,6 +6,7 @@ import { MerchantButton } from './MerchantAccountUI';
 import { merchantActionLabels } from './MerchantCommandForm';
 import { useColors } from '@/hooks/useColors';
 import { useI18n } from '@/hooks/useI18n';
+import { formatLocalizedDateTime } from '@/constants/i18n';
 import { formatExactMoney } from '@/data/exactMoneyPresentation';
 import type { MerchantOperation } from '@/types/merchant';
 
@@ -43,7 +44,7 @@ export function MerchantOperationDetails({
             </Text>
           ) : null}
           <Text style={text}>
-            {t('merchantRecordedAt')}: {new Date(operation.createdAt).toLocaleString(language)}
+            {t('merchantRecordedAt')}: {formatLocalizedDateTime(new Date(operation.createdAt), language)}
           </Text>
           {operation.lines?.map((line, index) => (
             <View key={index} style={{ gap: 6 }}>

@@ -21,7 +21,7 @@ export function ArchiveDayPicker({
   const [month, setMonth] = useState(value.slice(0, 7));
   const { t, language, isRTL } = useI18n();
   const colors = useColors();
-  const locale = language === 'ar' ? 'ar' : language === 'tr' ? 'tr-TR' : 'en-US';
+  const locale = language === 'ar' ? 'ar-u-nu-latn' : language === 'tr' ? 'tr-TR' : 'en-US';
   const previous = shiftArchiveMonth(month, -1);
   const next = shiftArchiveMonth(month, 1);
   const select = (date: string) => {

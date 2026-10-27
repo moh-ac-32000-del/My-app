@@ -106,6 +106,8 @@ export function useMerchantAccounts(merchantId?: string) {
       // A command initiated in A may complete there; never publish its success as a result in B.
       if (current.current !== expected) throw new Error('workspaceSessionChanged');
       assertBusinessAccess(activeSpaceId, sessionKey);
+      // Reconfirm this bounded account after the command without waiting for navigation.
+      if (merchantId) setRetry(value => value + 1);
       return result;
     },
     [activeSpaceId, canWriteBusiness, sessionKey, profile.id, key, assertBusinessAccess, merchantId],

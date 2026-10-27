@@ -1,5 +1,5 @@
 import { merchantStatementText } from '../constants/merchantStatementText';
-import { formatExactMoney } from '../data/exactMoneyPresentation';
+import { formatExactDecimal, formatExactMoney } from '../data/exactMoneyPresentation';
 import type { Language } from '../constants/i18n';
 import type { MerchantStatement } from '../data/merchantStatement';
 import { customerStatementText } from '../constants/customerStatementText';
@@ -48,7 +48,7 @@ export function merchantStatementHtml(input: {
               : 'other';
         const methods = { cash: 'paymentMethodCash', card: 'paymentMethodCard', 'bank-transfer': 'paymentMethodBankTransfer', other: 'paymentMethodOther' } as const;
         const method = customer && row.method in methods ? translate(methods[row.method as keyof typeof methods], input.language) : row.method;
-        return `<tr class="${tone}"><td><span dir="ltr">${escape(row.date)}</span>${!row.continuation && row.date !== row.recordedDate ? `<small>${escape(copy.recorded)}: <span dir="ltr">${escape(row.recordedDate)}</span></small>` : ''}</td><td>${escape(row.continuation ? continued : kind)}${row.corrected && !row.continuation ? `<small>${escape(copy.corrected)}</small>` : ''}</td><td>${escape(row.description)}</td>${customer ? '' : `<td dir="ltr">${row.continuation ? '—' : escape(row.quantity)}</td><td dir="ltr">${row.continuation ? '—' : escape(row.unitPrice)}</td>`}<td>${row.continuation ? '—' : escape(method)}</td><td dir="ltr">${row.continuation ? '—' : number(row.amount, row.currency)}</td></tr>`;
+        return `<tr class="${tone}"><td><span dir="ltr">${escape(row.date)}</span>${!row.continuation && row.date !== row.recordedDate ? `<small>${escape(copy.recorded)}: <span dir="ltr">${escape(row.recordedDate)}</span></small>` : ''}</td><td>${escape(row.continuation ? continued : kind)}${row.corrected && !row.continuation ? `<small>${escape(copy.corrected)}</small>` : ''}</td><td>${escape(row.description)}</td>${customer ? '' : `<td dir="ltr">${row.continuation ? '—' : row.quantity ? escape(formatExactDecimal(row.quantity)) : ''}</td><td dir="ltr">${row.continuation ? '—' : row.unitPrice ? escape(formatExactDecimal(row.unitPrice)) : ''}</td>`}<td>${row.continuation ? '—' : escape(method)}</td><td dir="ltr">${row.continuation ? '—' : number(row.amount, row.currency)}</td></tr>`;
       })
       .join('')}</tbody></table>`;
   // Never mix currencies within a table/page. Bounds account for summary and long wrapping text.

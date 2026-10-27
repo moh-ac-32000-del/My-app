@@ -927,6 +927,11 @@ try {
       const context = testEnvironment.authenticatedContext(`export-${role}`);
       try {
         const profile = doc(context.firestore(), 'spaces', 'export-preparation-space', 'storeProfile', 'profile');
+        await runCase(`Merchant detail refresh — ${role} selected merchant metadata`, () => getDocsFromServer(query(
+          collection(context.firestore(), 'spaces', 'export-preparation-space', 'merchants'), where('id', '==', 'record'))), 'ALLOW');
+        await runCase(`Merchant detail refresh — ${role} selected merchant balances`, () => getDocsFromServer(query(
+          collection(context.firestore(), 'spaces', 'export-preparation-space', 'merchantBalances'), where('merchantId', '==', 'merchant'))), 'ALLOW');
+        await runCase(`Archive PDF — ${role} selected immutable closing get`, () => getDocFromServer(doc(context.firestore(), 'spaces', 'export-preparation-space', 'dailyArchives', 'record')), 'ALLOW');
         await runCase(`Export authorization — ${role} fresh space/member/profile/customer reads`, () => Promise.all([
           getDocFromServer(multiSpaceReference(context, 'export-preparation-space')),
           getDocFromServer(memberReference(context, 'export-preparation-space', `export-${role}`)),
