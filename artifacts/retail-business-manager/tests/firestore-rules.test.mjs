@@ -902,7 +902,7 @@ try {
         () => getDocFromServer(doc(removedMerchantEditor.firestore(), 'spaces', 'merchant-read-space', name, 'history')), 'DENY');
     } finally { await removedMerchantEditor.cleanup(); }
 
-    // Exact export-preparation query shapes; no new write permission or Rules change.
+    // Export authorization must work before any merchant screen has been opened.
     await seedMultiSpace('export-preparation-space', 'export-owner', [
       { uid: 'export-owner', role: 'owner' }, { uid: 'export-editor', role: 'editor' },
       { uid: 'export-viewer', role: 'viewer' },
@@ -910,6 +910,7 @@ try {
     const exportCollections = ['customers', 'debts', 'payments', 'transactions', 'dailyArchives',
       'customerCredits', 'merchants', 'merchantBalances', 'merchantOperations'];
     await testEnvironment.withSecurityRulesDisabled(async context => {
+      await setDoc(doc(context.firestore(), 'spaces', 'export-preparation-space', 'storeProfile', 'profile'), { storeId: 'export-store' });
       for (const name of exportCollections) await setDoc(doc(context.firestore(), 'spaces', 'export-preparation-space', name, 'record'), {
         id: 'record', workspaceId: 'export-preparation-space', storeId: 'export-store',
         merchantId: 'merchant', createdAt: '2026-10-26T10:00:00Z',
@@ -925,12 +926,25 @@ try {
     for (const role of ['owner', 'editor', 'viewer']) {
       const context = testEnvironment.authenticatedContext(`export-${role}`);
       try {
+        const profile = doc(context.firestore(), 'spaces', 'export-preparation-space', 'storeProfile', 'profile');
+        await runCase(`Export authorization — ${role} fresh space/member/profile/customer reads`, () => Promise.all([
+          getDocFromServer(multiSpaceReference(context, 'export-preparation-space')),
+          getDocFromServer(memberReference(context, 'export-preparation-space', `export-${role}`)),
+          getDocFromServer(profile),
+          getDocFromServer(doc(context.firestore(), 'spaces', 'export-preparation-space', 'customers', 'record')),
+        ]), 'ALLOW');
+        await runCase(`Export authorization — ${role} cannot list profiles`, () => getDocsFromServer(collection(context.firestore(), 'spaces', 'export-preparation-space', 'storeProfile')), 'DENY');
+        await runCase(`Export authorization — ${role} cannot get another profile`, () => getDocFromServer(doc(context.firestore(), 'spaces', 'export-preparation-space', 'storeProfile', 'other')), 'DENY');
+        await runCase(`Export authorization — ${role} cannot update profile`, () => updateDoc(profile, { storeId: 'forged' }), 'DENY');
+        await runCase(`Export authorization — ${role} cannot delete profile`, () => deleteDoc(profile), 'DENY');
+        await runCase(`Export authorization — ${role} cannot create profile`, () => setDoc(doc(context.firestore(), 'spaces', 'export-preparation-space', 'storeProfile', 'forged'), { storeId: 'forged' }), 'DENY');
         for (const [index, request] of exportQueries(context).entries()) await runCase(
           `Export preparation — ${role} scoped ${exportCollections[index]}`, () => getDocsFromServer(request), 'ALLOW');
         await runCase(`Export preparation — ${role} cursor history`, () => getDocsFromServer(historyQuery(context)), 'ALLOW');
       } finally { await context.cleanup(); }
     }
     for (const context of [userA, anonymous]) {
+      await runCase('Export authorization — unauthorized profile read denied', () => getDocFromServer(doc(context.firestore(), 'spaces', 'export-preparation-space', 'storeProfile', 'profile')), 'DENY');
       for (const [index, request] of exportQueries(context).entries()) await runCase(
         `Export preparation — unauthorized ${exportCollections[index]}`, () => getDocsFromServer(request), 'DENY');
       await runCase('Export preparation — unauthorized cursor history', () => getDocsFromServer(historyQuery(context)), 'DENY');
@@ -938,10 +952,24 @@ try {
     await testEnvironment.withSecurityRulesDisabled(context => deleteDoc(doc(context.firestore(), 'spaces', 'export-preparation-space', 'members', 'export-editor')));
     const removedExporter = testEnvironment.authenticatedContext('export-editor');
     try {
+      await runCase('Export authorization — removed member profile read denied', () => getDocFromServer(doc(removedExporter.firestore(), 'spaces', 'export-preparation-space', 'storeProfile', 'profile')), 'DENY');
       for (const [index, request] of exportQueries(removedExporter).entries()) await runCase(
         `Export preparation — revoked ${exportCollections[index]}`, () => getDocsFromServer(request), 'DENY');
       await runCase('Export preparation — revoked cursor history', () => getDocsFromServer(historyQuery(removedExporter)), 'DENY');
     } finally { await removedExporter.cleanup(); }
+
+    for (const patch of [{ role: 'admin', status: 'active' }, { role: 'viewer', status: 'removed' }]) {
+      await testEnvironment.withSecurityRulesDisabled(context => updateDoc(memberReference(context, 'export-preparation-space', 'export-viewer'), patch));
+      const context = testEnvironment.authenticatedContext('export-viewer');
+      try {
+        await runCase(`Export authorization — invalid membership ${JSON.stringify(patch)}`, () => getDocFromServer(doc(context.firestore(), 'spaces', 'export-preparation-space', 'storeProfile', 'profile')), 'DENY');
+      } finally { await context.cleanup(); }
+    }
+    await testEnvironment.withSecurityRulesDisabled(context => updateDoc(multiSpaceReference(context, 'export-preparation-space'), { status: 'archived' }));
+    const archivedExporter = testEnvironment.authenticatedContext('export-owner');
+    try {
+      await runCase('Export authorization — archived workspace profile read denied', () => getDocFromServer(doc(archivedExporter.firestore(), 'spaces', 'export-preparation-space', 'storeProfile', 'profile')), 'DENY');
+    } finally { await archivedExporter.cleanup(); }
 
     for (const collectionName of [
       'customers',

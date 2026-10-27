@@ -45,6 +45,13 @@ service cloud.firestore {
       allow create, update, delete: if false;
     }
 
+    // Export authorization verifies the canonical store mapping with a fresh get.
+    // This profile is already returned to active members by storeProfileCommand.
+    match /spaces/{spaceId}/storeProfile/profile {
+      allow get: if isActiveMember(spaceId);
+      allow list, create, update, delete: if false;
+    }
+
     match /spaces/{spaceId}/customers/{customerId} {
       allow read: if isActiveMember(spaceId);
       // Customer history is retained; deletion is represented by isActive=false.
