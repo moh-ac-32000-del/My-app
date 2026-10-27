@@ -16,6 +16,7 @@ import { customerStatementText } from '@/constants/customerStatementText';
 import { merchantStatementText } from '@/constants/merchantStatementText';
 import { MerchantButton } from './MerchantAccountUI';
 import type { Customer } from '@/types/business';
+import { customerPaymentMethodLabels } from '@/services/customerPaymentMethodLabels';
 
 export function CustomerStatementModal({ customer, onClose }: { customer: Customer; onClose: () => void }) {
   const store = useStore(), { language, isRTL } = useI18n(), colors = useColors();
@@ -45,8 +46,11 @@ export function CustomerStatementModal({ customer, onClose }: { customer: Custom
       const debts = source[0].map(row => normalizeDebtDocument(row.id, row.data, spaceId));
       const payments = source[1].map(row => normalizePaymentDocument(row.id, row.data, spaceId));
       if (debts.some(row => !row) || payments.some(row => !row)) throw new Error('customerStatementIncomplete');
+      const paymentMethodLabels = await customerPaymentMethodLabels(scope, payments as NonNullable<typeof payments[number]>[], isCurrent);
+      if (!isCurrent() || JSON.stringify(read()) !== signature) throw new Error('exportScopeChanged');
       const statement = customerStatement({ ...scope, customer, debts: debts as NonNullable<typeof debts[number]>[],
-        payments: payments as NonNullable<typeof payments[number]>[], credits: source[2].map(row => customerCreditFromDocument(row.id, row.data, spaceId, scope.storeId)) });
+        payments: payments as NonNullable<typeof payments[number]>[], paymentMethodLabels,
+        credits: source[2].map(row => customerCreditFromDocument(row.id, row.data, spaceId, scope.storeId)) });
       const html = merchantStatementHtml({ statement, language, merchantName: customer.name, storeName: store.profile.name,
         issuedAt: new Date().toISOString(), kind: 'customer' });
       const saved = await saveMerchantStatement(html, mode, isCurrent, async () => {
