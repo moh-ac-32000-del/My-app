@@ -32,6 +32,21 @@ describe('Android Push client lifecycle with mocked native APIs (not a device te
     await expect(client.connectAndroidPush(scope)).rejects.toThrow('pushPermissionDenied');
     expect(mocks.call).not.toHaveBeenCalled();
   });
+  it.each(['channel', 'permission', 'token'] as const)('identifies a native %s failure before any server registration', async native => {
+    const client = await import('@/services/androidPush.android');
+    const { androidPushFailure } = await import('@/data/androidPushFailure');
+    mocks[native].mockRejectedValueOnce(new Error('native failure'));
+    try { await client.connectAndroidPush(scope); throw new Error('unexpected success'); }
+    catch (error) { expect(androidPushFailure(error)).toBe(native === 'permission' ? 'permissionCheck' : native); }
+    expect(mocks.call).not.toHaveBeenCalled(); expect(mocks.setItem).not.toHaveBeenCalled();
+  });
+  it('reports registration rejection without saving connection metadata', async () => {
+    const client = await import('@/services/androidPush.android');
+    const { androidPushFailure } = await import('@/data/androidPushFailure');
+    mocks.call.mockRejectedValueOnce(Object.assign(new Error('expired'), { code: 'functions/unauthenticated' }));
+    await expect(client.connectAndroidPush(scope).catch(error => androidPushFailure(error))).resolves.toBe('session');
+    expect(mocks.setItem).not.toHaveBeenCalled();
+  });
   it('hands off the reminder time without silently keeping a different server schedule', async () => {
     const client = await import('@/services/androidPush.android');
     mocks.getItem.mockImplementation(async (key: string) => key.includes('/notification-time') ? '10:45' : null);
