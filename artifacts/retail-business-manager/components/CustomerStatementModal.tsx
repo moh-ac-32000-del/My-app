@@ -20,7 +20,7 @@ import type { Customer } from '@/types/business';
 export function CustomerStatementModal({ customer, onClose }: { customer: Customer; onClose: () => void }) {
   const store = useStore(), { language, isRTL } = useI18n(), colors = useColors();
   const copy = customerStatementText[language], common = merchantStatementText[language];
-  const [busy, setBusy] = useState(false), [failed, setFailed] = useState(false);
+  const [busy, setBusy] = useState(false), [failure, setFailure] = useState<string | null>(null);
   const [result, setResult] = useState<string | null>(null);
   const fingerprint = JSON.stringify([store.sessionKey, store.activeSpaceId, store.profile.id, customer.id, localExportEpoch(), store.canWriteBusiness, store.activeSpaceLoading, store.activeSpaceError]);
   const alive = useRef(true), initial = useRef(fingerprint).current;
@@ -30,7 +30,7 @@ export function CustomerStatementModal({ customer, onClose }: { customer: Custom
   const isCurrent = () => alive.current && current.current === initial && store.canWriteBusiness && !store.activeSpaceLoading && !store.activeSpaceError;
   const run = async (mode: 'save' | 'share') => {
     if (busy || !isCurrent()) return;
-    setBusy(true); setFailed(false); setResult(null);
+    setBusy(true); setFailure(null); setResult(null);
     try {
       const uid = getFirebaseAuth().currentUser?.uid, spaceId = store.activeSpaceId;
       if (!uid || !spaceId) throw new Error('exportScopeChanged');
@@ -55,7 +55,9 @@ export function CustomerStatementModal({ customer, onClose }: { customer: Custom
         if (!isCurrent() || JSON.stringify(read()) !== signature) throw new Error('exportScopeChanged');
       });
       if (isCurrent()) setResult(saved === 'saved' ? common.saved : saved === 'shared' ? common.shared : saved === 'print-dialog' ? common.web : null);
-    } catch { if (isCurrent()) setFailed(true); } finally { if (alive.current) setBusy(false); }
+    } catch (error) {
+      if (isCurrent()) setFailure(error instanceof Error && error.message === 'customerStatementIncomplete' ? copy.incomplete : common.error);
+    } finally { if (alive.current) setBusy(false); }
   };
   if (!isCurrent()) return null;
   return <Modal visible transparent animationType="slide" onRequestClose={() => { if (!busy) onClose(); }}>
@@ -66,7 +68,7 @@ export function CustomerStatementModal({ customer, onClose }: { customer: Custom
         <Text style={{ color: colors.mutedForeground }}>{Platform.OS === 'web' ? common.web : common.native}</Text>
         <MerchantButton title={common.save} disabled={busy} selected onPress={() => void run('save')} />
         <MerchantButton title={common.share} disabled={busy} onPress={() => void run('share')} />
-        {failed ? <Text accessibilityLiveRegion="polite" style={{ color: colors.destructive }}>{copy.incomplete}</Text> : null}
+        {failure ? <Text accessibilityLiveRegion="polite" style={{ color: colors.destructive }}>{failure}</Text> : null}
         {result ? <Text accessibilityLiveRegion="polite" style={{ color: colors.success }}>{result}</Text> : null}
         <MerchantButton title={language === 'ar' ? 'إغلاق' : language === 'tr' ? 'Kapat' : 'Close'} disabled={busy} onPress={onClose} />
       </ScrollView>
