@@ -42,7 +42,7 @@ vi.mock('@/components/ReminderForm', () => ({ ReminderForm: () => null }));
 vi.mock('@/components/KeyboardAwareScrollViewCompat', () => ({ KeyboardAwareScrollViewCompat: () => null }));
 vi.mock('@/hooks/useColors', () => ({ useColors: () => ({}) }));
 vi.mock('@/hooks/useI18n', () => ({ useI18n: () => ({ language: 'en', isRTL: false, t: (key: any) => translate(key, 'en') }) }));
-vi.mock('@/context/StoreContext', () => ({ useStore: () => ({ profile: { id: 'store', currency: 'TRY' },
+vi.mock('@/context/StoreContext', () => ({ useStore: () => ({ profile: { id: 'store', currency: 'TRY', visibleCurrencies: ['TRY', 'USD'] },
   isReady: true, activeSpaceId: 's', sessionKey: 'session', canWriteBusiness: true }) }));
 vi.mock('@/context/CustomerContext', () => ({ useCustomers: () => ({
   customers: [{ id: 'c', name: 'Ready customer', phone: '', address: '', notes: '', isActive: true,

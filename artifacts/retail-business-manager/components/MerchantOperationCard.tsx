@@ -6,6 +6,7 @@ import { GlassCard } from './AppShell';
 import { merchantActionLabels } from './MerchantCommandForm';
 import { useColors } from '@/hooks/useColors';
 import { useI18n } from '@/hooks/useI18n';
+import { formatLocalizedDate } from '@/constants/i18n';
 import { formatExactMoney } from '@/data/exactMoneyPresentation';
 import { subtractCustomerExact } from '@/data/customerCreditAccounting';
 import type { MerchantOperation } from '@/types/merchant';
@@ -34,7 +35,7 @@ export function MerchantOperationCard({ operation, onPress, onEdit }: { operatio
           </Text>
         </View>
         <Text style={{ ...text, color: colors.mutedForeground }}>
-          {operation.operationDate ?? new Date(operation.createdAt).toLocaleDateString(language)}
+          {operation.operationDate ?? formatLocalizedDate(new Date(operation.createdAt), language)}
         </Text>
         {onEdit && !operation.reversedByOperationId ? <Pressable
           testID={`edit-merchant-operation-${operation.id}`} accessibilityRole="button" accessibilityLabel={t('operationEdit')}

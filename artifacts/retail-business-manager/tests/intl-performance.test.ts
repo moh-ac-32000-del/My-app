@@ -22,19 +22,19 @@ describe('formatting reuse without changing amounts or calendar rules', () => {
       expect(workspaceDateKey(new Date('2026-10-23T19:00:00Z'), 'Asia/Kathmandu')).toBe('2026-10-24');
     } finally { spy.mockRestore(); }
   });
-  it('preserves old money output for all app languages, precision and large exact integers', () => {
+  it('uses Latin digits in all app languages while preserving exact precision', () => {
     for (const language of ['ar', 'tr', 'en'] as const) {
       const locale = language === 'ar' ? 'ar' : language === 'tr' ? 'tr-TR' : 'en-US';
       for (const amount of [0, 0.005, -1234.567, 9999999.99]) {
-        const number = amount.toLocaleString(locale, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+        const number = amount.toLocaleString(locale, { numberingSystem: 'latn', minimumFractionDigits: 0, maximumFractionDigits: 2 });
         expect(formatMoney(amount, 'TRY', language)).toBe(`₺ ${number}`);
       }
       for (const value of ['0.00', '-0.005', '900719925474099312345.123456']) {
         const [whole, fraction = '00'] = value.replace(/^-/, '').split('.');
-        const parts = new Intl.NumberFormat(locale).formatToParts(1000.1);
+        const parts = new Intl.NumberFormat(locale, { numberingSystem: 'latn' }).formatToParts(1000.1);
         const group = parts.find(part => part.type === 'group')!.value;
         const decimal = parts.find(part => part.type === 'decimal')!.value;
-        const digits = new Intl.NumberFormat(language === 'ar' ? 'ar' : 'en', { useGrouping: false });
+        const digits = new Intl.NumberFormat(language === 'ar' ? 'ar' : 'en', { useGrouping: false, numberingSystem: 'latn' });
         const number = `${value.startsWith('-') ? '−' : ''}${whole.replace(/\B(?=(\d{3})+(?!\d))/g, group)}${decimal}${fraction}`
           .replace(/\d/g, digit => digits.format(Number(digit)));
         expect(formatExactMoney(value, 'TRY', language)).toBe(`₺ ${number}`);

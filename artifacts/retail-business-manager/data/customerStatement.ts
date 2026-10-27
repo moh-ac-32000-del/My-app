@@ -6,7 +6,7 @@ import { isCurrencyCode } from '../constants/currencies';
 
 /** Current-state statement, not an as-of historical reconstruction. Never invent an opening to make history reconcile. */
 export function customerStatement(input: { spaceId: string; storeId: string; customer: Customer;
-  debts: Debt[]; payments: Payment[]; credits: CustomerCredit[] }): MerchantStatement {
+  debts: Debt[]; payments: Payment[]; credits: CustomerCredit[]; paymentMethodLabels?: ReadonlyMap<string, string> }): MerchantStatement {
   const fail = (): never => { throw new Error('customerStatementIncomplete'); };
   if (input.customer.storeId !== input.storeId) fail();
   const rows: MerchantStatement['rows'] = [], totals: MerchantStatement['totals'] = [];
@@ -39,7 +39,8 @@ export function customerStatement(input: { spaceId: string; storeId: string; cus
       const amount = legacyAmountExact(payment.amount.amount, payment.amountExact);
       paid = addCustomerExact(paid, amount);
       dated.push({ at: payment.paidAt, row: { date: payment.operationDate ?? payment.paidAt.slice(0, 10), recordedDate: payment.paidAt.slice(0, 10),
-        currency, kind: 'payment', description: '', quantity: '', unitPrice: '', method: payment.method, amount, corrected: false } });
+        currency, kind: 'payment', description: '', quantity: '', unitPrice: '', method: payment.method,
+        ...(input.paymentMethodLabels?.has(payment.id) ? { methodLabel: input.paymentMethodLabels.get(payment.id)! } : {}), amount, corrected: false } });
     }
     const closing = subtractCustomerExact(purchases, paid);
     if (closing !== customerBalanceExact(debts, credits[0]?.creditExact ?? '0.00')) fail();

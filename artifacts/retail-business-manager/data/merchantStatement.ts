@@ -18,6 +18,8 @@ export interface MerchantStatement {
     quantity: string;
     unitPrice: string;
     method: string;
+    /** Literal historical label; never translated as a built-in payment enum. */
+    methodLabel?: string;
     amount: string;
     currency: CurrencyCode;
     corrected: boolean;

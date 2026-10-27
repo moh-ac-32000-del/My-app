@@ -50,6 +50,7 @@ export function MerchantCommandForm({
   statusOnly?: boolean;
 }) {
   const { profile, activeSpaceId, canWriteBusiness } = useStore();
+  const currencyOptions = CURRENCY_OPTIONS.filter(row => profile.visibleCurrencies.includes(row.code));
   const { customers, canonicalSpaceId, isLoading: customersLoading, error: customerError } = useCustomers();
   const { t, language, isRTL } = useI18n();
   const colors = useColors();
@@ -60,7 +61,7 @@ export function MerchantCommandForm({
   const [address, setAddress] = useState(merchant?.address ?? '');
   const [notes, setNotes] = useState(merchant?.notes ?? '');
   const [openings, setOpenings] = useState<Array<{ currency: CurrencyCode; amount: string; credit: boolean }>>([]);
-  const [currency, setCurrency] = useState<CurrencyCode>(target?.currency ?? profile.currency);
+  const [currency, setCurrency] = useState<CurrencyCode>(target?.currency ?? currencyOptions.find(row => row.code === profile.currency)?.code ?? currencyOptions[0]?.code ?? profile.currency);
   const editing = !!target && action !== 'reverse';
   const [cancelConfirm, setCancelConfirm] = useState(false);
   const [amount, setAmount] = useState(editing ? target.amountExact ?? '' : '');
@@ -74,6 +75,9 @@ export function MerchantCommandForm({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<'invalid' | 'uncertain' | null>(null);
   const pending = useRef<MerchantDraftCommand | null>(null);
+  useEffect(() => {
+    if (!target && !pending.current && !currencyOptions.some(row => row.code === currency) && currencyOptions[0]) setCurrency(currencyOptions[0].code);
+  }, [currency, profile.visibleCurrencies, target]);
   const alive = useRef(true);
   useEffect(() => {
     alive.current = true;
@@ -112,6 +116,9 @@ export function MerchantCommandForm({
     if (busy || !canWriteBusiness) return;
     if (!pending.current) {
       try {
+        if (!cancelOperation && !editing && (action === 'save'
+          ? openings.some(row => !profile.visibleCurrencies.includes(row.currency))
+          : action !== 'reverse' && !profile.visibleCurrencies.includes(currency))) throw new Error('currencyUnavailable');
         const base = { operationId: merchantDraftId(), merchantId: merchant?.id ?? merchantDraftId(),
           ...(editing && !cancelOperation ? { replacesOperationId: target.id } : {}) };
         if (cancelOperation) {
@@ -337,7 +344,7 @@ export function MerchantCommandForm({
                       title={t('merchantOpening')}
                       value=""
                       disabled={locked}
-                      options={CURRENCY_OPTIONS.filter(
+                      options={currencyOptions.filter(
                         (row) => !openings.some((item) => item.currency === row.code),
                       ).map((row) => ({ id: row.code, name: row.code }))}
                       onChange={(value) =>
@@ -380,7 +387,7 @@ export function MerchantCommandForm({
                   <MerchantSelect
                     title={t('currency')}
                     value={currency}
-                    options={CURRENCY_OPTIONS.map((item) => ({ id: item.code, name: item.code }))}
+                    options={(editing ? CURRENCY_OPTIONS.filter(item => item.code === target.currency) : currencyOptions).map((item) => ({ id: item.code, name: item.code }))}
                     disabled={locked || editing}
                     onChange={(value) => {
                       setCurrency(value as CurrencyCode);

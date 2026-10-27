@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, Share, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { AppShell, EmptyState, GlassCard, PageHeader, SectionTitle } from '@/components/AppShell';
@@ -14,10 +14,14 @@ import { ArchiveDayPicker } from '@/components/ArchiveDayPicker';
 import { useArchiveDay } from '@/hooks/useArchiveDay';
 import { archiveDateForDisplay } from '@/data/archiveCalendar';
 import { useFinancialWindow } from '@/hooks/useFinancialWindow';
+import { archiveExportFingerprint, archivePdfHtml, archivePdfText } from '@/services/archivePdf';
+import { authorizeArchivePdf } from '@/services/archivePdfAccess';
+import { saveMerchantStatement } from '@/services/saveMerchantStatement';
+import { merchantStatementText } from '@/constants/merchantStatementText';
 
 export default function ArchiveScreen() {
   const colors = useColors();
-  const { profile } = useStore();
+  const { profile, activeSpaceId, sessionKey, workspaceRole, activeSpaceLoading, activeSpaceError } = useStore();
   const clock = useFinancialWindow();
   const { t, language, isRTL } = useI18n();
   const [date, setDate] = useState(() => clock.window?.date ?? getLocalDateKey(new Date()));
@@ -28,6 +32,25 @@ export default function ArchiveScreen() {
     () => archives.find((archive) => archive.id === selectedArchiveId) ?? archives[0] ?? null,
     [archives, selectedArchiveId],
   );
+  const [pdfMessage, setPdfMessage] = useState<{ scope: string; text: string } | null>(null);
+  const pdfLock = useRef(false), alive = useRef(true);
+  const exportScope = useMemo(() => JSON.stringify([sessionKey, activeSpaceId, workspaceRole, profile.id, activeSpaceLoading, activeSpaceError,
+    date, language, selectedArchive ? archiveExportFingerprint(selectedArchive) : null]),
+    [sessionKey, activeSpaceId, workspaceRole, profile.id, activeSpaceLoading, activeSpaceError, date, language, selectedArchive]);
+  const currentExportScope = useRef(exportScope); currentExportScope.current = exportScope;
+  useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
+  const shareArchivePdf = async () => {
+    if (!selectedArchive || !activeSpaceId || activeSpaceLoading || activeSpaceError || archiveError || isLoading || isSharing || pdfLock.current) return;
+    const isCurrent = () => alive.current && currentExportScope.current === exportScope;
+    pdfLock.current = true; setIsSharing(true); setPdfMessage(null);
+    try {
+      const result = await saveMerchantStatement(archivePdfHtml(selectedArchive, profile.name, language), 'share', isCurrent,
+        () => authorizeArchivePdf(activeSpaceId, profile.id, selectedArchive));
+      const text = result === 'print-dialog' ? merchantStatementText[language].web : result === 'shared' ? merchantStatementText[language].shared : '';
+      if (isCurrent() && text) setPdfMessage({ scope: exportScope, text });
+    } catch { if (isCurrent()) setPdfMessage({ scope: exportScope, text: t('shareArchiveError') }); }
+    finally { pdfLock.current = false; if (alive.current) setIsSharing(false); }
+  };
 
   const getEventTitle = (event: DailyJournalEvent): string => {
     if (event.type === 'merchant' || event.correctionOfPaymentId) return journalEventTitle(event, t);
@@ -47,7 +70,7 @@ export default function ArchiveScreen() {
   };
 
   const shareSelectedArchive = async () => {
-    if (!selectedArchive || isSharing) {
+    if (!selectedArchive || isSharing || pdfLock.current) {
       return;
     }
     setIsSharing(true);
@@ -158,6 +181,12 @@ export default function ArchiveScreen() {
                 )}
                 <Text style={[styles.shareButtonText, { color: colors.primaryForeground }]}>{t('shareArchive')}</Text>
               </Pressable>
+              <Pressable testID="share-archive-pdf-button" accessibilityRole="button" disabled={isSharing}
+                onPress={() => void shareArchivePdf()} style={[styles.shareButton, { backgroundColor: colors.input, borderWidth: 1, borderColor: colors.border, flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
+                <Ionicons name="document-text-outline" size={17} color={colors.primary} />
+                <Text style={[styles.shareButtonText, { color: colors.primary }]}>{archivePdfText[language].share}</Text>
+              </Pressable>
+              {pdfMessage?.scope === exportScope ? <Text accessibilityLiveRegion="polite" style={{ color: colors.mutedForeground }}>{pdfMessage.text}</Text> : null}
               {statusesPending || statusesError || selectedArchive.operationStatusesUnavailable ?
                 <Text testID="archive-status-notice" style={{ color: colors.mutedForeground }}>
                   {t(statusesPending ? 'archiveStatusesPending' : statusesError ? 'archiveStatusesError' : 'archiveStatusesUnavailable')}

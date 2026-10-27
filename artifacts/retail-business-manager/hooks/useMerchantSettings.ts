@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { doc, getFirestore, onSnapshot } from 'firebase/firestore';
+import { doc, getDocFromServer, getFirestore, onSnapshot } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { getFirebaseApp } from '@/services/firebase';
 import { useStore } from '@/context/StoreContext';
@@ -14,6 +14,9 @@ export function useMerchantSettings(enabled = true) {
   const key = JSON.stringify([sessionKey, activeSpaceId, profile.id, workspaceRole]);
   const current = useRef(key);
   current.current = key;
+  const generation = useRef(0);
+  const confirmed = useRef<{ key: string; minimum: number; data: MerchantSettings | null }>({ key, minimum: 0, data: null });
+  if (confirmed.current.key !== key) confirmed.current = { key, minimum: 0, data: null };
   const [retry, setRetry] = useState(0);
   const [state, setState] = useState({ key, data: null as MerchantSettings | null, error: false });
   const ready =
@@ -24,8 +27,21 @@ export function useMerchantSettings(enabled = true) {
     !store.activeSpaceError &&
     !!activeSpaceId &&
     !!workspaceRole;
+  const fromSnapshot = (snapshot: { exists(): boolean; data(): unknown }): MerchantSettings => {
+    if (!snapshot.exists()) return emptyMerchantSettings();
+    const raw = snapshot.data() as Record<string, unknown> | undefined;
+    if (raw?.workspaceId !== activeSpaceId || raw.storeId !== profile.id || raw.version !== 1) throw new Error('settingsScopeMismatch');
+    return validateMerchantSettings(raw);
+  };
+  const receive = (next: MerchantSettings) => {
+    const previous = confirmed.current;
+    if (previous.key !== key || next.revision < previous.minimum || next.revision < (previous.data?.revision ?? 0)) return;
+    previous.data = next;
+    setState({ key, data: next, error: false });
+  };
   useEffect(() => {
     let alive = true;
+    generation.current++;
     setState({ key, data: null, error: false });
     if (!ready || !activeSpaceId) return;
     const fail = () => {
@@ -41,17 +57,7 @@ export function useMerchantSettings(enabled = true) {
           return;
         }
         try {
-          const raw = snapshot.data();
-          if (
-            snapshot.exists() &&
-            (raw?.workspaceId !== activeSpaceId || raw.storeId !== profile.id || raw.version !== 1)
-          )
-            throw new Error('scope');
-          setState({
-            key,
-            data: snapshot.exists() ? validateMerchantSettings(raw) : emptyMerchantSettings(),
-            error: false,
-          });
+          receive(fromSnapshot(snapshot));
         } catch {
           fail();
         }
@@ -60,6 +66,7 @@ export function useMerchantSettings(enabled = true) {
     );
     return () => {
       alive = false;
+      generation.current++;
       unsubscribe();
     };
   }, [key, ready, activeSpaceId, profile.id, retry]);
@@ -69,14 +76,15 @@ export function useMerchantSettings(enabled = true) {
     error: ready && state.key === key && state.error,
     retry: () => setRetry((value) => value + 1),
     save: async (settings: MerchantSettings, operationId: string) => {
-      if (!activeSpaceId || !store.canWriteBusiness) throw new Error('workspaceReadOnly');
+      if (!ready || !activeSpaceId || !store.canWriteBusiness) throw new Error('workspaceReadOnly');
       const expected = key;
+      const expectedGeneration = generation.current;
       store.assertBusinessAccess(activeSpaceId, sessionKey);
       const response = await httpsCallable<Record<string, unknown>, Record<string, unknown>>(
         getFunctions(getFirebaseApp()),
         'merchantSettingsCommand',
       )({ spaceId: activeSpaceId, storeId: profile.id, operationId, settings });
-      if (current.current !== expected) throw new Error('workspaceSessionChanged');
+      if (current.current !== expected || generation.current !== expectedGeneration) throw new Error('workspaceSessionChanged');
       store.assertBusinessAccess(activeSpaceId, sessionKey);
       if (
         !['updated', 'replayed'].includes(String(response.data?.outcome)) ||
@@ -86,7 +94,19 @@ export function useMerchantSettings(enabled = true) {
         !Number.isFinite(Date.parse(response.data.processedAt))
       )
         throw new Error('invalidSettingsResponse');
-      return response.data;
+      const revision = settings.revision + 1;
+      confirmed.current.minimum = Math.max(confirmed.current.minimum, revision);
+      if (!confirmed.current.data || confirmed.current.data.revision < revision) {
+        // One bounded read only when the live listener has not delivered the acknowledged revision.
+        setState({ key, data: null, error: false });
+        const snapshot = await getDocFromServer(doc(getFirestore(getFirebaseApp()), `${workspaceDocumentPath(activeSpaceId)}/merchantSettings/config`));
+        if (current.current !== expected || generation.current !== expectedGeneration) throw new Error('workspaceSessionChanged');
+        store.assertBusinessAccess(activeSpaceId, sessionKey);
+        const next = fromSnapshot(snapshot);
+        if (!snapshot.exists() || next.revision < revision) throw new Error('invalidSettingsResponse');
+        receive(next);
+      }
+      return { ...response.data, settings: confirmed.current.data! };
     },
   };
 }

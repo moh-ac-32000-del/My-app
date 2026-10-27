@@ -48,13 +48,12 @@ function MerchantSettingsEditor() {
     setBusy(true);
     setMessage(null);
     try {
-      await save(pending.current.settings, pending.current.id);
+      const result = await save(pending.current.settings, pending.current.id);
       if (alive.current) {
         pending.current = null;
         setDirty(false);
-        setDraft(null);
+        setDraft(result.settings);
         setMessage('confirmed');
-        retry();
       }
     } catch (caught) {
       if (!alive.current) return;

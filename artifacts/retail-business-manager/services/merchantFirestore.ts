@@ -55,8 +55,11 @@ export function subscribeMerchantAccounts(
         throw new Error('invalidCloudMerchantDocument');
       }
       publish(value);
-      merchantExport.receive(observed(value.merchants));
-      balanceExport.receive(observed(value.balances));
+      // Detail reads are partial; never replace complete workspace export receipts.
+      if (!merchantId) {
+        merchantExport.receive(observed(value.merchants));
+        balanceExport.receive(observed(value.balances));
+      }
       if (merchantId && operationExportHead) operationExport.merchantOperations(operationExportHead, storeId);
     },
     (error) => {
@@ -70,7 +73,7 @@ export function subscribeMerchantAccounts(
   try {
     subscriptions.push(
       onSnapshot(
-        collection(db, `${root}/merchants`),
+        merchantId ? query(collection(db, `${root}/merchants`), where('id', '==', merchantId)) : collection(db, `${root}/merchants`),
         { includeMetadataChanges: true },
         (snapshot) => {
           try {
@@ -88,7 +91,7 @@ export function subscribeMerchantAccounts(
     );
     subscriptions.push(
       onSnapshot(
-        collection(db, `${root}/merchantBalances`),
+        merchantId ? query(collection(db, `${root}/merchantBalances`), where('merchantId', '==', merchantId)) : collection(db, `${root}/merchantBalances`),
         { includeMetadataChanges: true },
         (snapshot) => {
           try {

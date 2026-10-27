@@ -128,8 +128,8 @@ function CustomerDetails({ customerId }: { customerId: string }) {
       .filter(account => account.customerId === customerId); } catch { return null; }
   }, [workspaceDebts, workspaceCredits, activeSpaceId, profile.id, customerId]);
   const debtCurrencies = useMemo(
-    () => CURRENCY_OPTIONS.filter(({ code }) => accountBalances?.some(balance => balance.currency === code && balance.balanceExact !== '0.00' && !balance.balanceExact.startsWith('-'))),
-    [accountBalances],
+    () => CURRENCY_OPTIONS.filter(({ code }) => profile.visibleCurrencies.includes(code) && accountBalances?.some(balance => balance.currency === code && balance.balanceExact !== '0.00' && !balance.balanceExact.startsWith('-'))),
+    [accountBalances, profile.visibleCurrencies],
   );
   useFocusEffect(
     useCallback(() => {
@@ -250,6 +250,7 @@ function CustomerDetails({ customerId }: { customerId: string }) {
     }
 
     try {
+      if (!settlementIntentRef.current && !profile.visibleCurrencies.includes(settlementCurrency)) throw new Error('currencyUnavailable');
       if (!settlementIntentRef.current) settlementIntentRef.current = {
         amount: parsedAmount, currency: settlementCurrency, intentId: createOperationId(),
       };
@@ -422,7 +423,7 @@ function CustomerDetails({ customerId }: { customerId: string }) {
           onPress={() => {
             if (settlementIntentRef.current) { setIsSettlementVisible(true); return; }
             setSettlementErrorMessage(null);
-            setSettlementCurrency(debtCurrencies[0]?.code ?? profile.currency);
+            setSettlementCurrency(debtCurrencies[0]?.code ?? profile.visibleCurrencies[0] ?? profile.currency);
             setSettlementAmount('');
             setIsSettlementVisible(true);
           }}
@@ -644,7 +645,7 @@ function CustomerDetails({ customerId }: { customerId: string }) {
               <View style={styles.debtField}>
                 <Text style={[styles.debtFieldLabel, { color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' }]}>{t('settlementCurrency')}</Text>
                 <View style={styles.debtCurrencyOptions}>
-                  {CURRENCY_OPTIONS.map((option) => {
+                  {CURRENCY_OPTIONS.filter(option => profile.visibleCurrencies.includes(option.code)).map((option) => {
                     const selected = settlementCurrency === option.code;
                     return (
                       <Pressable
