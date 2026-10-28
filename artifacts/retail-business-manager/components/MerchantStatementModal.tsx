@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Modal, Platform, ScrollView, Text, View } from 'react-native';
+import { Modal, Platform, Pressable, ScrollView, Text, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MerchantButton, MerchantField } from './MerchantAccountUI';
 import { useColors } from '@/hooks/useColors';
@@ -154,31 +155,33 @@ export function MerchantStatementModal({
         <ScrollView
           style={{
             maxHeight: '92%',
-            backgroundColor: colors.glassStrong,
+            flexGrow: 0,
+            backgroundColor: colors.card,
             borderTopLeftRadius: 28,
             borderTopRightRadius: 28,
           }}
           contentContainerStyle={{ padding: 22, gap: 14, paddingBottom: Math.max(insets.bottom, 20) }}
         >
-          <Text style={{ ...style, fontFamily: 'Inter_700Bold', fontSize: 20 }}>{copy.title}</Text>
-          <MerchantButton
-            title={copy.all}
-            selected={!period}
-            disabled={busy}
-            onPress={() => {
-              setPeriod(false);
-              setPreview(null);
-            }}
-          />
-          <MerchantButton
-            title={copy.period}
-            selected={period}
-            disabled={busy}
-            onPress={() => {
-              setPeriod(true);
-              setPreview(null);
-            }}
-          />
+          <View style={{ flexDirection: isRTL ? 'row-reverse' : 'row', alignItems: 'center', gap: 12, paddingBottom: 14, borderBottomWidth: 1, borderBottomColor: colors.border }}>
+            <Text style={{ ...style, flex: 1, fontFamily: 'Inter_700Bold', fontSize: 20 }}>{copy.title}</Text>
+            <Pressable accessibilityRole="button" accessibilityLabel={t('close')} disabled={busy} onPress={onClose}
+              style={{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 22, backgroundColor: colors.input, opacity: busy ? 0.45 : 1 }}>
+              <Ionicons name="close" size={22} color={colors.foreground} />
+            </Pressable>
+          </View>
+          <View style={{ gap: 12, padding: 14, backgroundColor: colors.input, borderRadius: 18 }}>
+          <Text style={{ ...style, fontWeight: '600' }}>{copy.periodLabel}</Text>
+          <View accessibilityRole="radiogroup" accessibilityLabel={copy.periodLabel} style={{ flexDirection: isRTL ? 'row-reverse' : 'row', gap: 8 }}>
+            {[false, true].map((value) => (
+              <Pressable key={String(value)} accessibilityRole="radio" accessibilityState={{ checked: period === value, disabled: busy }}
+                disabled={busy} onPress={() => { setPeriod(value); setPreview(null); }}
+                style={{ flex: 1, minHeight: 48, padding: 10, borderRadius: 12, borderWidth: 1, borderColor: period === value ? colors.primary : colors.border,
+                  backgroundColor: colors.card, opacity: busy ? 0.45 : 1, flexDirection: isRTL ? 'row-reverse' : 'row', alignItems: 'center', justifyContent: 'center', gap: 7 }}>
+                <Ionicons name={period === value ? 'radio-button-on' : 'radio-button-off'} size={20} color={period === value ? colors.primary : colors.mutedForeground} />
+                <Text style={{ ...style, flexShrink: 1, fontWeight: '600' }}>{value ? copy.period : copy.all}</Text>
+              </Pressable>
+            ))}
+          </View>
           {period ? (
             <>
               <MerchantField
@@ -201,6 +204,7 @@ export function MerchantStatementModal({
               />
             </>
           ) : null}
+          </View>
           {operationsLimited ? (
             <>
               <Text style={style}>{copy.consent}</Text>
@@ -218,6 +222,7 @@ export function MerchantStatementModal({
           <MerchantButton
             testID="merchant-statement-preview"
             title={copy.preview}
+            selected
             disabled={busy || historyLoading || operationsLimited}
             onPress={prepare}
           />
@@ -258,7 +263,6 @@ export function MerchantStatementModal({
               {message}
             </Text>
           ) : null}
-          <MerchantButton title={t('close')} disabled={busy} onPress={onClose} />
         </ScrollView>
       </View>
     </Modal>
