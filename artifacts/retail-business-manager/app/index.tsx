@@ -152,6 +152,11 @@ export default function DashboardScreen() {
       </GlassCard>
 
       <SectionTitle title={t('recentActivity')} />
+      <Pressable testID="open-journal-history" accessibilityRole="button" onPress={() => router.push('/journal-history' as never)}
+        style={{ minHeight: 44, flexDirection: isRTL ? 'row-reverse' : 'row', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+        <Ionicons name="calendar-outline" size={20} color={colors.primary} />
+        <Text style={{ color: colors.primary }}>{t('journalHistory')}</Text>
+      </Pressable>
       <DailyClosingAction
         storeId={profile.id}
         spaceId={activeSpaceId}

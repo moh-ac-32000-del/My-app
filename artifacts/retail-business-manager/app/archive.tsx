@@ -14,12 +14,14 @@ import { ArchiveDayPicker } from '@/components/ArchiveDayPicker';
 import { useArchiveDay } from '@/hooks/useArchiveDay';
 import { archiveDateForDisplay } from '@/data/archiveCalendar';
 import { useFinancialWindow } from '@/hooks/useFinancialWindow';
+import { useRouter } from 'expo-router';
 import { archiveExportFingerprint, archivePdfHtml, archivePdfText } from '@/services/archivePdf';
 import { authorizeArchivePdf } from '@/services/archivePdfAccess';
 import { saveMerchantStatement } from '@/services/saveMerchantStatement';
 import { merchantStatementText } from '@/constants/merchantStatementText';
 
 export default function ArchiveScreen() {
+  const router = useRouter();
   const colors = useColors();
   const { profile, activeSpaceId, sessionKey, workspaceRole, activeSpaceLoading, activeSpaceError } = useStore();
   const clock = useFinancialWindow();
@@ -102,6 +104,11 @@ export default function ArchiveScreen() {
         }
       />
 
+      <Pressable testID="archive-open-journal-history" accessibilityRole="button"
+        onPress={() => router.push({ pathname: '/journal-history', params: { date } } as never)}
+        style={{ minHeight: 44, paddingVertical: 12, marginBottom: 12 }}>
+        <Text style={{ color: colors.primary, textAlign: isRTL ? 'right' : 'left' }}>{t('journalViewDay')}</Text>
+      </Pressable>
       {archiveError ? (
         <>
           <EmptyState icon="alert-circle-outline" title={t('somethingWentWrong')} hint={t('reloadToContinue')} />
