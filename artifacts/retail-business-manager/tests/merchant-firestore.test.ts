@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const state = vi.hoisted(() => ({
   listeners: [] as Array<{
     path: string;
@@ -75,8 +75,36 @@ beforeEach(() => {
   state.constraints = [];
   state.read.mockReset();
 });
+afterEach(() => vi.useRealTimers());
 
 describe('scoped merchant observations', () => {
+  it('ends a cache-only stalled connection with an error instead of loading indefinitely', async () => {
+    vi.useFakeTimers();
+    const publish = vi.fn(), fail = vi.fn();
+    subscribeMerchantAccounts('s', 'store', publish, fail, 'm');
+    state.listeners[0].next(snapshot([merchant], true));
+    state.listeners[1].next(snapshot([balance], true));
+    state.listeners[2].next(snapshot([], true));
+    state.sync();
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(fail).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ message: 'merchantServerConfirmationTimeout' }));
+    expect(publish).not.toHaveBeenCalled();
+    expect(state.listeners.every(listener => listener.stop.mock.calls.length === 1)).toBe(true);
+    state.listeners[0].next(snapshot([merchant])); state.listeners[1].next(snapshot([balance])); state.listeners[2].next(snapshot([])); state.sync();
+    expect(publish).not.toHaveBeenCalled();
+  });
+  it('cancels the initial deadline after server confirmation and on leaving the account', async () => {
+    vi.useFakeTimers();
+    const publish = vi.fn(), fail = vi.fn();
+    const stop = subscribeMerchantAccounts('s', 'store', publish, fail);
+    state.listeners[0].next(snapshot([merchant])); state.listeners[1].next(snapshot([balance])); state.sync();
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(publish).toHaveBeenCalledOnce(); expect(fail).not.toHaveBeenCalled();
+    stop();
+    const stopPending = subscribeMerchantAccounts('s', 'store', vi.fn(), fail);
+    stopPending(); await vi.advanceTimersByTimeAsync(60_000);
+    expect(fail).not.toHaveBeenCalled();
+  });
   const historyRow = (index: number) => ({ id: `history-${index}`, workspaceId: 's', storeId: 'store', merchantId: 'm', merchantName: 'Merchant',
     action: 'payment', source: 'external', currency: 'TRY', amountExact: '1.00', balanceBeforeExact: '0.00', balanceAfterExact: '-1.00',
     cashDeltaExact: '0.00', createdAt: '2026-10-19T12:00:00.000Z', createdByUserId: 'u', note: '' });
