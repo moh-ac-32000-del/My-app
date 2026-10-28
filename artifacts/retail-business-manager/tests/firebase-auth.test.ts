@@ -1,12 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const authInstance = vi.hoisted(() => ({ name: 'auth-instance' }));
+const authInstance = vi.hoisted(() => ({ name: 'auth-instance', languageCode: null as string | null }));
 const firebaseUser = vi.hoisted(() => ({ uid: 'firebase-user', email: 'owner@example.com' }));
 const createUserMock = vi.hoisted(() => vi.fn());
 const signInMock = vi.hoisted(() => vi.fn());
 const signOutMock = vi.hoisted(() => vi.fn());
 const unsubscribeMock = vi.hoisted(() => vi.fn());
 const onAuthStateChangedMock = vi.hoisted(() => vi.fn());
+const resetMock = vi.hoisted(() => vi.fn());
 
 vi.mock('@/services/firebase', () => ({
   getFirebaseAuth: () => authInstance,
@@ -18,6 +19,7 @@ vi.mock('firebase/auth', () => ({
   onAuthStateChanged: onAuthStateChangedMock,
   signInWithEmailAndPassword: signInMock,
   signOut: signOutMock,
+  sendPasswordResetEmail: resetMock,
 }));
 
 import {
@@ -26,6 +28,7 @@ import {
   signInWithFirebase,
   signOutFromFirebase,
   subscribeToFirebaseAuth,
+  requestFirebasePasswordReset,
 } from '@/services/firebaseAuth';
 
 describe('Firebase Authentication boundary', () => {
@@ -35,6 +38,7 @@ describe('Firebase Authentication boundary', () => {
     signOutMock.mockReset();
     unsubscribeMock.mockReset();
     onAuthStateChangedMock.mockReset();
+    resetMock.mockReset(); authInstance.languageCode = null;
   });
 
   it('creates an email/password account through Firebase Auth', async () => {
@@ -56,6 +60,24 @@ describe('Firebase Authentication boundary', () => {
 
     await expect(signOutFromFirebase()).resolves.toBeUndefined();
     expect(signOutMock).toHaveBeenCalledWith(authInstance);
+  });
+  it.each(['ar','en','tr'] as const)('requests a localized %s email reset without changing the signed-in user', async language => {
+    resetMock.mockResolvedValue(undefined);
+    await requestFirebasePasswordReset(' owner@example.com ',language);
+    expect(resetMock).toHaveBeenCalledExactlyOnceWith(authInstance,'owner@example.com');
+    expect(authInstance.languageCode).toBe(language);
+    expect(createUserMock).not.toHaveBeenCalled(); expect(signInMock).not.toHaveBeenCalled(); expect(signOutMock).not.toHaveBeenCalled();
+  });
+  it.each(['auth/user-not-found','auth/user-disabled'])('does not reveal account status for %s', async code => {
+    resetMock.mockRejectedValue({ code });
+    await expect(requestFirebasePasswordReset('owner@example.com','ar')).resolves.toBeUndefined();
+  });
+  it.each(['auth/network-request-failed','auth/too-many-requests','auth/invalid-email'])('propagates actual reset failure %s', async code => {
+    resetMock.mockRejectedValue({ code });
+    await expect(requestFirebasePasswordReset('owner@example.com','ar')).rejects.toEqual({ code });
+  });
+  it('does not send an empty email', async () => {
+    await expect(requestFirebasePasswordReset('  ','ar')).rejects.toMatchObject({ code: 'auth/invalid-email' }); expect(resetMock).not.toHaveBeenCalled();
   });
 
   it('restores an existing Firebase session through the auth-state observer', () => {
