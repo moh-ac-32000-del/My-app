@@ -43,6 +43,7 @@ vi.mock('@/context/StoreContext', () => ({
     isReady: true,
     isAuthenticated: true,
     canWriteBusiness: state.role === 'owner' || state.role === 'editor',
+    workspaceRole: state.role,
   }),
 }));
 vi.mock('@/context/CustomerContext', () => ({
@@ -82,12 +83,14 @@ describe('workspace read-only controls (server render, not device testing)', () 
     expect(html.includes('add-customer-header')).toBe(role !== 'viewer');
     expect(html.includes('add-customer-button')).toBe(false); // Duplicate lower action removed for every role.
   });
-  it.each(['owner', 'editor', 'viewer'])('only exposes manual closing to business writers: %s', (role) => {
+  it.each(['owner', 'editor', 'viewer'])('never falls back to manual closing when automatic closing is unconfigured: %s', (role) => {
     state.role = role;
     const html = renderToStaticMarkup(
       React.createElement(DailyClosingAction, { spaceId: 's', storeId: 'store', testID: 'closing' }),
     );
-    expect(html.includes('closing')).toBe(role !== 'viewer');
+    expect(html).toContain(translate('workspaceClosingPrepared', state.language));
+    expect(html).not.toContain(translate('closeDay', state.language));
+    expect(html.includes(translate('workspaceClosingSettings', state.language))).toBe(role === 'owner');
   });
   it.each(['ar', 'en', 'tr'] as const)('uses the existing %s dictionary for member roles', (language) => {
     state.language = language;

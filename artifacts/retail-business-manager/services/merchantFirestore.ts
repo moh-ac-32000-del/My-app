@@ -36,6 +36,11 @@ export function subscribeMerchantAccounts(
   if (!storeId.trim()) throw new Error('merchantStoreUnavailable');
   const db = getFirestore(getFirebaseApp());
   const subscriptions: Array<() => void> = [];
+  let initialReadTimer: ReturnType<typeof setTimeout> | undefined;
+  const clearInitialReadTimer = () => {
+    if (initialReadTimer !== undefined) clearTimeout(initialReadTimer);
+    initialReadTimer = undefined;
+  };
   const merchantExport = observeForLocalExport(spaceId, 'merchants');
   const balanceExport = observeForLocalExport(spaceId, 'merchantBalances');
   const operationExport = observeForLocalExport(spaceId, 'merchantOperations');
@@ -44,6 +49,7 @@ export function subscribeMerchantAccounts(
   const coordinator = synchronizedSnapshots<MerchantSnapshot & Record<string, unknown>>(
     ['merchants', 'balances', 'operations', 'operationsLimited'],
     (value) => {
+      clearInitialReadTimer();
       const ids = new Set(value.merchants.map((merchant) => merchant.id));
       const seen = new Set<string>();
       for (const balance of value.balances) {
@@ -63,6 +69,7 @@ export function subscribeMerchantAccounts(
       if (merchantId && operationExportHead) operationExport.merchantOperations(operationExportHead, storeId);
     },
     (error) => {
+      clearInitialReadTimer();
       merchantExport.invalidate(); balanceExport.invalidate(); operationExport.invalidate();
       queueMicrotask(() => subscriptions.forEach((unsubscribe) => unsubscribe()));
       fail(error);
@@ -70,6 +77,9 @@ export function subscribeMerchantAccounts(
   );
   if (merchantId !== undefined && (!merchantId.trim() || merchantId.includes('/')))
     throw new Error('invalidMerchantId');
+  // A stalled SDK connection may keep returning cache metadata without an error.
+  // Never keep the screen spinning forever or promote that cache to financial truth.
+  initialReadTimer = setTimeout(() => coordinator.error(new Error('merchantServerConfirmationTimeout')), 20_000);
   try {
     subscriptions.push(
       onSnapshot(
@@ -146,11 +156,13 @@ export function subscribeMerchantAccounts(
     }
     subscriptions.push(onSnapshotsInSync(db, () => coordinator.sync()));
   } catch (error) {
+    clearInitialReadTimer();
     coordinator.stop();
     subscriptions.forEach((unsubscribe) => unsubscribe());
     throw error;
   }
   return () => {
+    clearInitialReadTimer();
     coordinator.stop();
     subscriptions.forEach((unsubscribe) => unsubscribe());
   };

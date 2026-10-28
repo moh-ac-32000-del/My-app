@@ -90,7 +90,7 @@ function MerchantDetail({ id, operationId }: { id: string; operationId?: string 
         <ActivityIndicator color={colors.primary} />
       ) : error || !merchant ? (
         <GlassCard style={{ gap: 14 }}>
-          <Text style={text}>{t('merchantUnavailable')}</Text>
+          <Text style={text}>{t(error === 'merchantServerConfirmationTimeout' ? 'merchantLoadTimeout' : 'merchantUnavailable')}</Text>
           <MerchantButton title={t('tryAgain')} onPress={retry} />
         </GlassCard>
       ) : (
