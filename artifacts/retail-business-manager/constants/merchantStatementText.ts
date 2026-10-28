@@ -2,6 +2,7 @@ export const merchantStatementText = {
   ar: {
     title: 'كشف حساب التاجر PDF',
     all: 'كل الحساب',
+    periodLabel: 'الفترة الزمنية للكشف',
     period: 'فترة محددة',
     from: 'من',
     to: 'إلى',
@@ -43,6 +44,7 @@ export const merchantStatementText = {
   en: {
     title: 'Merchant PDF statement',
     all: 'Full account',
+    periodLabel: 'Statement date range',
     period: 'Date range',
     from: 'From',
     to: 'To',
@@ -85,6 +87,7 @@ export const merchantStatementText = {
   tr: {
     title: 'Tedarikçi PDF hesap özeti',
     all: 'Tüm hesap',
+    periodLabel: 'Hesap özeti tarih aralığı',
     period: 'Tarih aralığı',
     from: 'Başlangıç',
     to: 'Bitiş',

@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Modal, Platform, ScrollView, Text, View } from 'react-native';
+import { Modal, Platform, Pressable, ScrollView, Text, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useStore } from '@/context/StoreContext';
 import { useI18n } from '@/hooks/useI18n';
 import { useColors } from '@/hooks/useColors';
@@ -19,7 +20,7 @@ import type { Customer } from '@/types/business';
 import { customerPaymentMethodLabels } from '@/services/customerPaymentMethodLabels';
 
 export function CustomerStatementModal({ customer, onClose }: { customer: Customer; onClose: () => void }) {
-  const store = useStore(), { language, isRTL } = useI18n(), colors = useColors();
+  const store = useStore(), { language, isRTL, t } = useI18n(), colors = useColors();
   const copy = customerStatementText[language], common = merchantStatementText[language];
   const [busy, setBusy] = useState(false), [failure, setFailure] = useState<string | null>(null);
   const [result, setResult] = useState<string | null>(null);
@@ -66,15 +67,20 @@ export function CustomerStatementModal({ customer, onClose }: { customer: Custom
   if (!isCurrent()) return null;
   return <Modal visible transparent animationType="slide" onRequestClose={() => { if (!busy) onClose(); }}>
     <View style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: colors.overlay }}>
-      <ScrollView style={{ maxHeight: '85%', backgroundColor: colors.card, borderTopLeftRadius: 22, borderTopRightRadius: 22 }} contentContainerStyle={{ padding: 22, paddingBottom: 36, gap: 16 }}>
-        <Text style={{ color: colors.foreground, fontSize: 20, fontWeight: '700', textAlign: isRTL ? 'right' : 'left' }}>{copy.title} - {customer.name}</Text>
+      <ScrollView style={{ maxHeight: '85%', flexGrow: 0, backgroundColor: colors.card, borderTopLeftRadius: 22, borderTopRightRadius: 22 }} contentContainerStyle={{ padding: 22, paddingBottom: 36, gap: 16 }}>
+        <View style={{ flexDirection: isRTL ? 'row-reverse' : 'row', alignItems: 'center', gap: 12, paddingBottom: 14, borderBottomWidth: 1, borderBottomColor: colors.border }}>
+          <Text style={{ flex: 1, color: colors.foreground, fontSize: 20, fontWeight: '700', textAlign: isRTL ? 'right' : 'left' }}>{copy.title} - {customer.name}</Text>
+          <Pressable accessibilityRole="button" accessibilityLabel={t('close')} disabled={busy} onPress={onClose}
+            style={{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 22, backgroundColor: colors.input, opacity: busy ? 0.45 : 1 }}>
+            <Ionicons name="close" size={22} color={colors.foreground} />
+          </Pressable>
+        </View>
         <Text style={{ color: colors.mutedForeground }}>{copy.note}</Text>
         <Text style={{ color: colors.mutedForeground }}>{Platform.OS === 'web' ? common.web : common.native}</Text>
         <MerchantButton title={common.save} disabled={busy} selected onPress={() => void run('save')} />
         <MerchantButton title={common.share} disabled={busy} onPress={() => void run('share')} />
         {failure ? <Text accessibilityLiveRegion="polite" style={{ color: colors.destructive }}>{failure}</Text> : null}
         {result ? <Text accessibilityLiveRegion="polite" style={{ color: colors.success }}>{result}</Text> : null}
-        <MerchantButton title={language === 'ar' ? 'إغلاق' : language === 'tr' ? 'Kapat' : 'Close'} disabled={busy} onPress={onClose} />
       </ScrollView>
     </View>
   </Modal>;
