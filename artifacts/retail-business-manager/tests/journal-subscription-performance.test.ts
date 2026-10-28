@@ -2,7 +2,7 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 const state = vi.hoisted(() => ({
-  cursor: 0, slots: [] as any[], effects: [] as Array<() => void>, result: null as any, refresh: 0,
+  cursor: 0, slots: [] as any[], effects: [] as Array<() => void>, result: null as any, refresh: 0, historyDate: undefined as string | undefined,
   store: {} as any, debts: [] as any[], callbacks: [] as Array<{ next: (rows: any[]) => void; error: (e: Error) => void }>,
   subscribe: vi.fn(), stop: vi.fn(),
   reads: null as ReturnType<typeof import('../data/sessionLiveReads').createSessionLiveReads> | null,
@@ -36,7 +36,7 @@ vi.mock('@/hooks/useMerchantJournal', () => ({ useMerchantJournal: () => ({ oper
   window: { date: '2026-10-23', startAt: '2026-10-23T00:00:00Z', endAt: '2026-10-24T00:00:00Z', timeZone: 'UTC' } }) }));
 import { useDailyJournalProjection } from '../hooks/useDailyJournalProjection';
 import { createSessionLiveReads } from '../data/sessionLiveReads';
-function Probe() { state.result = useDailyJournalProjection(state.refresh); return null; }
+function Probe() { state.result = useDailyJournalProjection(state.refresh, state.historyDate); return null; }
 function render() {
   state.cursor = 0; state.effects = [];
   renderToStaticMarkup(React.createElement(Probe));
@@ -45,11 +45,22 @@ function render() {
 beforeEach(() => {
   state.reads?.clear(); state.reads = null;
   vi.clearAllMocks(); state.cursor = 0; state.slots = []; state.effects = []; state.callbacks = []; state.refresh = 0; state.debts = [];
+  state.historyDate = undefined;
   state.store = { isReady: true, isAuthenticated: true, activeSpaceId: 's', profile: { id: 'store' }, workspaceRole: 'owner',
     sessionKey: 'session-s', transactions: [] };
   state.subscribe.mockImplementation((_space, _store, next, error) => { state.callbacks.push({ next, error }); return state.stop; });
 });
 describe('journal recomputation is independent of archive I/O', () => {
+  it('reads historical source events without an archive request or closing, including already archived identities', () => {
+    state.historyDate = '2026-10-23';
+    state.store.transactions = [{ id: 'cash', storeId: 'store', type: 'cash_in', amount: 50, currency: 'TRY', createdAt: '2026-10-23T10:00:00Z' }];
+    const original = JSON.stringify(state.store.transactions);
+    render(); render();
+    expect(state.result).toMatchObject({ isLoading: false, error: null });
+    expect(state.result.events.map((row: any) => row.id)).toEqual(['transaction:cash']);
+    expect(state.subscribe).not.toHaveBeenCalled();
+    expect(JSON.stringify(state.store.transactions)).toBe(original);
+  });
   it('reopens Home with the current live archives without another source request', () => {
     state.reads = createSessionLiveReads();
     render(); state.callbacks[0].next([]); render();

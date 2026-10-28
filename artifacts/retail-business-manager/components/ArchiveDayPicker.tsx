@@ -12,15 +12,18 @@ export function ArchiveDayPicker({
   value,
   today,
   onChange,
+  label,
 }: {
   value: string;
   today?: string;
   onChange: (value: string) => void;
+  label?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [month, setMonth] = useState(value.slice(0, 7));
   const { t, language, isRTL } = useI18n();
   const colors = useColors();
+  const title = label ?? t('archiveChooseDate');
   const locale = language === 'ar' ? 'ar-u-nu-latn' : language === 'tr' ? 'tr-TR' : 'en-US';
   const previous = shiftArchiveMonth(month, -1);
   const next = shiftArchiveMonth(month, 1);
@@ -34,7 +37,7 @@ export function ArchiveDayPicker({
       <Pressable
         testID="archive-calendar-button"
         accessibilityRole="button"
-        accessibilityLabel={t('archiveChooseDate')}
+        accessibilityLabel={title}
         accessibilityState={{ expanded: open }}
         onPress={() => {
           setMonth(value.slice(0, 7));
@@ -55,7 +58,7 @@ export function ArchiveDayPicker({
             ]}
           >
             <View style={[styles.row, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
-              <Text style={[styles.title, { color: colors.foreground }]}>{t('archiveChooseDate')}</Text>
+              <Text style={[styles.title, { color: colors.foreground }]}>{title}</Text>
               <Pressable
                 testID="archive-calendar-cancel"
                 accessibilityRole="button"

@@ -18,6 +18,7 @@ const state = vi.hoisted(() => ({
   emitArchive: null as null | ((rows: DailyArchive[]) => void),
   failArchive: null as null | ((error: Error) => void),
   share: vi.fn(),
+  navigate: vi.fn(),
   savePdf: vi.fn(),
   authorizePdf: vi.fn(),
   store: {
@@ -48,6 +49,7 @@ vi.mock('react', async (original) => ({
   },
 }));
 vi.mock('expo-router', () => ({
+  useRouter: () => ({ push: state.navigate }),
   useFocusEffect: (callback: () => () => void) => {
     state.focus = callback;
   },
@@ -181,6 +183,7 @@ beforeEach(() => {
     initializationError: null,
   };
   state.load.mockReset().mockResolvedValue([archive]);
+  state.navigate.mockReset();
   state.statuses.mockReset().mockImplementation(async () => [archive]);
   state.share.mockReset().mockResolvedValue({});
   state.authorizePdf.mockReset().mockResolvedValue(undefined);
@@ -423,6 +426,9 @@ describe('archive screen reuses separate immutable closings', () => {
       const html = render(element);
       expect(html).toContain(translate('archiveDayEmpty', language));
       expect(html).not.toContain('share-archive-button');
+      state.buttons['archive-open-journal-history']();
+      expect(state.navigate).toHaveBeenCalledExactlyOnceWith({ pathname: '/journal-history', params: { date: state.load.mock.calls[0][2] } });
+      expect(state.load).toHaveBeenCalledOnce();
     },
   );
 });

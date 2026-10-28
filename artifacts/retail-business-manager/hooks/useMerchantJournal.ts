@@ -1,15 +1,27 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useStore } from '@/context/StoreContext';
 import { useSessionLiveReads } from '@/context/SessionLiveReadsContext';
 import { subscribeMerchantJournal } from '@/services/merchantJournalFirestore';
 import { useFinancialWindow } from './useFinancialWindow';
 import type { MerchantOperation } from '@/types/merchant';
+import { journalHistoryWindow } from '@/data/journalHistoryWindow';
+import { closingSettings } from '@/data/workspaceClosing';
 const empty: MerchantOperation[] = [];
 
-export function useMerchantJournal(refreshToken: number) {
+export function useMerchantJournal(refreshToken: number, selectedDate?: string) {
   const reads = useSessionLiveReads();
   const store = useStore();
-  const clock = useFinancialWindow();
+  const liveClock = useFinancialWindow();
+  const clock = useMemo(() => {
+    if (!selectedDate) return liveClock;
+    try {
+      if (liveClock.error || !liveClock.window) throw new Error(liveClock.error ?? 'journalCalendarUnavailable');
+      const timeZone = store.cloudSpace?.automaticClosing ? liveClock.window.timeZone : closingSettings(store.cloudSpace?.closingSettings).timeZone;
+      return { window: journalHistoryWindow(selectedDate, timeZone), error: null };
+    } catch (error) {
+      return { window: null, error: error instanceof Error ? error.message : 'journalCalendarUnavailable' };
+    }
+  }, [selectedDate, liveClock.window?.date, liveClock.window?.startAt, liveClock.window?.endAt, liveClock.window?.timeZone, liveClock.error, store.cloudSpace?.automaticClosing, store.cloudSpace?.closingSettings]);
   const day = clock.window?.date ?? '';
   const key = JSON.stringify([
     store.sessionKey,
@@ -54,7 +66,8 @@ export function useMerchantJournal(refreshToken: number) {
         subscribeMerchantJournal(spaceId, store.profile.id, startAt, endAt, next, fail);
       const next = (operations: MerchantOperation[]) => update(operations, false, null);
       const fail = (error: Error) => update([], false, error.message);
-      stop = reads ? reads.subscribe('merchantJournal', key, start, next, fail) : start(next, fail);
+      // An explicitly opened historical day must not replace the mounted dashboard's live channel.
+      stop = reads && !selectedDate ? reads.subscribe('merchantJournal', key, start, next, fail) : start(next, fail);
     } catch (error) {
       update([], false, error instanceof Error ? error.message : 'journalLoadFailed');
     }
@@ -62,7 +75,7 @@ export function useMerchantJournal(refreshToken: number) {
       active = false;
       stop?.();
     };
-  }, [key, ready, store.activeSpaceId, store.profile.id, day, reads]);
+  }, [key, ready, store.activeSpaceId, store.profile.id, day, reads, selectedDate]);
   if (clock.error) return { key, operations: empty, loading: false, error: clock.error, window: undefined };
   return {
     ...(ready && state.key === key ? state : { key, operations: empty, loading: true, error: null }),
