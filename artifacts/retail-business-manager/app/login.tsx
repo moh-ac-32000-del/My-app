@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
@@ -15,9 +15,10 @@ import {
   createFirebaseAccount,
   getFirebaseAuthErrorKey,
   signInWithFirebase,
+  requestFirebasePasswordReset,
 } from '@/services/firebaseAuth';
 
-type AuthMode = 'login' | 'createAccount';
+type AuthMode = 'login' | 'createAccount' | 'recover';
 
 export default function LoginScreen() {
   const colors = useColors();
@@ -29,9 +30,11 @@ export default function LoginScreen() {
   const [password, setPassword] = useState<string>('');
   const [status, setStatus] = useState<{ key: TranslationKey; success: boolean } | null>(null);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const inFlight = useRef(false);
 
   const submit = async () => {
-    if (!email.trim() || !password.trim()) {
+    if (inFlight.current) return;
+    if (!email.trim() || (mode !== 'recover' && !password.trim())) {
       setStatus({ key: 'fieldRequired', success: false });
       return;
     }
@@ -44,9 +47,15 @@ export default function LoginScreen() {
       return;
     }
 
+    inFlight.current = true;
     setIsSubmitting(true);
     setStatus(null);
     try {
+      if (mode === 'recover') {
+        await requestFirebasePasswordReset(email, language);
+        setStatus({ key: 'authResetEmailRequested', success: true });
+        return;
+      }
       if (mode === 'createAccount') {
         await createFirebaseAccount(email, password);
         setStatus({ key: 'authAccountCreated', success: true });
@@ -54,13 +63,14 @@ export default function LoginScreen() {
         await signInWithFirebase(email, password);
         setStatus({ key: 'authSignedIn', success: true });
       }
-      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
       await new Promise((resolve) => setTimeout(resolve, 450));
       router.replace(pendingInvitation() ? '/workspaces' as never : '/');
     } catch (error) {
       setStatus({ key: getFirebaseAuthErrorKey(error), success: false });
-      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => undefined);
     } finally {
+      inFlight.current = false;
       setIsSubmitting(false);
     }
   };
@@ -112,8 +122,8 @@ export default function LoginScreen() {
       </View>
       <View style={styles.formWrap}>
         <AppearanceSettings />
-        <Text style={[styles.title, { color: colors.foreground, textAlign: isRTL ? 'right' : 'left' }]}>{t('welcomeBack')}</Text>
-        <Text style={[styles.hint, { color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' }]}>{t('loginHint')}</Text>
+        <Text style={[styles.title, { color: colors.foreground, textAlign: isRTL ? 'right' : 'left' }]}>{t(mode === 'recover' ? 'authRecoveryTitle' : 'welcomeBack')}</Text>
+        <Text style={[styles.hint, { color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' }]}>{t(mode === 'recover' ? 'authRecoveryHint' : 'loginHint')}</Text>
         <GlassCard style={styles.formCard}>
           <View style={styles.field}>
             <Text style={[styles.label, { color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' }]}>{t('emailAddress')}</Text>
@@ -122,10 +132,11 @@ export default function LoginScreen() {
               <TextInput
                 testID="login-identity"
                 value={email}
-                onChangeText={setEmail}
+                onChangeText={(value) => { setEmail(value); if (mode === 'recover') setStatus(null); }}
                 placeholder={t('identityPlaceholder')}
                 placeholderTextColor={colors.mutedForeground}
                 autoCapitalize="none"
+                editable={!isSubmitting}
                 autoCorrect={false}
                 autoComplete="email"
                 keyboardType="email-address"
@@ -133,7 +144,7 @@ export default function LoginScreen() {
               />
             </View>
           </View>
-          <View style={styles.field}>
+          {mode !== 'recover' ? <View style={styles.field}>
             <Text style={[styles.label, { color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' }]}>{t('password')}</Text>
             <View style={[styles.inputWrap, { backgroundColor: colors.input, borderColor: colors.border, flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
               <Ionicons name="lock-closed-outline" size={18} color={colors.mutedForeground} />
@@ -148,7 +159,7 @@ export default function LoginScreen() {
                 style={[styles.input, { color: colors.foreground, textAlign: isRTL ? 'right' : 'left' }]}
               />
             </View>
-          </View>
+          </View> : null}
           {status ? (
             <View
               testID="auth-status"
@@ -183,11 +194,15 @@ export default function LoginScreen() {
           >
             {isSubmitting
               ? <ActivityIndicator color={colors.primaryForeground} />
-              : <Ionicons name={isRTL ? 'arrow-back' : 'arrow-forward'} size={19} color={colors.primaryForeground} />}
+              : <Ionicons name={mode === 'recover' ? 'mail-outline' : isRTL ? 'arrow-back' : 'arrow-forward'} size={19} color={colors.primaryForeground} />}
             <Text style={[styles.buttonText, { color: colors.primaryForeground }]}>
-              {t(mode === 'createAccount' ? 'createAccount' : 'login')}
+              {t(mode === 'recover' ? 'authSendResetEmail' : mode === 'createAccount' ? 'createAccount' : 'login')}
             </Text>
           </Pressable>
+          {mode === 'login' ? <Pressable testID="auth-forgot-password" accessibilityRole="button" disabled={isSubmitting}
+            onPress={() => { setMode('recover'); setPassword(''); setStatus(null); }} style={styles.modeButton}>
+            <Text style={[styles.modeText, { color: colors.primary }]}>{t('authForgotPassword')}</Text>
+          </Pressable> : null}
           <Pressable
             testID="auth-mode-toggle"
             disabled={isSubmitting}
@@ -195,7 +210,7 @@ export default function LoginScreen() {
             style={({ pressed }) => [styles.modeButton, pressed && styles.pressed, isSubmitting && styles.disabled]}
           >
             <Text style={[styles.modeText, { color: colors.primary }]}>
-              {t(mode === 'createAccount' ? 'switchToLogin' : 'switchToCreateAccount')}
+              {t(mode === 'recover' ? 'authReturnToLogin' : mode === 'createAccount' ? 'switchToLogin' : 'switchToCreateAccount')}
             </Text>
           </Pressable>
         </GlassCard>

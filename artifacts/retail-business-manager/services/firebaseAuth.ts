@@ -1,6 +1,7 @@
 import {
   createUserWithEmailAndPassword,
   onAuthStateChanged,
+  sendPasswordResetEmail,
   signInWithEmailAndPassword,
   signOut,
   type Auth,
@@ -9,6 +10,7 @@ import {
 import { getFirebaseAuth, isFirebaseConfigured } from '@/services/firebase';
 import { disconnectAndroidPush } from '@/services/androidPush';
 import { clearLocalExportCache } from './localExportCache';
+import type { Language } from '@/constants/i18n';
 
 export type FirebaseAuthErrorKey =
   | 'authEmailAlreadyInUse'
@@ -40,6 +42,22 @@ export async function createFirebaseAccount(email: string, password: string): Pr
 
 export async function signInWithFirebase(email: string, password: string): Promise<User> {
   return (await signInWithEmailAndPassword(getFirebaseAuthOrThrow(), email.trim(), password)).user;
+}
+
+/** Recovery never signs in, creates an account, or changes financial/workspace data. */
+export async function requestFirebasePasswordReset(email: string, language: Language): Promise<void> {
+  const address = email.trim();
+  if (!address) throw Object.assign(new Error('invalidEmail'), { code: 'auth/invalid-email' });
+  const auth = getFirebaseAuthOrThrow();
+  auth.languageCode = language;
+  try {
+    await sendPasswordResetEmail(auth, address);
+  } catch (error) {
+    // Match the SDK's email-enumeration protection on older project configurations.
+    // The UI always uses a conditional message, not a claim that an account exists.
+    if (isFirebaseError(error) && ['auth/user-not-found', 'auth/user-disabled'].includes(error.code)) return;
+    throw error;
+  }
 }
 
 export async function signOutFromFirebase(): Promise<void> {
