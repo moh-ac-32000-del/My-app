@@ -183,11 +183,20 @@ export default function WorkspacesScreen() {
             {current ? (
               <Pressable
                 accessibilityRole="button"
+                accessibilityLabel={t('workspaceSettings')}
                 testID="open-workspace-settings"
                 onPress={() => router.push('/workspace-settings' as never)}
-                style={{ paddingVertical: 14 }}
+                style={{
+                  width: 44,
+                  height: 44,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  alignSelf: isRTL ? 'flex-end' : 'flex-start',
+                  borderRadius: 14,
+                  backgroundColor: colors.secondary,
+                }}
               >
-                <Text style={[align, { color: colors.foreground }]}>{t('workspaceSettings')}</Text>
+                <Ionicons name="settings-outline" size={22} color={colors.foreground} />
               </Pressable>
             ) : null}
           </GlassCard>
