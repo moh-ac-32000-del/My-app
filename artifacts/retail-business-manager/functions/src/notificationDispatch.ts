@@ -3,6 +3,7 @@ import type { Firestore, Transaction, DocumentReference } from 'firebase-admin/f
 import type { Messaging } from 'firebase-admin/messaging';
 import { assertWorkspaceAccess } from './workspaceAccess.js';
 import { planNotifications, notificationReceiptId, type NotificationRow } from './notificationPlan.js';
+import { workspaceNotificationTimeZone } from './workspaceNotificationTimeZone.js';
 
 export interface NotificationRuntime {
   firestore: Firestore;
@@ -77,7 +78,7 @@ async function currentPlan(tx: Transaction, db: Firestore, device: NotificationR
       .map((doc) => tx.get(space.collection('reminders').doc(`due-date_${doc.id}`))),
   );
   return planNotifications(
-    device,
+    { ...device, followUp: { ...device.followUp, timeZone: workspaceNotificationTimeZone(canonical.data()!, now) } },
     debts.docs.map((doc) => ({ ...doc.data(), id: doc.id })),
     [...reminders.docs, ...markers.filter((doc) => doc.exists)].map((doc) => ({ ...doc.data(), id: doc.id })),
     now,

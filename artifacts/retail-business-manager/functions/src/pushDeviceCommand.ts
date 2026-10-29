@@ -4,6 +4,7 @@ import type { Messaging } from 'firebase-admin/messaging';
 import { HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
 import { parsePushFollowUp } from './pushFollowUpPreferences.js';
 import { assertWorkspaceAccess } from './workspaceAccess.js';
+import { workspaceNotificationTimeZone } from './workspaceNotificationTimeZone.js';
 
 type Input = { action: 'register' | 'status' | 'disable' | 'test' | 'preferences'; actorUid: string; token: string; spaceId: string; storeId: string; language?: 'ar' | 'en' | 'tr'; followUp?: unknown; scheduledVersion?: 1; reminderTime?: string };
 export interface PushDeviceRuntime { firestore: Firestore; messaging: Pick<Messaging, 'send'>; now: () => number; notificationDispatchReady?: boolean }
@@ -55,17 +56,20 @@ export async function pushDeviceCommandHandler(request: CallableRequest<Input>, 
         || (['reserved', 'attempting'].includes(device?.dispatchLastAttemptState) && now - Date.parse(device?.dispatchLastAttemptAt) > 120_000))),
     } : {}) };
     if (input.action === 'register') {
+      const canonicalFollowUp = followUp ?? (matches ? device?.followUp : undefined);
+      const workspaceFollowUp = canonicalFollowUp ? { ...parsePushFollowUp(canonicalFollowUp),
+        timeZone: workspaceNotificationTimeZone(spaceSnap.data()!, new Date(now).toISOString()) } : undefined;
       tx.set(ref, { uid, token: input.token, spaceId: input.spaceId, storeId: input.storeId, language: input.language ?? 'ar',
         enabled: true, updatedAt: now,
         ...(input.scheduledVersion === 1 ? { scheduledVersion: 1, reminderTime: input.reminderTime,
           dispatchRevision: randomUUID(), nextDispatchAt: new Date(now).toISOString(), dispatchFailures: 0 } : {}),
-        ...(followUp ? { followUp, followUpUpdatedAt: now } : matches && device?.followUp ? { followUp: device.followUp, followUpUpdatedAt: device.followUpUpdatedAt ?? now } : {}),
+        ...(workspaceFollowUp ? { followUp: workspaceFollowUp, followUpUpdatedAt: now } : {}),
         testDay: device?.testDay ?? '', testCount: device?.testCount ?? 0, lastTestAt: device?.lastTestAt ?? 0 });
       return { enabled: true };
     }
     if (!matches || !device?.enabled) throw new HttpsError('failed-precondition', 'Connect this device first');
     if (input.action === 'preferences') {
-      tx.update(ref, { followUp, followUpUpdatedAt: now, language: input.language ?? device.language ?? 'ar', updatedAt: now,
+      tx.update(ref, { followUp: { ...followUp!, timeZone: workspaceNotificationTimeZone(spaceSnap.data()!, new Date(now).toISOString()) }, followUpUpdatedAt: now, language: input.language ?? device.language ?? 'ar', updatedAt: now,
         ...(device.scheduledVersion === 1 ? { reminderTime: input.reminderTime ?? device.reminderTime, dispatchRevision: randomUUID(),
           dispatchClaim: null, dispatchFailures: 0, nextDispatchAt: new Date(now).toISOString() } : {}) });
       return { enabled: true };
