@@ -31,6 +31,16 @@ const request = (action: string, changes: Doc = {}) => ({ auth: { uid: 'u' }, da
 const call = (f: ReturnType<typeof fixture>, action: string, changes: Doc = {}) => pushDeviceCommandHandler(request(action, changes) as never, f.runtime);
 
 describe('authenticated Android Push registration and bounded test sending', () => {
+  it('uses canonical workspace time for registration and preference changes despite the handset zone', async () => {
+    const f = fixture({ 'spaces/s': { status: 'active', closingSettings: {
+      timeZone: 'Europe/London', executionTime: '00:00', revision: 1, status: 'prepared',
+      updatedAt: '2026-10-18T10:00:00.000Z', updatedByUserId: 'u',
+    } } });
+    await call(f, 'register', { followUp, scheduledVersion: 1, reminderTime: '09:00' });
+    expect(f.docs[path].followUp).toEqual({ ...followUp, timeZone: 'Europe/London' });
+    await call(f, 'preferences', { followUp: { ...followUp, time: '18:00', timeZone: 'Asia/Tokyo' } });
+    expect(f.docs[path].followUp).toEqual({ ...followUp, time: '18:00', timeZone: 'Europe/London' });
+  });
   it('requires an explicit versioned reconnect to enroll scheduled delivery; preferences do not enroll old devices', async () => {
     const f = fixture();
     await call(f, 'register', { followUp });
@@ -88,7 +98,7 @@ describe('authenticated Android Push registration and bounded test sending', () 
   });
   it('preserves settings for legacy reconnects but never leaks them to a new owner/scope', async () => {
     const f = fixture(); await call(f, 'register', { followUp });
-    await call(f, 'register'); expect(f.docs[path].followUp).toEqual(followUp);
+    await call(f, 'register'); expect(f.docs[path].followUp).toEqual({ ...followUp, timeZone: 'Europe/Istanbul' });
     f.docs[path].uid = 'other';
     await expect(call(f, 'preferences', { followUp })).rejects.toMatchObject({ code: 'failed-precondition' });
     await call(f, 'register'); expect(f.docs[path]).not.toHaveProperty('followUp');
@@ -99,7 +109,7 @@ describe('authenticated Android Push registration and bounded test sending', () 
   it('rejects preference updates after revoked membership', async () => {
     const f = fixture(); await call(f, 'register', { followUp }); f.docs['spaces/s/members/u'].status = 'inactive';
     await expect(call(f, 'preferences', { followUp: { ...followUp, time: '18:00' } })).rejects.toMatchObject({ code: 'permission-denied' });
-    expect(f.docs[path].followUp).toEqual(followUp);
+    expect(f.docs[path].followUp).toEqual({ ...followUp, timeZone: 'Europe/Istanbul' });
   });
   it('requires authentication and rejects stale account requests before Firestore', async () => {
     const f = fixture();

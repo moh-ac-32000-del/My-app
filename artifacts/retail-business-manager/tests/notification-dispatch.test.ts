@@ -47,6 +47,18 @@ const business = (f: ReturnType<typeof fixture>) =>
   structuredClone(Object.fromEntries(Object.entries(f.docs).filter(([path]) => path.startsWith('spaces/'))));
 
 describe('bounded opted-in member dispatch (controlled provider, not physical delivery)', () => {
+  it('replans old registrations using the current workspace zone without modifying business records', async () => {
+    const f = fixture();
+    delete f.docs['spaces/s/reminders/r'];
+    f.device.followUp.timeZone = 'Asia/Tokyo';
+    f.docs['spaces/s'].closingSettings = { timeZone: 'America/New_York', executionTime: '00:00',
+      revision: 1, status: 'prepared', updatedAt: f.runtime.now(), updatedByUserId: 'u' };
+    const before = business(f);
+    await dispatchNotifications(f.runtime);
+    expect(receipts(f).map(row => row.key)).toEqual(['due:d:2026-10-20']);
+    expect(f.docs['pushDevices/device'].nextDispatchAt).toBe('2026-10-21T21:00:00.000Z');
+    expect(business(f)).toEqual(before);
+  });
   it('expires old source events without reads, and allows fresh coalesced wakeups', async () => {
     const f = fixture();
     f.device.nextDispatchAt = '2026-10-22T14:00:00.000Z';
