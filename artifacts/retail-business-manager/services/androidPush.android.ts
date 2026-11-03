@@ -6,6 +6,7 @@ import { getFirebaseApp, getFirebaseAuth } from '@/services/firebase';
 import type { AndroidPushScope } from './androidPush';
 import { loadFollowUpPreferences, type FollowUpPreferences, type FollowUpScope } from './followUpPreferences';
 import { loadNotificationTime } from './preferences';
+import { pushStep } from '@/data/androidPushFailure';
 
 const KEY = '@my-app/android-push/v1';
 type Saved = AndroidPushScope & { token: string };
@@ -25,23 +26,31 @@ export async function savedAndroidPush(): Promise<Saved | null> {
 async function send(action: 'register' | 'status' | 'disable' | 'test' | 'preferences', scope: AndroidPushScope, token: string, preferences?: FollowUpPreferences, reminderTime?: string) {
   if (getFirebaseAuth().currentUser?.uid !== scope.uid) throw new Error('pushAccountChanged');
   const call = httpsCallable<unknown, { enabled: boolean; accepted?: boolean; scheduledEnabled?: boolean; dispatchProblem?: boolean }>(getFunctions(getFirebaseApp()), 'pushDeviceCommand');
-  const followUp = preferences ? { ...preferences, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone } : undefined;
-  if (preferences && !followUp?.timeZone) throw new Error('pushTimeZoneUnavailable');
-  const result = (await call({ action, actorUid: scope.uid, ...scope, token, scheduledVersion: 1, ...(followUp ? { followUp } : {}), ...(reminderTime ? { reminderTime } : {}) })).data;
-  if (typeof result?.enabled !== 'boolean' || (action === 'test' && result.accepted !== true)) throw new Error('pushResponseInvalid');
-  return result;
+  const followUp = preferences ? await pushStep('preferences', async () => {
+    const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if (!timeZone) throw new Error('pushTimeZoneUnavailable');
+    return { ...preferences, timeZone };
+  }) : undefined;
+  return pushStep(action === 'status' ? 'status' : 'command', async () => {
+    const result = (await call({ action, actorUid: scope.uid, ...scope, token, scheduledVersion: 1, ...(followUp ? { followUp } : {}), ...(reminderTime ? { reminderTime } : {}) })).data;
+    if (typeof result?.enabled !== 'boolean' || (action === 'test' && result.accepted !== true)) throw new Error('pushResponseInvalid');
+    return result;
+  });
 }
 
 export async function connectAndroidPush(scope: AndroidPushScope) {
   if (Constants.executionEnvironment === 'storeClient') throw new Error('pushStandaloneRequired');
-  await Notifications.setNotificationChannelAsync('my-app-reminders', {
+  await pushStep('channel', () => Notifications.setNotificationChannelAsync('my-app-reminders', {
     name: 'My app', importance: Notifications.AndroidImportance.DEFAULT, lockscreenVisibility: Notifications.AndroidNotificationVisibility.PRIVATE,
-  });
-  let permission = await Notifications.getPermissionsAsync();
-  if (!permission.granted) permission = await Notifications.requestPermissionsAsync();
+  }));
+  let permission = await pushStep('permissionCheck', () => Notifications.getPermissionsAsync());
+  if (!permission.granted) permission = await pushStep('permissionCheck', () => Notifications.requestPermissionsAsync());
   if (!permission.granted) throw new Error('pushPermissionDenied');
-  const token = (await Notifications.getDevicePushTokenAsync()).data;
-  if (typeof token !== 'string') throw new Error('pushTokenInvalid');
+  const token = await pushStep('token', async () => {
+    const value = (await Notifications.getDevicePushTokenAsync()).data;
+    if (typeof value !== 'string') throw new Error('pushTokenInvalid');
+    return value;
+  });
   await replaceAndroidPushToken(scope, token);
 }
 
@@ -54,16 +63,17 @@ export async function refreshAndroidPushToken(scope: AndroidPushScope, token: st
 }
 
 async function replaceAndroidPushToken(scope: AndroidPushScope, token: string) {
-  const old = await savedAndroidPush();
+  const old = await pushStep('storage', () => savedAndroidPush());
   if (old?.uid === scope.uid && old.token !== token) await send('disable', old, old.token);
   // Failure to read settings must not silently register a different/default schedule.
-  const preferences = await loadFollowUpPreferences(scope);
-  const reminderTime = await loadNotificationTime();
+  const { preferences, reminderTime } = await pushStep('preferences', async () => ({
+    preferences: await loadFollowUpPreferences(scope), reminderTime: await loadNotificationTime(),
+  }));
   await send('register', scope, token, preferences, reminderTime);
   pendingRegistration = { ...scope, token };
   try {
     if (getFirebaseAuth().currentUser?.uid !== scope.uid) throw new Error('pushAccountChanged');
-    await AsyncStorage.setItem(KEY, JSON.stringify(pendingRegistration));
+    await pushStep('storage', () => AsyncStorage.setItem(KEY, JSON.stringify(pendingRegistration)));
   }
   catch (error) {
     // A cloud registration without saved local metadata must not survive a failed connect silently.
@@ -77,12 +87,14 @@ export async function androidPushConnected(scope: AndroidPushScope) {
 }
 
 export async function androidPushDeliveryState(scope: AndroidPushScope) {
-  const saved = await savedAndroidPush();
-  const disconnected = { connected: false, scheduled: false, problem: false };
-  if (!saved || saved.uid !== scope.uid || saved.spaceId !== scope.spaceId || saved.storeId !== scope.storeId) return disconnected;
-  if (!(await Notifications.getPermissionsAsync()).granted) return disconnected;
-  const status = await send('status', scope, saved.token);
-  return { connected: status.enabled, scheduled: status.scheduledEnabled === true, problem: status.dispatchProblem === true };
+  return pushStep('status', async () => {
+    const saved = await savedAndroidPush();
+    const disconnected = { connected: false, scheduled: false, problem: false };
+    if (!saved || saved.uid !== scope.uid || saved.spaceId !== scope.spaceId || saved.storeId !== scope.storeId) return disconnected;
+    if (!(await Notifications.getPermissionsAsync()).granted) return disconnected;
+    const status = await send('status', scope, saved.token);
+    return { connected: status.enabled, scheduled: status.scheduledEnabled === true, problem: status.dispatchProblem === true };
+  });
 }
 
 export async function testAndroidPush(scope: AndroidPushScope) {

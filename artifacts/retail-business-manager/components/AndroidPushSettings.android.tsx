@@ -6,6 +6,8 @@ import { useColors } from '@/hooks/useColors';
 import { useI18n } from '@/hooks/useI18n';
 import { getFirebaseAuth, isFirebaseConfigured } from '@/services/firebase';
 import { androidPushDeliveryState, connectAndroidPush, disconnectAndroidPush, testAndroidPush } from '@/services/androidPush.android';
+import { androidPushFailure, type PushFailureReason } from '@/data/androidPushFailure';
+import { androidPushFailureText } from '@/constants/androidPushFailureText';
 
 export function AndroidPushSettings() {
   const colors = useColors();
@@ -20,16 +22,17 @@ export function AndroidPushSettings() {
   const [scheduled, setScheduled] = useState(false);
   const [dispatchProblem, setDispatchProblem] = useState(false);
   const [working, setWorking] = useState(false);
-  const [message, setMessage] = useState<'pushTestAccepted' | 'pushConnectError' | 'pushPermissionDenied' | null>(null);
+  const [message, setMessage] = useState<'pushTestAccepted' | null>(null);
+  const [failure, setFailure] = useState<PushFailureReason | null>(null);
   const scope = uid && activeSpaceId ? { uid, spaceId: activeSpaceId, storeId: profile.id, language } : null;
   useEffect(() => {
-    let active = true; const version = ++revision.current; setConnected(false); setScheduled(false); setDispatchProblem(false); setMessage(null);
-    if (scope) void androidPushDeliveryState(scope).then((value) => { if (active && revision.current === version) { setConnected(value.connected); setScheduled(value.scheduled); setDispatchProblem(value.problem); } }).catch(() => { if (active && revision.current === version) setMessage('pushConnectError'); });
+    let active = true; const version = ++revision.current; setConnected(false); setScheduled(false); setDispatchProblem(false); setMessage(null); setFailure(null);
+    if (scope) void androidPushDeliveryState(scope).then((value) => { if (active && revision.current === version) { setConnected(value.connected); setScheduled(value.scheduled); setDispatchProblem(value.problem); } }).catch(error => { if (active && revision.current === version) setFailure(androidPushFailure(error, 'status')); });
     return () => { active = false; };
   }, [key]);
   const act = async (action: 'connect' | 'disconnect' | 'test') => {
     if (!scope || busy.current || current.current !== key) return;
-    busy.current = true; revision.current += 1; setWorking(true); setMessage(null);
+    busy.current = true; revision.current += 1; setWorking(true); setMessage(null); setFailure(null);
     try {
       if (action === 'connect') await connectAndroidPush(scope);
       else if (action === 'disconnect') await disconnectAndroidPush();
@@ -40,7 +43,7 @@ export function AndroidPushSettings() {
         if (action === 'test') setMessage('pushTestAccepted');
       }
     } catch (error) {
-      if (current.current === key) setMessage(error instanceof Error && error.message === 'pushPermissionDenied' ? 'pushPermissionDenied' : 'pushConnectError');
+      if (current.current === key) setFailure(androidPushFailure(error));
     } finally { busy.current = false; setWorking(false); }
   };
   const align = { textAlign: isRTL ? 'right' as const : 'left' as const };
@@ -48,7 +51,8 @@ export function AndroidPushSettings() {
     <Text style={[align, { color: colors.foreground, fontSize: 16, fontFamily: 'Inter_700Bold' }]}>{t('pushAndroidTitle')}</Text>
     <Text style={[align, { color: colors.mutedForeground, lineHeight: 22 }]}>{t(connected ? 'pushDeviceConnected' : 'pushDeviceNotConnected')}</Text>
     <Text style={[align, { color: dispatchProblem ? colors.destructive : colors.mutedForeground, lineHeight: 22 }]}>{t(dispatchProblem ? 'pushScheduleProblem' : scheduled ? 'pushScheduleEnabled' : 'pushSchedulePending')}</Text>
-    {message ? <Text accessibilityLiveRegion="polite" style={[align, { color: message === 'pushTestAccepted' ? colors.primary : colors.destructive }]}>{t(message)}</Text> : null}
+    {message ? <Text accessibilityLiveRegion="polite" style={[align, { color: colors.primary }]}>{t(message)}</Text> : null}
+    {failure ? <Text accessibilityLiveRegion="polite" style={[align, { color: colors.destructive }]}>{androidPushFailureText[language][failure]}</Text> : null}
     {working ? <ActivityIndicator color={colors.primary} /> : null}
     <View style={{ flexDirection: isRTL ? 'row-reverse' : 'row', flexWrap: 'wrap', gap: 12 }}>
       <Pressable accessibilityRole="button" disabled={!scope || working} onPress={() => void act('connect')} style={{ padding: 14, borderRadius: 12, backgroundColor: colors.accent }}><Text style={{ color: colors.primary }}>{t(connected ? 'pushReconnect' : 'pushConnect')}</Text></Pressable>
