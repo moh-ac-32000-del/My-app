@@ -105,6 +105,7 @@ export async function workspaceCommandHandler(
   if (['invite', 'role', 'transferOwnership'].includes(input.action) && !role(input.role))
     fail('invalid-argument', 'Only editor or viewer can be assigned');
   if (['role', 'remove', 'transferOwnership'].includes(input.action) && !id(input.userId)) fail('invalid-argument', 'Invalid member');
+  if (input.action === 'transferOwnership' && !id(input.operationId)) fail('invalid-argument', 'Invalid ownership transfer operation');
   if (input.action === 'revoke' && !/^[a-f0-9]{64}$/.test(input.invitationId ?? ''))
     fail('invalid-argument', 'Invalid invitation');
   if (input.action === 'accept' && !/^[a-f0-9]{64}$/.test(input.token ?? ''))
@@ -279,6 +280,13 @@ export async function workspaceCommandHandler(
     ]);
     const space = spaceSnap.data();
     if (!space || space.status !== 'active') fail('failed-precondition', 'Workspace unavailable');
+    if (input.action === 'transferOwnership' && space.ownerUserId === input.userId) {
+      const receipt = space.lastOwnershipTransfer;
+      if (receipt?.operationId === input.operationId && receipt?.fromUserId === uid &&
+        receipt?.toUserId === input.userId && receipt?.previousOwnerRole === input.role) {
+        return { spaceId: input.spaceId, ownerUserId: input.userId, previousOwnerRole: input.role, replayed: true };
+      }
+    }
     assertWorkspaceAccess(memberSnap.data(), ['overview', 'memberNames', 'setMemberName', 'leave'].includes(input.action) ? 'read' : 'owner', space, uid);
     if (input.action === 'setMemberName') {
       // Self only, including Viewer. A confirmed name cannot be silently replaced.
@@ -497,7 +505,8 @@ export async function workspaceCommandHandler(
       const previousOwner = memberSnap.data()!;
       const previousOwnerMembership = actorRef.collection('memberships').doc(input.spaceId!);
       const nextOwnerMembership = db.collection('users').doc(input.userId!).collection('memberships').doc(input.spaceId!);
-      tx.update(spaceRef, { ownerUserId: input.userId, updatedAt: now, ownershipTransferredAt: now, ownershipTransferredByUserId: uid });
+      tx.update(spaceRef, { ownerUserId: input.userId, updatedAt: now, ownershipTransferredAt: now, ownershipTransferredByUserId: uid,
+        lastOwnershipTransfer: { operationId: input.operationId, fromUserId: uid, toUserId: input.userId, previousOwnerRole: input.role, transferredAt: now } });
       tx.update(spaceRef.collection('members').doc(uid), { role: input.role, updatedAt: now, updatedByUserId: uid });
       tx.update(targetRef, { role: 'owner', updatedAt: now, updatedByUserId: uid, becameOwnerAt: now });
       tx.set(previousOwnerMembership, {
