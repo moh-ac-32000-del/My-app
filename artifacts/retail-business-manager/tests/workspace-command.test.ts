@@ -250,6 +250,62 @@ describe('workspace metadata command', () => {
     expect(f.docs['spaces/s/members/a'].status).toBe('suspended');
     expect(f.docs['spaces/s/debts/d']).toEqual(debt);
   });
+  it('lets an active non-owner leave without deleting their account or workspace history', async () => {
+    const f = fixture();
+    f.docs['spaces/s/members/a'] = { spaceId: 's', userId: 'a', role: 'editor', status: 'active', joinedAt: '2026-10-01T00:00:00.000Z' };
+    f.docs['users/a'] = { primarySpaceId: 's' };
+    f.docs['users/a/memberships/s'] = { spaceId: 's', role: 'editor', status: 'active', spaceNameSnapshot: 'Shop' };
+    const debt = structuredClone(f.docs['spaces/s/debts/d']);
+    const result = await workspaceCommandHandler(req('a', { action: 'leave', spaceId: 's' }), f.runtime);
+    expect(result).toMatchObject({ spaceId: 's', status: 'left' });
+    expect(f.docs['spaces/s/members/a']).toMatchObject({ role: 'editor', status: 'left' });
+    expect(f.docs['users/a/memberships/s']).toMatchObject({ role: 'editor', status: 'left' });
+    expect(f.docs['users/a']).toEqual({ primarySpaceId: 's' });
+    expect(f.docs['spaces/s/debts/d']).toEqual(debt);
+    await expect(workspaceCommandHandler(req('a', { action: 'overview', spaceId: 's' }), f.runtime)).rejects.toMatchObject({ code: 'permission-denied' });
+    expect(f.writes).toEqual(['spaces/s/members/a', 'users/a/memberships/s']);
+  });
+  it('requires ownership transfer before the owner can leave', async () => {
+    const f = fixture();
+    await expect(workspaceCommandHandler(req('u', { action: 'leave', spaceId: 's' }), f.runtime)).rejects.toMatchObject({ code: 'failed-precondition' });
+    expect(f.writes).toEqual([]);
+  });
+  it('transfers ownership atomically and preserves both canonical memberships and financial history', async () => {
+    const f = fixture();
+    f.docs['spaces/s/members/a'] = { spaceId: 's', userId: 'a', role: 'editor', status: 'active', joinedAt: '2026-10-01T00:00:00.000Z' };
+    f.docs['users/a'] = { primarySpaceId: 'another' };
+    f.docs['users/a/memberships/s'] = { spaceId: 's', role: 'editor', status: 'active', spaceNameSnapshot: 'Shop', joinedAt: '2026-10-01T00:00:00.000Z' };
+    const debt = structuredClone(f.docs['spaces/s/debts/d']);
+    const result = await workspaceCommandHandler(req('u', { action: 'transferOwnership', spaceId: 's', userId: 'a', role: 'viewer' }), f.runtime);
+    expect(result).toMatchObject({ spaceId: 's', ownerUserId: 'a', previousOwnerRole: 'viewer' });
+    expect(f.docs['spaces/s']).toMatchObject({ ownerUserId: 'a' });
+    expect(f.docs['spaces/s/members/u']).toMatchObject({ role: 'viewer', status: 'active' });
+    expect(f.docs['spaces/s/members/a']).toMatchObject({ role: 'owner', status: 'active' });
+    expect(f.docs['users/u/memberships/s']).toMatchObject({ role: 'viewer', status: 'active' });
+    expect(f.docs['users/a/memberships/s']).toMatchObject({ role: 'owner', status: 'active' });
+    expect(f.docs['spaces/s/debts/d']).toEqual(debt);
+    await expect(workspaceCommandHandler(req('u', { action: 'rename', spaceId: 's', name: 'No longer owner' }), f.runtime)).rejects.toMatchObject({ code: 'permission-denied' });
+    await expect(workspaceCommandHandler(req('a', { action: 'rename', spaceId: 's', name: 'New owner edit' }), f.runtime)).resolves.toMatchObject({ spaceId: 's' });
+  });
+  it('rejects transferring ownership to self, an inactive member, or an unrecognized role', async () => {
+    const f = fixture();
+    f.docs['spaces/s/members/a'] = { spaceId: 's', userId: 'a', role: 'viewer', status: 'suspended' };
+    await expect(workspaceCommandHandler(req('u', { action: 'transferOwnership', spaceId: 's', userId: 'u', role: 'editor' }), f.runtime)).rejects.toMatchObject({ code: 'failed-precondition' });
+    await expect(workspaceCommandHandler(req('u', { action: 'transferOwnership', spaceId: 's', userId: 'a', role: 'editor' }), f.runtime)).rejects.toMatchObject({ code: 'failed-precondition' });
+    await expect(workspaceCommandHandler(req('u', { action: 'transferOwnership', spaceId: 's', userId: 'a', role: 'owner' }), f.runtime)).rejects.toMatchObject({ code: 'invalid-argument' });
+    expect(f.docs['spaces/s'].ownerUserId).toBe('u');
+    expect(f.writes).toEqual([]);
+  });
+  it('rechecks transfer authority after a transaction conflict', async () => {
+    const f = fixture();
+    f.docs['spaces/s/members/a'] = { spaceId: 's', userId: 'a', role: 'editor', status: 'active' };
+    f.retryOnce(() => {
+      f.docs['spaces/s'].ownerUserId = 'other';
+      f.docs['spaces/s/members/u'].role = 'editor';
+    });
+    await expect(workspaceCommandHandler(req('u', { action: 'transferOwnership', spaceId: 's', userId: 'a', role: 'viewer' }), f.runtime)).rejects.toMatchObject({ code: 'permission-denied' });
+    expect(f.writes).toEqual([]);
+  });
   it('returns quota metadata only to the canonical owner', async () => {
     const f = fixture();
     const result = await workspaceCommandHandler(req('u', { action: 'overview', spaceId: 's' }), f.runtime);
