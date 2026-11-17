@@ -111,3 +111,7 @@ If ownership resolution is ambiguous, stop and ask the user to resolve it; do no
 - Firebase remains the sole source of truth for business data. No local-storage/AsyncStorage financial fallback.
 - Keep reads/writes bounded and avoid background polling.
 - Deliver in reviewable stages: (1) schema/dependency inventory and lifecycle contracts, (2) backend job engine and emulator tests, (3) customer deletion, (4) merchant archive/deletion, (5) workspace deletion, (6) account deletion, (7) UI integration and practical acceptance.
+
+## Source-audit companion
+
+The verified-but-not-yet-exhaustive Firestore path and relationship inventory is maintained in [`destructive-data-schema-inventory.md`](./destructive-data-schema-inventory.md). It records canonical ownership paths, customer/merchant/cashbox financial edges, current trusted-command gaps, and the audit items that must be closed before cascade implementation. Treat it as an implementation gate, not as proof that every repository collection has already been inventoried.
