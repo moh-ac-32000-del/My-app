@@ -11,6 +11,8 @@ This document defines the safety contract for permanent workspace/customer/merch
 - Merchant data is split across `merchants`, `merchantBalances`, and `merchantOperations`. Some merchant operations reference customers and create linked customer debt/payment records.
 - Workspace management explicitly has no permanent-deletion operation today. Workspace authorization is based on canonical `spaces/{spaceId}/members/{uid}` membership; user membership indexes are discovery-only.
 - Daily archive snapshots are historical records. Existing archive behavior intentionally does not rewrite old snapshots when current operations are later corrected.
+- A customer settlement creates both a customer `payments` record and a cash `transactions` record. The latter changes the real cashbox and must not be blindly removed with the customer account.
+- A merchant `directPayment` creates a merchant operation, a customer payment marked `source: 'customer-to-merchant'`, and may affect customer debt/credit. The existing merchant reversal path validates an active customer and uses the customer credit state; deleting that customer first would make a later merchant reversal fail.
 
 ## Required architecture
 
@@ -42,7 +44,11 @@ The trusted cascade must cover, at minimum:
 
 After completion, the customer and their live debt/credit amounts must not appear in active lists, balances, totals, statements, reminders, or journal projections.
 
-Before deleting linked merchant-originated records, classify the relationship and ensure the merchant-side operation and customer-side counterpart are handled consistently. Never leave a merchant balance changed without its matching source operation, or vice versa.
+**Linked merchant operations are a hard dependency, not an ordinary payment row.** If the customer has an unreversed merchant `directPayment`, the deletion flow must first complete a verified merchant-side reversal while the customer and credit state still exist, or stop with a clear blocking result and require that operation to be resolved. It must never delete the customer-side payment while leaving the merchant balance/operation inconsistent. Reversal and deletion must each be idempotent and resumable.
+
+**Cashbox entries require separate treatment.** A cash `transactions` record created by a customer settlement represents physical cash movement, not merely customer identity. Removing it would silently rewrite the cashbox. The implementation must preserve that cash movement and remove or neutralize customer-identifying linkage only where the transaction schema and cash/journal projections can prove this is safe. It must not delete a transaction that also participates in another financial workflow. This decision needs emulator coverage before UI rollout.
+
+Customer-linked `operationReceipts` are idempotency/audit evidence. Do not bulk-delete them by a loose `customerId` query. Define a minimal, privacy-safe retention rule that preserves replay protection and does not expose the deleted customer's identity in ordinary views.
 
 Historical daily archive snapshots remain immutable historical evidence. They are not part of the live customer balance projection and must not be silently regenerated or rewritten. If the product later requires privacy erasure of historical snapshots, that must be a separately approved retention/legal policy with explicit effects on accounting history.
 
@@ -92,7 +98,7 @@ If ownership resolution is ambiguous, stop and ask the user to resolve it; do no
 - Unit/contract tests for validation, state transitions, pagination, idempotency, and retry.
 - Firestore Emulator tests with large datasets spanning multiple pages.
 - Tests for malformed references, concurrent deletion attempts, interrupted jobs, permission changes, and cross-workspace isolation.
-- Customer tests: debt + payment + credit + reminder removal; all currencies; linked merchant-originated records; no remaining live customer balance.
+- Customer tests: debt + payment + credit + reminder removal; all currencies; linked merchant-originated records; no remaining live customer balance; cashbox totals remain correct; a future merchant reversal is not broken.
 - Merchant tests: archive vs inactive distinction; full history and balances in archive; no new postings after archive; reversals and linked customer/cash effects reconcile.
 - Workspace tests: every known collection/subcollection removed, other workspaces untouched, membership/invitation cleanup, owner-only access.
 - Account tests: shared ownership transfer, workspace deletion choice, non-owner membership removal, reauthentication, and Auth deletion only after successful cleanup.
