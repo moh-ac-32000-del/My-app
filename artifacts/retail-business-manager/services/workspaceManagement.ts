@@ -25,6 +25,8 @@ export type WorkspaceRequest = {
     | 'accept'
     | 'role'
     | 'remove'
+    | 'leave'
+    | 'transferOwnership'
     | 'closingSettings'
     | 'enableClosing'
     | 'retryClosing';
