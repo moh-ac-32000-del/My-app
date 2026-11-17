@@ -81,6 +81,8 @@ export async function workspaceCommandHandler(
       'accept',
       'role',
       'remove',
+      'leave',
+      'transferOwnership',
       'closingSettings',
       'enableClosing',
       'retryClosing',
