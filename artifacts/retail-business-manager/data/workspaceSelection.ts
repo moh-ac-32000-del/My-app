@@ -10,6 +10,14 @@ export function workspaceSessionKey(
   return JSON.stringify([uid ?? null, spaceId, role, generation]);
 }
 
+/** A stale primary-space hint must not block the chooser after every membership has been left or suspended. */
+export function hasActiveWorkspaceMembership(discovery: SpaceDiscoveryResult): boolean {
+  return discovery.memberships.some((membership) =>
+    membership.status === 'active' && typeof membership.spaceId === 'string' &&
+    !!membership.spaceId.trim() && !membership.spaceId.includes('/'),
+  );
+}
+
 /** Hints determine order only. Every candidate must still pass canonical server authorization. */
 export function workspaceCandidates(discovery: SpaceDiscoveryResult, preferred?: string | null): string[] {
   const ids = discovery.memberships
