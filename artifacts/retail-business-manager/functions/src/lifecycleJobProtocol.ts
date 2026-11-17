@@ -67,7 +67,8 @@ export function createLifecycleJob(input: NewLifecycleJob): LifecycleJob {
     throw new Error('lifecycle-job-invalid-input');
   }
   const needsSpace = input.kind !== 'account.delete';
-  if (needsSpace !== (input.spaceId != null) || (needsSpace && input.storeId == null && input.kind.startsWith('customer.'))) {
+  const needsStore = input.kind.startsWith('customer.') || input.kind.startsWith('merchant.');
+  if (needsSpace !== (input.spaceId != null) || needsStore !== (input.storeId != null)) {
     throw new Error('lifecycle-job-invalid-scope');
   }
   return {
@@ -107,6 +108,8 @@ export function claimLifecycleJob(
   if (terminal(current.status)) return null;
   const nowMs = Date.parse(now);
   const leaseEnd = current.leaseExpiresAt == null ? NaN : Date.parse(current.leaseExpiresAt);
+  if ((current.leaseOwner == null) !== (current.leaseExpiresAt == null) ||
+      (current.leaseOwner != null && !Number.isFinite(leaseEnd))) throw new Error('lifecycle-lease-state-invalid');
   const heldByOther = current.leaseOwner !== null && current.leaseOwner !== workerId &&
     Number.isFinite(leaseEnd) && leaseEnd > nowMs;
   if (heldByOther) return null;
@@ -142,7 +145,7 @@ export interface LifecycleCheckpoint {
 }
 export function checkpointLifecycleJob(current: LifecycleJob, input: LifecycleCheckpoint): LifecycleJob {
   if (!validId(input.workerId) || !validTime(input.now) || !validId(input.phase) ||
-      !Number.isSafeInteger(input.generation) || !Number.isSafeInteger(input.phaseIndex) ||
+      !Number.isSafeInteger(input.generation) || !Number.isSafeInteger(input.phaseIndex) || input.phaseIndex < 0 ||
       !Number.isSafeInteger(input.processedDelta) || input.processedDelta < 0 ||
       (input.cursor !== null && !validId(input.cursor))) throw new Error('lifecycle-checkpoint-invalid');
   if (current.status !== 'running' || current.leaseOwner !== input.workerId ||
