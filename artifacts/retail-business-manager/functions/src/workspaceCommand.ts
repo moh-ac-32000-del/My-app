@@ -485,7 +485,7 @@ export async function workspaceCommandHandler(
     }
     const targetRef = spaceRef.collection('members').doc(input.userId!);
     const target = (await tx.get(targetRef)).data();
-    if (!target || target.userId !== input.userId || target.spaceId !== input.spaceId || target.status !== 'active')
+    if (!target || target.userId !== input.userId || target.spaceId !== input.spaceId || target.status !== 'active' || !['owner', 'editor', 'viewer'].includes(target.role))
       fail('failed-precondition', 'Active member required');
     if (input.action === 'transferOwnership') {
       if (input.userId === uid || input.userId === space.ownerUserId || target.role === 'owner')
