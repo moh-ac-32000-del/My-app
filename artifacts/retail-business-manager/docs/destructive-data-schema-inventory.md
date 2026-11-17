@@ -35,7 +35,10 @@ A lifecycle worker must re-read canonical workspace status, membership/owner rol
 | `merchantSettings` | Singleton `config` for merchant payment methods/settings. | Workspace-level, not merchant-owned; do not remove during one merchant deletion. |
 | `storeProfile` | Singleton `profile` used to validate store scope. | Workspace metadata; preserve until workspace cleanup. |
 | `members` | Canonical workspace members. | Remove only as part of owner-authorized workspace/account lifecycle; keep owner/role rules intact. |
-| `dailyClosings` / archive records | Daily immutable snapshots created by archive command. | Historical snapshots must not be rewritten by later entity deletion. Exact archive collection path and nested content still require full source audit. |
+| `dailyArchives` | Daily immutable snapshots created by `dailyArchiveCommand`; each snapshot embeds journal events including customerId/customerName and merchant journal events. | Historical snapshots must not be rewritten by later entity deletion. Workspace deletion removes this collection only as part of the explicit full-space purge. |
+| `dailyClosingCounters` | Per-store/per-date closing sequence counters. | Include in workspace inventory; do not remove during customer/merchant lifecycle. |
+| `pushDevices` (root) | Device registrations keyed by a hashed device token, with uid/spaceId/storeId and notification scheduling state. | Account deletion must affect only devices owned by the target UID; workspace deletion must revoke registrations scoped to that space without affecting other spaces. |
+| `pushDeliveryReceipts` (root) | Notification delivery receipts carrying uid/spaceId/storeId. | Include in account/workspace privacy cleanup with strict ownership checks; not part of ordinary customer/merchant deletion. |
 
 ## 3. Cross-entity financial edges verified
 
