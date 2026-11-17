@@ -48,6 +48,8 @@ export default function WorkspaceSettingsScreen() {
       setFailed(false);
       setLink('');
       setRemoveId(null);
+      setTransferId(null);
+      setLeaveConfirm(false);
       if (!activeSpaceId) {
         setLoading(false);
         return;
