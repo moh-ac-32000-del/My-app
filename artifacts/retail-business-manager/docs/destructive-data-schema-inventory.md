@@ -59,6 +59,8 @@ Merchant cash operations link merchant operations to transactions using merchant
 ## 4. Existing trusted backend and current gaps
 
 - `workspaceCommand` currently handles workspace metadata, invitations, roles, quotas and closing settings. Its source comment explicitly states it does not read or write financial collections. It has no permanent workspace deletion action.
+- `dailyArchiveCommand` writes `dailyArchives/{date}_{closingNumber}` and `dailyClosingCounters/{storeId_date}`. The snapshot embeds customer identifiers/names and merged merchant journal events; this makes archive retention a deliberate privacy/accounting policy decision.
+- Notification state also exists outside the workspace tree in root `pushDevices` and `pushDeliveryReceipts`; workspace/account cleanup must query and validate the explicit scope fields rather than delete by token or UID guesses.
 - `merchantCommand` handles merchant save/opening/purchase/payment/directPayment/reverse/statement. It has no archive or permanent-delete action.
 - `customerOperationCommand` edits/cancels debt/payment operations; it is not a customer-deletion cascade.
 - `reminderCommand` supports reminder list/create/status/delete, but deletion is a reminder tombstone, not a customer cascade.
