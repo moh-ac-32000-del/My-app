@@ -7,7 +7,7 @@ import { normalizeAccent, type AccentColor } from '@/constants/colors';
 import { isFirebaseConfigured } from '@/services/firebase';
 import { signOutFromFirebase, subscribeToFirebaseAuth } from '@/services/firebaseAuth';
 import { discoverUserSpaces, validateUserSpaceMembership, loadWorkspaceSession, observeWorkspaceSession } from '@/services/firestore';
-import { workspaceCandidates, workspaceSessionKey } from '@/data/workspaceSelection';
+import { hasActiveWorkspaceMembership, workspaceCandidates, workspaceSessionKey } from '@/data/workspaceSelection';
 import { clearLocalExportCache } from '@/services/localExportCache';
 import { financialCommandIntent } from '@/data/financialCommandIntent';
 import { createOperationId } from '@/services/operationId';
@@ -130,6 +130,7 @@ export function clearFirebaseAuthSession(callbacks: {
 
 export async function resolveActiveSpaceForUser(uid: string, preferred?: string | null): Promise<string | null> {
   const discovery = await discoverUserSpaces(uid);
+  if (!hasActiveWorkspaceMembership(discovery)) return null;
   const candidates = workspaceCandidates(discovery, preferred);
   if (!candidates.length && !discovery.memberships.length) {
     // New accounts choose explicitly between creating a workspace and accepting an invitation.
