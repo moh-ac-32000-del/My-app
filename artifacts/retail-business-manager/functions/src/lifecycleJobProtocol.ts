@@ -155,7 +155,7 @@ export function checkpointLifecycleJob(current: LifecycleJob, input: LifecycleCh
       current.processedCount > Number.MAX_SAFE_INTEGER - input.processedDelta)
     throw new Error('lifecycle-checkpoint-out-of-range');
   const status = input.status ?? 'running';
-  if (status === 'blocked' && (!validId(input.failureCode) || input.failureCode.length > 80))
+  if (status === 'blocked' && (typeof input.failureCode !== 'string' || !/^[a-z0-9-]{1,80}$/.test(input.failureCode)))
     throw new Error('lifecycle-failure-code-required');
   if (status !== 'blocked' && input.failureCode != null)
     throw new Error('lifecycle-unexpected-failure-code');
