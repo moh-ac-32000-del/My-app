@@ -115,3 +115,11 @@ If ownership resolution is ambiguous, stop and ask the user to resolve it; do no
 ## Source-audit companion
 
 The verified-but-not-yet-exhaustive Firestore path and relationship inventory is maintained in [`destructive-data-schema-inventory.md`](./destructive-data-schema-inventory.md). It records canonical ownership paths, customer/merchant/cashbox financial edges, current trusted-command gaps, and the audit items that must be closed before cascade implementation. Treat it as an implementation gate, not as proof that every repository collection has already been inventoried.
+
+## Backend implementation progress — lifecycle protocol foundation
+
+The first backend foundation is now present in `functions/src/lifecycleJobProtocol.ts`, with focused tests in `tests/lifecycle-job-protocol.test.ts`.
+
+It defines the supported job kinds, strict target/scope validation, a fixed maximum page size (100), bounded leases (90 seconds by default, at most five minutes), monotonic phase checkpoints, retry counters, terminal states, and lease-generation fencing. A worker that resumes after another worker has reclaimed an expired lease cannot write a checkpoint using its stale generation. Corrupt lease state fails closed.
+
+**This is deliberately only the pure protocol/state machine.** It does not yet persist jobs, register a callable or scheduled worker, block existing financial writers, or delete/archive any records. Do not deploy it or present it as an operational deletion feature. The next backend step is transactional Firestore persistence and claim/checkpoint tests, followed by lifecycle guards in existing trusted commands. Only then should an entity-specific worker be introduced.
