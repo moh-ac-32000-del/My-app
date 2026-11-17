@@ -32,6 +32,10 @@ describe('destructive lifecycle job protocol', () => {
       actorUserId: 'u', payloadDigest: 'a'.repeat(64), now: '2026-11-17T12:00:00Z',
     })).toThrow('lifecycle-job-invalid-scope');
     expect(() => createLifecycleJob({
+      jobId: 'j', kind: 'merchant.archive', spaceId: 's', targetId: 'm',
+      actorUserId: 'u', payloadDigest: 'a'.repeat(64), now: '2026-11-17T12:00:00Z',
+    })).toThrow('lifecycle-job-invalid-scope');
+    expect(() => createLifecycleJob({
       jobId: 'j', kind: 'account.delete', spaceId: 's', targetId: 'u',
       actorUserId: 'u', payloadDigest: 'a'.repeat(64), now: '2026-11-17T12:00:00Z',
     })).toThrow('lifecycle-job-invalid-scope');
@@ -71,6 +75,7 @@ describe('destructive lifecycle job protocol', () => {
       phase: 'preflight', phaseIndex: 0, cursor: null, processedDelta: 0 };
     expect(() => checkpointLifecycleJob(active, { ...input, now: '2026-11-17T12:02:00.000Z' })).toThrow('lifecycle-lease-lost');
     expect(() => checkpointLifecycleJob(active, { ...input, phaseIndex: -1 })).toThrow('lifecycle-checkpoint-invalid');
+    expect(() => claimLifecycleJob({ ...active, leaseExpiresAt: 'not-a-date' }, 'worker-b', '2026-11-17T12:02:00.000Z')).toThrow('lifecycle-lease-state-invalid');
     expect(() => checkpointLifecycleJob(active, { ...input, processedDelta: LIFECYCLE_PAGE_SIZE + 1 })).toThrow('lifecycle-checkpoint-out-of-range');
     expect(() => checkpointLifecycleJob({ ...active, processedCount: Number.MAX_SAFE_INTEGER }, { ...input, processedDelta: 1 })).toThrow('lifecycle-checkpoint-out-of-range');
   });
