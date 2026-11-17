@@ -276,7 +276,7 @@ describe('workspace metadata command', () => {
     f.docs['users/a'] = { primarySpaceId: 'another' };
     f.docs['users/a/memberships/s'] = { spaceId: 's', role: 'editor', status: 'active', spaceNameSnapshot: 'Shop', joinedAt: '2026-10-01T00:00:00.000Z' };
     const debt = structuredClone(f.docs['spaces/s/debts/d']);
-    const result = await workspaceCommandHandler(req('u', { action: 'transferOwnership', spaceId: 's', userId: 'a', role: 'viewer' }), f.runtime);
+    const result = await workspaceCommandHandler(req('u', { action: 'transferOwnership', spaceId: 's', userId: 'a', role: 'viewer', operationId: 'transfer-1' }), f.runtime);
     expect(result).toMatchObject({ spaceId: 's', ownerUserId: 'a', previousOwnerRole: 'viewer' });
     expect(f.docs['spaces/s']).toMatchObject({ ownerUserId: 'a' });
     expect(f.docs['spaces/s/members/u']).toMatchObject({ role: 'viewer', status: 'active' });
@@ -284,15 +284,19 @@ describe('workspace metadata command', () => {
     expect(f.docs['users/u/memberships/s']).toMatchObject({ role: 'viewer', status: 'active' });
     expect(f.docs['users/a/memberships/s']).toMatchObject({ role: 'owner', status: 'active' });
     expect(f.docs['spaces/s/debts/d']).toEqual(debt);
+    const writesAfterTransfer = f.writes.length;
+    await expect(workspaceCommandHandler(req('u', { action: 'transferOwnership', spaceId: 's', userId: 'a', role: 'viewer', operationId: 'transfer-1' }), f.runtime)).resolves.toMatchObject({ replayed: true, ownerUserId: 'a' });
+    expect(f.writes).toHaveLength(writesAfterTransfer);
+    await expect(workspaceCommandHandler(req('u', { action: 'transferOwnership', spaceId: 's', userId: 'a', role: 'editor', operationId: 'transfer-1' }), f.runtime)).rejects.toMatchObject({ code: 'permission-denied' });
     await expect(workspaceCommandHandler(req('u', { action: 'rename', spaceId: 's', name: 'No longer owner' }), f.runtime)).rejects.toMatchObject({ code: 'permission-denied' });
     await expect(workspaceCommandHandler(req('a', { action: 'rename', spaceId: 's', name: 'New owner edit' }), f.runtime)).resolves.toMatchObject({ spaceId: 's' });
   });
   it('rejects transferring ownership to self, an inactive member, or an unrecognized role', async () => {
     const f = fixture();
     f.docs['spaces/s/members/a'] = { spaceId: 's', userId: 'a', role: 'viewer', status: 'suspended' };
-    await expect(workspaceCommandHandler(req('u', { action: 'transferOwnership', spaceId: 's', userId: 'u', role: 'editor' }), f.runtime)).rejects.toMatchObject({ code: 'failed-precondition' });
-    await expect(workspaceCommandHandler(req('u', { action: 'transferOwnership', spaceId: 's', userId: 'a', role: 'editor' }), f.runtime)).rejects.toMatchObject({ code: 'failed-precondition' });
-    await expect(workspaceCommandHandler(req('u', { action: 'transferOwnership', spaceId: 's', userId: 'a', role: 'owner' }), f.runtime)).rejects.toMatchObject({ code: 'invalid-argument' });
+    await expect(workspaceCommandHandler(req('u', { action: 'transferOwnership', spaceId: 's', userId: 'u', role: 'editor', operationId: 'transfer-self' }), f.runtime)).rejects.toMatchObject({ code: 'failed-precondition' });
+    await expect(workspaceCommandHandler(req('u', { action: 'transferOwnership', spaceId: 's', userId: 'a', role: 'editor', operationId: 'transfer-inactive' }), f.runtime)).rejects.toMatchObject({ code: 'failed-precondition' });
+    await expect(workspaceCommandHandler(req('u', { action: 'transferOwnership', spaceId: 's', userId: 'a', role: 'owner', operationId: 'transfer-invalid-role' }), f.runtime)).rejects.toMatchObject({ code: 'invalid-argument' });
     expect(f.docs['spaces/s'].ownerUserId).toBe('u');
     expect(f.writes).toEqual([]);
   });
@@ -303,7 +307,7 @@ describe('workspace metadata command', () => {
       f.docs['spaces/s'].ownerUserId = 'other';
       f.docs['spaces/s/members/u'].role = 'editor';
     });
-    await expect(workspaceCommandHandler(req('u', { action: 'transferOwnership', spaceId: 's', userId: 'a', role: 'viewer' }), f.runtime)).rejects.toMatchObject({ code: 'permission-denied' });
+    await expect(workspaceCommandHandler(req('u', { action: 'transferOwnership', spaceId: 's', userId: 'a', role: 'viewer', operationId: 'transfer-conflict' }), f.runtime)).rejects.toMatchObject({ code: 'permission-denied' });
     expect(f.writes).toEqual([]);
   });
   it('returns quota metadata only to the canonical owner', async () => {
