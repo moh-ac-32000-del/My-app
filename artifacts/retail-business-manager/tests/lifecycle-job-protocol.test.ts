@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  LIFECYCLE_COMPLETION_PHASE,
   LIFECYCLE_PAGE_SIZE,
   claimLifecycleJob,
   checkpointLifecycleJob,
@@ -75,6 +76,8 @@ describe('destructive lifecycle job protocol', () => {
       phase: 'preflight', phaseIndex: 0, cursor: null, processedDelta: 0 };
     expect(() => checkpointLifecycleJob(active, { ...input, now: '2026-11-17T12:02:00.000Z' })).toThrow('lifecycle-lease-lost');
     expect(() => checkpointLifecycleJob(active, { ...input, phaseIndex: -1 })).toThrow('lifecycle-checkpoint-invalid');
+    expect(() => checkpointLifecycleJob(active, { ...input, phase: 'another-phase' })).toThrow('lifecycle-phase-transition-invalid');
+    expect(() => checkpointLifecycleJob(active, { ...input, phase: 'phase-3', phaseIndex: 3 })).toThrow('lifecycle-checkpoint-out-of-range');
     expect(() => claimLifecycleJob({ ...active, leaseExpiresAt: 'not-a-date' }, 'worker-b', '2026-11-17T12:02:00.000Z')).toThrow('lifecycle-lease-state-invalid');
     expect(() => checkpointLifecycleJob(active, { ...input, processedDelta: LIFECYCLE_PAGE_SIZE + 1 })).toThrow('lifecycle-checkpoint-out-of-range');
     expect(() => checkpointLifecycleJob({ ...active, processedCount: Number.MAX_SAFE_INTEGER }, { ...input, processedDelta: 1 })).toThrow('lifecycle-checkpoint-out-of-range');
@@ -83,7 +86,7 @@ describe('destructive lifecycle job protocol', () => {
     const active = claim().job;
     const done = checkpointLifecycleJob(active, {
       workerId: 'worker-a', generation: 1, now: '2026-11-17T12:00:10.000Z',
-      phase: 'verified', phaseIndex: 5, cursor: 'ignored', processedDelta: 2, status: 'completed',
+      phase: LIFECYCLE_COMPLETION_PHASE, phaseIndex: 1, cursor: 'ignored', processedDelta: 2, status: 'completed',
     });
     expect(done).toMatchObject({ status: 'completed', completedAt: '2026-11-17T12:00:10.000Z',
       cursor: null, leaseOwner: null, leaseExpiresAt: null, processedCount: 2 });
@@ -91,6 +94,10 @@ describe('destructive lifecycle job protocol', () => {
   });
   it('blocks with a sanitized failure code and cannot silently complete', () => {
     const active = claim().job;
+    expect(() => checkpointLifecycleJob(active, {
+      workerId: 'worker-a', generation: 1, now: '2026-11-17T12:00:10.000Z',
+      phase: 'preflight', phaseIndex: 0, cursor: null, processedDelta: 0, status: 'completed',
+    })).toThrow('lifecycle-completion-phase-required');
     expect(() => checkpointLifecycleJob(active, {
       workerId: 'worker-a', generation: 1, now: '2026-11-17T12:00:10.000Z',
       phase: 'preflight', phaseIndex: 0, cursor: null, processedDelta: 0, status: 'blocked',
