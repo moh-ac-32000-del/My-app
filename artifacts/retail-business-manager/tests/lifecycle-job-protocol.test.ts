@@ -82,13 +82,17 @@ describe('destructive lifecycle job protocol', () => {
     expect(() => checkpointLifecycleJob(active, { ...input, processedDelta: LIFECYCLE_PAGE_SIZE + 1 })).toThrow('lifecycle-checkpoint-out-of-range');
     expect(() => checkpointLifecycleJob({ ...active, processedCount: Number.MAX_SAFE_INTEGER }, { ...input, processedDelta: 1 })).toThrow('lifecycle-checkpoint-out-of-range');
   });
-  it('completes exactly once and releases its lease', () => {
+  it('completes only in the terminal phase and supports paged final verification', () => {
     const active = claim().job;
-    const done = checkpointLifecycleJob(active, {
+    const finalizing = checkpointLifecycleJob(active, {
       workerId: 'worker-a', generation: 1, now: '2026-11-17T12:00:10.000Z',
-      phase: LIFECYCLE_COMPLETION_PHASE, phaseIndex: 1, cursor: 'ignored', processedDelta: 2, status: 'completed',
+      phase: LIFECYCLE_COMPLETION_PHASE, phaseIndex: 1, cursor: 'verify-100', processedDelta: 1,
     });
-    expect(done).toMatchObject({ status: 'completed', completedAt: '2026-11-17T12:00:10.000Z',
+    const done = checkpointLifecycleJob(finalizing, {
+      workerId: 'worker-a', generation: 1, now: '2026-11-17T12:00:20.000Z',
+      phase: LIFECYCLE_COMPLETION_PHASE, phaseIndex: 1, cursor: 'ignored', processedDelta: 1, status: 'completed',
+    });
+    expect(done).toMatchObject({ status: 'completed', completedAt: '2026-11-17T12:00:20.000Z',
       cursor: null, leaseOwner: null, leaseExpiresAt: null, processedCount: 2 });
     expect(claimLifecycleJob(done, 'worker-b', '2026-11-17T12:01:00.000Z')).toBeNull();
   });
