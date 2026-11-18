@@ -160,8 +160,7 @@ export function checkpointLifecycleJob(current: LifecycleJob, input: LifecycleCh
       (input.phaseIndex === current.phaseIndex + 1 && input.phase === current.phase))
     throw new Error('lifecycle-phase-transition-invalid');
   const status = input.status ?? 'running';
-  if (status === 'completed' &&
-      (input.phase !== LIFECYCLE_COMPLETION_PHASE || input.phaseIndex !== current.phaseIndex + 1))
+  if (status === 'completed' && input.phase !== LIFECYCLE_COMPLETION_PHASE)
     throw new Error('lifecycle-completion-phase-required');
   if (status === 'blocked' && (typeof input.failureCode !== 'string' || !/^[a-z0-9-]{1,80}$/.test(input.failureCode)))
     throw new Error('lifecycle-failure-code-required');
