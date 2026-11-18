@@ -4,6 +4,7 @@
  */
 export const LIFECYCLE_PAGE_SIZE = 100;
 export const LIFECYCLE_LEASE_MS = 90_000;
+export const LIFECYCLE_COMPLETION_PHASE = 'complete';
 export const LIFECYCLE_JOB_KINDS = [
   'customer.delete',
   'merchant.archive',
@@ -151,10 +152,17 @@ export function checkpointLifecycleJob(current: LifecycleJob, input: LifecycleCh
   if (current.status !== 'running' || current.leaseOwner !== input.workerId ||
       current.leaseGeneration !== input.generation || !current.leaseExpiresAt ||
       Date.parse(current.leaseExpiresAt) <= Date.parse(input.now)) throw new Error('lifecycle-lease-lost');
-  if (input.phaseIndex < current.phaseIndex || input.processedDelta > LIFECYCLE_PAGE_SIZE ||
+  if (input.phaseIndex < current.phaseIndex || input.phaseIndex > current.phaseIndex + 1 ||
+      input.processedDelta > LIFECYCLE_PAGE_SIZE ||
       current.processedCount > Number.MAX_SAFE_INTEGER - input.processedDelta)
     throw new Error('lifecycle-checkpoint-out-of-range');
+  if ((input.phaseIndex === current.phaseIndex && input.phase !== current.phase) ||
+      (input.phaseIndex === current.phaseIndex + 1 && input.phase === current.phase))
+    throw new Error('lifecycle-phase-transition-invalid');
   const status = input.status ?? 'running';
+  if (status === 'completed' &&
+      (input.phase !== LIFECYCLE_COMPLETION_PHASE || input.phaseIndex !== current.phaseIndex + 1))
+    throw new Error('lifecycle-completion-phase-required');
   if (status === 'blocked' && (typeof input.failureCode !== 'string' || !/^[a-z0-9-]{1,80}$/.test(input.failureCode)))
     throw new Error('lifecycle-failure-code-required');
   if (status !== 'blocked' && input.failureCode != null)
