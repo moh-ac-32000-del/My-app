@@ -117,6 +117,10 @@ describe('trustedDebtCommand idempotency', () => {
   it('replays matching legacy receipts without stored payloads', async () => {
     const processedAt = '2026-10-17T12:00:00.000Z';
     const firestore = fakeFirestore({
+      'spaces/space-A/customers/customer-A': {
+        id: 'customer-A', isActive: true, storeId: 'store-A', workspaceId: 'space-A',
+        lifecycleStatus: 'deleting',
+      },
       'spaces/space-A/debts/debt-A': {
         id: 'debt-A',
         workspaceId: 'space-A',
