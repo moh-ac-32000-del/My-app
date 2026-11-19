@@ -62,7 +62,6 @@ export async function settleCustomerDebtHandler(
           code: 'STORE_SCOPE_MISMATCH',
         });
       }
-      assertLifecycleTargetWritable(customerSnap.data(), 'customer');
       if (
         !customerSnap.exists ||
         customerSnap.data()?.isActive !== true ||
@@ -99,6 +98,7 @@ export async function settleCustomerDebtHandler(
           processedAt: String(receipt.processedAt ?? ''),
         };
       }
+      assertLifecycleTargetWritable(customerSnap.data(), 'customer');
 
       const matchingDebts = debtSnaps.docs
         .map((snapshot) => ({ ref: snapshot.ref, data: snapshot.data() }))
