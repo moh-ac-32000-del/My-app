@@ -60,7 +60,6 @@ export async function trustedDebtCommandHandler(
         });
       }
       const customer = customerSnap.data();
-      assertLifecycleTargetWritable(customer, 'customer');
       if (
         !customerSnap.exists ||
         customer?.id !== input.customerId ||
@@ -91,6 +90,7 @@ export async function trustedDebtCommandHandler(
         return { outcome: 'replayed', debtId: input.debtId, processedAt: String(receipt.processedAt ?? '') };
       }
 
+      assertLifecycleTargetWritable(customer, 'customer');
       if (input.action === 'create' && debtSnap.exists) {
         throw new HttpsError('already-exists', 'Debt ID already exists', { code: 'DEBT_ALREADY_EXISTS' });
       }
