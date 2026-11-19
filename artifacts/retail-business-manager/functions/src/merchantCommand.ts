@@ -10,7 +10,7 @@ import {
 } from '../../data/merchantAccounting.js';
 import { addCustomerExact, legacyAmountExact, planCustomerPayment } from '../../data/customerCreditAccounting.js';
 import { readCustomerCredit, writeCustomerCredit } from './customerCreditState.js';
-import { assertWorkspaceAccess } from './workspaceAccess.js';
+import { assertLifecycleTargetWritable, assertWorkspaceAccess } from './workspaceAccess.js';
 import { financialPostingTime } from '../../data/automaticClosing.js';
 import { prepareMerchantReversal, reverseMerchantOperation } from './merchantReversal.js';
 import { merchantOperationDate, validateMerchantSettings } from '../../data/merchantSettings.js';
@@ -268,6 +268,7 @@ export async function merchantCommandHandler(request: CallableRequest<unknown>, 
     if (profileSnap.data()?.storeId !== input.storeId)
       throw new HttpsError('permission-denied', 'Store scope mismatch');
     const merchant = merchantSnap.data();
+    assertLifecycleTargetWritable(merchant, 'merchant');
     if (
       merchantSnap.exists &&
       (merchant?.id !== input.merchantId ||
@@ -597,6 +598,7 @@ export async function merchantCommandHandler(request: CallableRequest<unknown>, 
     const customerRef = input.action === 'directPayment' ? space.collection('customers').doc(input.customerId!) : null;
     const customerSnap = customerRef ? await tx.get(customerRef) : null;
     const customer = customerSnap?.data();
+    assertLifecycleTargetWritable(customer, 'customer');
     if (
       customerRef &&
       (!customerSnap?.exists ||
