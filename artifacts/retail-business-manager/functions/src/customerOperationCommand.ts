@@ -68,7 +68,6 @@ export async function customerOperationCommandHandler(request: CallableRequest<u
     assertWorkspaceAccess(member.data(), 'write');
     if (profile.data()?.storeId !== input.storeId) throw new HttpsError('permission-denied', 'Store scope mismatch');
     const customerData = customer.data();
-    assertLifecycleTargetWritable(customerData, 'customer');
     if (!customer.exists || customerData?.id !== input.customerId || customerData.workspaceId !== input.spaceId ||
       customerData.storeId !== input.storeId || customerData.isActive !== true) throw new HttpsError('not-found', 'Active customer unavailable');
     if (receipt.exists) {
@@ -78,6 +77,7 @@ export async function customerOperationCommandHandler(request: CallableRequest<u
         prior.result?.targetId !== input.targetId) throw new HttpsError('already-exists', 'Operation ID already used', { code: 'IDEMPOTENCY_CONFLICT' });
       return { ...prior.result, outcome: 'replayed' };
     }
+    assertLifecycleTargetWritable(customerData, 'customer');
     const target = targetSnap.data();
     if (!targetSnap.exists || target?.id !== input.targetId || target.workspaceId !== input.spaceId ||
       target.storeId !== input.storeId || target.customerId !== input.customerId) throw new HttpsError('not-found', 'Operation unavailable');
