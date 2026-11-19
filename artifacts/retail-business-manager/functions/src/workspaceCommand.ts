@@ -21,6 +21,8 @@ type Input = {
     | 'accept'
     | 'role'
     | 'remove'
+    | 'leave'
+    | 'transferOwnership'
     | 'closingSettings'
     | 'enableClosing'
     | 'retryClosing';
@@ -79,6 +81,8 @@ export async function workspaceCommandHandler(
       'accept',
       'role',
       'remove',
+      'leave',
+      'transferOwnership',
       'closingSettings',
       'enableClosing',
       'retryClosing',
@@ -98,9 +102,10 @@ export async function workspaceCommandHandler(
     fail('invalid-argument', 'Invalid workspace name');
   if (input.action === 'create' && (!['private', 'shared'].includes(input.mode!) || !id(input.operationId)))
     fail('invalid-argument', 'Invalid creation request');
-  if (['invite', 'role'].includes(input.action) && !role(input.role))
+  if (['invite', 'role', 'transferOwnership'].includes(input.action) && !role(input.role))
     fail('invalid-argument', 'Only editor or viewer can be assigned');
-  if (['role', 'remove'].includes(input.action) && !id(input.userId)) fail('invalid-argument', 'Invalid member');
+  if (['role', 'remove', 'transferOwnership'].includes(input.action) && !id(input.userId)) fail('invalid-argument', 'Invalid member');
+  if (input.action === 'transferOwnership' && !id(input.operationId)) fail('invalid-argument', 'Invalid ownership transfer operation');
   if (input.action === 'revoke' && !/^[a-f0-9]{64}$/.test(input.invitationId ?? ''))
     fail('invalid-argument', 'Invalid invitation');
   if (input.action === 'accept' && !/^[a-f0-9]{64}$/.test(input.token ?? ''))
@@ -275,7 +280,14 @@ export async function workspaceCommandHandler(
     ]);
     const space = spaceSnap.data();
     if (!space || space.status !== 'active') fail('failed-precondition', 'Workspace unavailable');
-    assertWorkspaceAccess(memberSnap.data(), ['overview', 'memberNames', 'setMemberName'].includes(input.action) ? 'read' : 'owner', space, uid);
+    if (input.action === 'transferOwnership' && space.ownerUserId === input.userId) {
+      const receipt = space.lastOwnershipTransfer;
+      if (receipt?.operationId === input.operationId && receipt?.fromUserId === uid &&
+        receipt?.toUserId === input.userId && receipt?.previousOwnerRole === input.role) {
+        return { spaceId: input.spaceId, ownerUserId: input.userId, previousOwnerRole: input.role, replayed: true };
+      }
+    }
+    assertWorkspaceAccess(memberSnap.data(), ['overview', 'memberNames', 'setMemberName', 'leave'].includes(input.action) ? 'read' : 'owner', space, uid);
     if (input.action === 'setMemberName') {
       // Self only, including Viewer. A confirmed name cannot be silently replaced.
       const member = memberSnap.data()!;
@@ -465,11 +477,50 @@ export async function workspaceCommandHandler(
       tx.update(reference, { status: 'revoked', revokedAt: now, revokedByUserId: uid });
       return { spaceId: input.spaceId };
     }
+    if (input.action === 'leave') {
+      const member = memberSnap.data();
+      if (!member || member.userId !== uid || member.spaceId !== input.spaceId || member.status !== 'active')
+        fail('failed-precondition', 'Active membership required');
+      if (space.ownerUserId === uid || member.role === 'owner')
+        fail('failed-precondition', 'Transfer workspace ownership before leaving');
+      tx.update(spaceRef.collection('members').doc(uid), {
+        status: 'left', updatedAt: now, leftAt: now, leftByUserId: uid,
+      });
+      tx.set(actorRef.collection('memberships').doc(input.spaceId!), {
+        spaceId: input.spaceId, role: member.role, status: 'left',
+        spaceNameSnapshot: space.name, joinedAt: member.joinedAt ?? member.createdAt ?? now,
+        updatedAt: now, leftAt: now,
+      });
+      return { spaceId: input.spaceId, status: 'left' };
+    }
     const targetRef = spaceRef.collection('members').doc(input.userId!);
     const target = (await tx.get(targetRef)).data();
-    if (input.userId === space.ownerUserId || target?.role === 'owner')
+    if (!target || target.userId !== input.userId || target.spaceId !== input.spaceId || target.status !== 'active' || !['owner', 'editor', 'viewer'].includes(target.role))
+      fail('failed-precondition', 'Active member required');
+    if (input.action === 'transferOwnership') {
+      if (input.userId === uid || input.userId === space.ownerUserId || target.role === 'owner')
+        fail('failed-precondition', 'Choose a different active non-owner member');
+      if (space.ownerUserId !== uid || memberSnap.data()?.role !== 'owner')
+        fail('permission-denied', 'Current canonical owner required');
+      const previousOwner = memberSnap.data()!;
+      const previousOwnerMembership = actorRef.collection('memberships').doc(input.spaceId!);
+      const nextOwnerMembership = db.collection('users').doc(input.userId!).collection('memberships').doc(input.spaceId!);
+      tx.update(spaceRef, { ownerUserId: input.userId, updatedAt: now, ownershipTransferredAt: now, ownershipTransferredByUserId: uid,
+        lastOwnershipTransfer: { operationId: input.operationId, fromUserId: uid, toUserId: input.userId, previousOwnerRole: input.role, transferredAt: now } });
+      tx.update(spaceRef.collection('members').doc(uid), { role: input.role, updatedAt: now, updatedByUserId: uid });
+      tx.update(targetRef, { role: 'owner', updatedAt: now, updatedByUserId: uid, becameOwnerAt: now });
+      tx.set(previousOwnerMembership, {
+        spaceId: input.spaceId, role: input.role, status: 'active', spaceNameSnapshot: space.name,
+        joinedAt: previousOwner.joinedAt ?? previousOwner.createdAt ?? now, updatedAt: now,
+      });
+      tx.set(nextOwnerMembership, {
+        spaceId: input.spaceId, role: 'owner', status: 'active', spaceNameSnapshot: space.name,
+        joinedAt: target.joinedAt ?? target.createdAt ?? now, updatedAt: now,
+      });
+      return { spaceId: input.spaceId, ownerUserId: input.userId, previousOwnerRole: input.role };
+    }
+    if (input.userId === space.ownerUserId || target.role === 'owner')
       fail('permission-denied', 'Owner cannot be removed or reassigned');
-    if (!target || target.status !== 'active') fail('failed-precondition', 'Active member required');
     const updates = input.action === 'remove' ? { status: 'suspended' } : { role: input.role };
     tx.update(targetRef, { ...updates, updatedAt: now, updatedByUserId: uid });
     tx.set(db.collection('users').doc(input.userId!).collection('memberships').doc(input.spaceId!), {

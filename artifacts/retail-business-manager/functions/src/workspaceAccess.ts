@@ -25,3 +25,51 @@ export function assertWorkspaceAccess(
       { code: 'FORBIDDEN' },
     );
 }
+
+
+/**
+ * Destructive lifecycle jobs set this field on the canonical target document.
+ * Call only with the target snapshot read in the same Firestore transaction as
+ * the financial write. Missing fields remain compatible with legacy records;
+ * malformed or non-active values fail closed.
+ */
+export function assertLifecycleTargetWritable(
+  target: unknown,
+  kind: 'customer' | 'merchant' | 'debt',
+): void {
+  if (target === null || typeof target !== 'object' || Array.isArray(target)) return;
+  const value = (target as Record<string, unknown>).lifecycleStatus;
+  if (value === undefined || value === 'active') return;
+  if (value === 'deleting' || value === 'archiving' || value === 'deleted' || value === 'archived') {
+    throw new HttpsError('failed-precondition', `${kind} is in a destructive lifecycle transition`, {
+      code: `${kind.toUpperCase()}_LIFECYCLE_LOCKED`,
+    });
+  }
+  throw new HttpsError('failed-precondition', `${kind} lifecycle state is invalid`, {
+    code: 'LIFECYCLE_STATE_INVALID',
+  });
+}
+
+/**
+ * Archive snapshots must never capture a partially processed destructive lifecycle.
+ * The lifecycle starter increments this workspace barrier in the same transaction
+ * that persists and locks its job. Missing remains compatible with legacy spaces;
+ * malformed values fail closed.
+ */
+export function assertNoActiveLifecycleJobs(space: unknown): void {
+  if (space === null || typeof space !== 'object' || Array.isArray(space)) {
+    throw new HttpsError('failed-precondition', 'Workspace lifecycle state is unavailable', {
+      code: 'LIFECYCLE_BARRIER_INVALID',
+    });
+  }
+  const count = (space as Record<string, unknown>).activeLifecycleJobCount;
+  if (count === undefined || count === 0) return;
+  if (typeof count !== 'number' || !Number.isSafeInteger(count) || count < 0) {
+    throw new HttpsError('failed-precondition', 'Workspace lifecycle barrier is invalid', {
+      code: 'LIFECYCLE_BARRIER_INVALID',
+    });
+  }
+  throw new HttpsError('failed-precondition', 'Archive is paused while workspace records are being processed', {
+    code: 'LIFECYCLE_IN_PROGRESS',
+  });
+}

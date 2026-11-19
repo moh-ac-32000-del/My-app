@@ -1,7 +1,7 @@
 import type { Firestore, Transaction, DocumentReference } from 'firebase-admin/firestore';
 import { HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
 import { closingCashBalances } from './closingCashBalances.js';
-import { assertWorkspaceAccess } from './workspaceAccess.js';
+import { assertNoActiveLifecycleJobs, assertWorkspaceAccess } from './workspaceAccess.js';
 import { merchantOperationFromDocument } from '../../data/merchantDocuments.js';
 import { mergeMerchantJournal } from '../../data/merchantJournal.js';
 import { isArchiveDate } from '../../data/archiveCalendar.js';
@@ -113,6 +113,7 @@ export async function dailyArchiveCommandHandler(
     // A role change/removal races with this transaction, not with an earlier permission check.
     const [space, member, profile] = await Promise.all([tx.get(spaceRef), tx.get(memberRef), tx.get(profileRef)]);
     authorize(space.data(), member.data(), profile.data(), 'write');
+    assertNoActiveLifecycleJobs(space.data());
     if (space.data()?.automaticClosing) throw new HttpsError('failed-precondition', 'Automatic closing controls this workspace');
     const [transactionSnap, debtSnap, paymentSnap, existingArchives, counterSnap, cashSnapshot, merchantSnap] = await Promise.all([
       tx.get(spaceRef.collection('transactions').where('storeId', '==', input.storeId).where('createdAt', '>=', startAt).where('createdAt', '<', endAt)),

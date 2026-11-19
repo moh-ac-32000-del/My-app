@@ -1,6 +1,6 @@
 import React, { useCallback, useRef, useState } from 'react';
 import { ActivityIndicator, Share, Text, View } from 'react-native';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { AppShell, GlassCard, PageHeader, SectionTitle } from '@/components/AppShell';
 import { WorkspaceButton, WorkspaceInput, WorkspaceRolePicker } from '@/components/WorkspaceControls';
 import { WorkspaceClosingSettingsCard } from '@/components/WorkspaceClosingSettingsCard';
@@ -9,6 +9,7 @@ import { useStore } from '@/context/StoreContext';
 import { useMemberNames } from '@/context/MemberNamesContext';
 import { ActorBadge } from '@/components/ActorBadge';
 import { getFirebaseAuth } from '@/services/firebase';
+import { createOperationId } from '@/services/operationId';
 import { useColors } from '@/hooks/useColors';
 import { useI18n } from '@/hooks/useI18n';
 import { formatLocalizedDateTime } from '@/constants/i18n';
@@ -21,6 +22,7 @@ import {
 
 export default function WorkspaceSettingsScreen() {
   const { activeSpaceId, cloudSpace, canManageSpace, sessionKey } = useStore();
+  const router = useRouter();
   const { t, isRTL, language } = useI18n();
   const colors = useColors();
   const { reload: reloadNames } = useMemberNames();
@@ -33,6 +35,10 @@ export default function WorkspaceSettingsScreen() {
   const [refresh, setRefresh] = useState(0);
   const [link, setLink] = useState('');
   const [removeId, setRemoveId] = useState<string | null>(null);
+  const [transferId, setTransferId] = useState<string | null>(null);
+  const [transferRole, setTransferRole] = useState<'editor' | 'viewer'>('viewer');
+  const transferOperationId = useRef<string | null>(null);
+  const [leaveConfirm, setLeaveConfirm] = useState(false);
   const lock = useRef(false);
   const current = useRef(sessionKey);
   current.current = sessionKey;
@@ -44,6 +50,9 @@ export default function WorkspaceSettingsScreen() {
       setFailed(false);
       setLink('');
       setRemoveId(null);
+      setTransferId(null);
+      transferOperationId.current = null;
+      setLeaveConfirm(false);
       if (!activeSpaceId) {
         setLoading(false);
         return;
@@ -67,7 +76,7 @@ export default function WorkspaceSettingsScreen() {
     }, [activeSpaceId, refresh, sessionKey]),
   );
   const run = async (input: WorkspaceRequest) => {
-    if (lock.current || !activeSpaceId || !canManageSpace) return;
+    if (lock.current || !activeSpaceId || (!canManageSpace && input.action !== 'leave')) return;
     lock.current = true;
     setBusy(true);
     setFailed(false);
@@ -75,11 +84,15 @@ export default function WorkspaceSettingsScreen() {
     try {
       const result = await workspaceCommand<{ token?: string }>(input);
       if (current.current !== key) return;
-      if (result.token) {
+      if (input.action === 'leave') {
+        router.replace('/workspaces');
+      } else if (result.token) {
         setLink(workspaceInvitationLink(result.token));
       } else {
         setRefresh((v) => v + 1);
         setRemoveId(null);
+        setTransferId(null);
+        transferOperationId.current = null;
       }
     } catch {
       if (current.current === key) setFailed(true);
@@ -201,6 +214,23 @@ export default function WorkspaceSettingsScreen() {
                               void run({ action: 'role', spaceId: activeSpaceId!, userId: member.userId, role: next });
                           }}
                         />
+                        {transferId === member.userId ? (
+                          <View style={{ gap: 12 }}>
+                            <Text style={text}>{t('workspaceTransferHint')}</Text>
+                            <WorkspaceRolePicker value={transferRole} disabled={busy} onChange={(next) => { transferOperationId.current = null; setTransferRole(next); }} />
+                            <WorkspaceButton
+                              label={t('workspaceTransferConfirm')}
+                              destructive
+                              disabled={busy}
+                              onPress={() => {
+                                const operationId = transferOperationId.current ?? createOperationId();
+                                transferOperationId.current = operationId;
+                                void run({ action: 'transferOwnership', spaceId: activeSpaceId!, userId: member.userId, role: transferRole, operationId });
+                              }}
+                            />
+                            <WorkspaceButton label={t('cancel')} disabled={busy} onPress={() => { setTransferId(null); transferOperationId.current = null; }} />
+                          </View>
+                        ) : null}
                         {removeId === member.userId ? (
                           <View style={{ gap: 12 }}>
                             <Text style={text}>{t('workspaceRemoveHint')}</Text>
@@ -222,6 +252,11 @@ export default function WorkspaceSettingsScreen() {
                             onPress={() => setRemoveId(member.userId)}
                           />
                         )}
+                        <WorkspaceButton
+                          label={t('workspaceTransfer')}
+                          disabled={busy || (transferId !== null && transferId !== member.userId)}
+                          onPress={() => { setRemoveId(null); transferOperationId.current = null; setTransferId(member.userId); }}
+                        />
                       </>
                     ) : null}
                   </GlassCard>
@@ -271,6 +306,20 @@ export default function WorkspaceSettingsScreen() {
                   </GlassCard>
                 ))}
             </>
+          ) : null}
+          {overview.role !== 'owner' ? (
+            <GlassCard style={{ gap: 12, marginTop: 18 }}>
+              <Text style={text}>{t('workspaceLeaveHint')}</Text>
+              {leaveConfirm ? (
+                <>
+                  <Text style={text}>{t('workspaceLeaveConfirm')}</Text>
+                  <WorkspaceButton label={t('workspaceLeave')} destructive disabled={busy} onPress={() => void run({ action: 'leave', spaceId: activeSpaceId! })} />
+                  <WorkspaceButton label={t('cancel')} disabled={busy} onPress={() => setLeaveConfirm(false)} />
+                </>
+              ) : (
+                <WorkspaceButton label={t('workspaceLeave')} destructive disabled={busy} onPress={() => setLeaveConfirm(true)} />
+              )}
+            </GlassCard>
           ) : null}
         </>
       ) : null}

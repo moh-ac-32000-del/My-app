@@ -82,6 +82,20 @@ const runtime = (firestore: ReturnType<typeof fakeFirestore>) => ({
 });
 
 describe('trustedDebtCommand idempotency', () => {
+  it('rejects a customer locked by a destructive lifecycle job before writing a debt', async () => {
+    const firestore = fakeFirestore({
+      'spaces/space-A/customers/customer-A': {
+        id: 'customer-A', isActive: true, storeId: 'store-A', workspaceId: 'space-A',
+        lifecycleStatus: 'deleting',
+      },
+    });
+    await expect(trustedDebtCommandHandler(request() as never, runtime(firestore)))
+      .rejects.toMatchObject({
+        code: 'failed-precondition',
+        details: { code: 'CUSTOMER_LIFECYCLE_LOCKED' },
+      });
+  });
+
   it('rejects a reused operation ID when the debt payload changes', async () => {
     const firestore = fakeFirestore();
 
@@ -103,6 +117,10 @@ describe('trustedDebtCommand idempotency', () => {
   it('replays matching legacy receipts without stored payloads', async () => {
     const processedAt = '2026-10-17T12:00:00.000Z';
     const firestore = fakeFirestore({
+      'spaces/space-A/customers/customer-A': {
+        id: 'customer-A', isActive: true, storeId: 'store-A', workspaceId: 'space-A',
+        lifecycleStatus: 'deleting',
+      },
       'spaces/space-A/debts/debt-A': {
         id: 'debt-A',
         workspaceId: 'space-A',

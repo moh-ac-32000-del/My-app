@@ -10,7 +10,7 @@ import {
 } from '../../data/merchantAccounting.js';
 import { addCustomerExact, legacyAmountExact, planCustomerPayment } from '../../data/customerCreditAccounting.js';
 import { readCustomerCredit, writeCustomerCredit } from './customerCreditState.js';
-import { assertWorkspaceAccess } from './workspaceAccess.js';
+import { assertLifecycleTargetWritable, assertWorkspaceAccess } from './workspaceAccess.js';
 import { financialPostingTime } from '../../data/automaticClosing.js';
 import { prepareMerchantReversal, reverseMerchantOperation } from './merchantReversal.js';
 import { merchantOperationDate, validateMerchantSettings } from '../../data/merchantSettings.js';
@@ -312,6 +312,7 @@ export async function merchantCommandHandler(request: CallableRequest<unknown>, 
       }
       return { ...receipt.result, outcome: 'replayed' };
     }
+    assertLifecycleTargetWritable(merchant, 'merchant');
     const now = financialPostingTime(spaceSnap.data()!, runtime.now());
     const replacementOriginal = input.replacesOperationId
       ? (await tx.get(space.collection('merchantOperations').doc(input.replacesOperationId))).data() : null;
@@ -597,6 +598,7 @@ export async function merchantCommandHandler(request: CallableRequest<unknown>, 
     const customerRef = input.action === 'directPayment' ? space.collection('customers').doc(input.customerId!) : null;
     const customerSnap = customerRef ? await tx.get(customerRef) : null;
     const customer = customerSnap?.data();
+    assertLifecycleTargetWritable(customer, 'customer');
     if (
       customerRef &&
       (!customerSnap?.exists ||

@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { DocumentReference, Transaction } from 'firebase-admin/firestore';
 import { HttpsError } from 'firebase-functions/v2/https';
+import { assertLifecycleTargetWritable } from './workspaceAccess.js';
 import type { CurrencyCode } from '../../constants/currencies.js';
 import type { PartyBalance } from '../../data/merchantAccounting.js';
 import { summarizeMerchantBalances } from '../../data/merchantAccounting.js';
@@ -137,6 +138,7 @@ export async function prepareMerchantReversal({
       throw new HttpsError('data-loss', 'Original linked payment is inconsistent');
     const customerSnap = await tx.get(space.collection('customers').doc(original.customerId));
     const customer = customerSnap.data();
+    assertLifecycleTargetWritable(customer, 'customer');
     if (
       !customerSnap.exists ||
       customer?.id !== original.customerId ||

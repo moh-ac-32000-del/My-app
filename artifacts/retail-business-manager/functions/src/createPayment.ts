@@ -1,6 +1,6 @@
 import type { Firestore } from 'firebase-admin/firestore';
 import { HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
-import { assertWorkspaceAccess } from './workspaceAccess.js';
+import { assertLifecycleTargetWritable, assertWorkspaceAccess } from './workspaceAccess.js';
 import { automaticClosingPolicy, financialPostingTime, financialWindow } from '../../data/automaticClosing.js';
 
 const SUPPORTED_CURRENCIES = new Set(['TRY', 'USD', 'EUR', 'GBP', 'SAR', 'AED', 'SYP']);
@@ -82,6 +82,7 @@ export async function createPaymentHandler(
       }
       if (customerRef) {
         const customer = customerSnap?.data();
+        assertLifecycleTargetWritable(customer, 'customer');
         if (
           !customerSnap?.exists ||
           customer?.id !== input.customerId ||
