@@ -268,7 +268,6 @@ export async function merchantCommandHandler(request: CallableRequest<unknown>, 
     if (profileSnap.data()?.storeId !== input.storeId)
       throw new HttpsError('permission-denied', 'Store scope mismatch');
     const merchant = merchantSnap.data();
-    assertLifecycleTargetWritable(merchant, 'merchant');
     if (
       merchantSnap.exists &&
       (merchant?.id !== input.merchantId ||
@@ -313,6 +312,7 @@ export async function merchantCommandHandler(request: CallableRequest<unknown>, 
       }
       return { ...receipt.result, outcome: 'replayed' };
     }
+    assertLifecycleTargetWritable(merchant, 'merchant');
     const now = financialPostingTime(spaceSnap.data()!, runtime.now());
     const replacementOriginal = input.replacesOperationId
       ? (await tx.get(space.collection('merchantOperations').doc(input.replacesOperationId))).data() : null;
