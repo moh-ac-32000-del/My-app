@@ -70,7 +70,26 @@ Merchant cash operations link merchant operations to transactions using merchant
 - `index.ts` registers the existing callable functions. No lifecycle-job worker or lifecycle trigger is currently registered.
 - Firestore Rules deny direct writes to core financial collections. Any new destructive path must remain trusted-backend-only; do not add client write permissions.
 
-## 5. Mandatory audit still outstanding before implementation
+## 5. Newly added lifecycle write and archive barriers
+
+- Trusted financial command handlers now call `assertLifecycleTargetWritable`
+  for customer, merchant, or debt targets where applicable. Legacy records with
+  no `lifecycleStatus` remain writable; active records are writable; destructive
+  states and malformed values fail closed. Receipt replay checks are intentionally
+  performed before the lifecycle guard so a completed matching operation can be
+  replayed without new writes after the target is locked.
+- Client Firestore Rules prevent client-controlled lifecycle status changes and
+  updates to customers carrying a non-active lifecycle status. These Rules remain
+  source changes only and have not been deployed.
+- Manual archive creation and automatic archive closing now reject a workspace
+  with positive `activeLifecycleJobCount` inside the archive transaction. This
+  barrier is not active yet because no lifecycle starter increments the counter.
+  The starter must atomically create the job, lock its target, and increment the
+  workspace counter; terminal completion must decrement it exactly once.
+- These protections do not prove that every writer is covered. Continue the
+  repository-wide audit before creating the first operational job worker.
+
+## 6. Mandatory audit still outstanding before implementation
 
 The following must be checked against all source writers, readers, indexes and emulator tests before any production-capable deletion code is written:
 
