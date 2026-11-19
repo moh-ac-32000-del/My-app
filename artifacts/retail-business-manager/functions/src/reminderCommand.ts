@@ -244,12 +244,14 @@ async function listAndReconcile(
       amount?: unknown;
       settledAt?: unknown;
       dueDate?: unknown;
+      lifecycleStatus?: unknown;
     }> = debtSnapshot.docs.map((doc) => ({
       id: doc.id,
       ...(doc.data() as {
         amount?: unknown;
         settledAt?: unknown;
         dueDate?: unknown;
+        lifecycleStatus?: unknown;
       }),
     }));
     const byDebt = new Map(debts.map((debt) => [debt.id, debt]));
@@ -259,6 +261,8 @@ async function listAndReconcile(
     const pending: Array<() => void> = [];
 
     for (const debt of debts) {
+      // Never recreate generated reminders for a target already locked by a lifecycle job.
+      if (debt.lifecycleStatus !== undefined && debt.lifecycleStatus !== 'active') continue;
       if (
         typeof debt.amount !== 'number' ||
         debt.amount <= 0 ||
@@ -314,6 +318,7 @@ async function listAndReconcile(
       const debt = byDebt.get(reminder.debtId);
       const shouldExist = Boolean(
         debt &&
+        (debt.lifecycleStatus === undefined || debt.lifecycleStatus === 'active') &&
         typeof debt.amount === 'number' &&
         debt.amount > 0 &&
         !debt.settledAt &&
