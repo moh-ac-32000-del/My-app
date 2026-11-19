@@ -102,7 +102,7 @@ The following must be checked against all source writers, readers, indexes and e
 7. Account deletion ownership-transfer contract and Auth deletion ordering.
 8. Emulator coverage for interrupted multi-page jobs, retries, concurrent writes, stale locks, malformed/cross-scope documents, linked directPayment reversal, shared cash links and preservation of another workspace.
 
-## 6. Implementation guardrails
+## 7. Implementation guardrails
 
 - No client-side cascade loops, unbounded batches, full-workspace scans for single-entity deletion, or polling loops.
 - Use server-side bounded pages with stable cursors, checkpoints, per-page scope validation, lease/lock expiry and idempotent phase transitions.
