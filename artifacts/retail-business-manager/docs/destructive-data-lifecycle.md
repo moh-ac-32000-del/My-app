@@ -93,6 +93,25 @@ Before Auth deletion:
 
 If ownership resolution is ambiguous, stop and ask the user to resolve it; do not choose a successor automatically.
 
+## Archive consistency barrier — partial implementation
+
+The trusted manual archive command and automatic-closing worker now call
+`assertNoActiveLifecycleJobs(space)` inside the same Firestore transaction that
+reads the workspace document used for the archive snapshot. A positive
+`activeLifecycleJobCount` blocks snapshot creation with
+`LIFECYCLE_IN_PROGRESS`; malformed counter values fail closed. Legacy workspaces
+without the field remain compatible.
+
+**Important:** no lifecycle job starter/worker currently increments or decrements
+this counter. This is a protective gate only, not an operational lifecycle lock.
+Before enabling any destructive job, its start transaction must atomically persist
+the job, set the target lifecycle lock, and increment this counter; successful or
+safely aborted terminal completion must decrement it exactly once. The automatic
+closing transaction and manual archive transaction both read the same workspace
+document, so this barrier participates in Firestore transaction conflict/retry
+semantics. This does not yet protect other snapshot/export writers unless they are
+also shown to read the barrier.
+
 ## Required verification
 
 - Unit/contract tests for validation, state transitions, pagination, idempotency, and retry.
