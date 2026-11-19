@@ -1,5 +1,5 @@
 import { HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
-import { assertWorkspaceAccess } from './workspaceAccess.js';
+import { assertLifecycleTargetWritable, assertWorkspaceAccess } from './workspaceAccess.js';
 import { financialPostingTime } from '../../data/automaticClosing.js';
 import { readCustomerCredit, writeCustomerCredit } from './customerCreditState.js';
 import { legacyAmountExact, planCustomerPayment } from '../../data/customerCreditAccounting.js';
@@ -62,6 +62,7 @@ export async function settleCustomerDebtHandler(
           code: 'STORE_SCOPE_MISMATCH',
         });
       }
+      assertLifecycleTargetWritable(customerSnap.data(), 'customer');
       if (
         !customerSnap.exists ||
         customerSnap.data()?.isActive !== true ||
