@@ -1,6 +1,6 @@
 import type { CollectionReference, DocumentReference, Firestore, Transaction } from 'firebase-admin/firestore';
 import { HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
-import { assertWorkspaceAccess } from './workspaceAccess.js';
+import { assertLifecycleTargetWritable, assertWorkspaceAccess } from './workspaceAccess.js';
 import { activeWorkspaceRole } from '../../data/workspaceAccess.js';
 
 const SYSTEM_DUE_DATE_NOTE = 'system:due-date';
@@ -66,6 +66,7 @@ export async function reminderCommandHandler(
         });
       }
       const debt = debtSnap.data()!;
+      assertLifecycleTargetWritable(debt, 'debt');
       if (typeof debt.amount !== 'number' || debt.amount <= 0 || debt.settledAt) {
         throw new HttpsError('failed-precondition', 'A reminder requires an outstanding debt', { code: 'DEBT_NOT_OUTSTANDING' });
       }
