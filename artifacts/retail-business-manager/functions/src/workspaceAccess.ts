@@ -25,3 +25,27 @@ export function assertWorkspaceAccess(
       { code: 'FORBIDDEN' },
     );
 }
+
+
+/**
+ * Destructive lifecycle jobs set this field on the canonical target document.
+ * Call only with the target snapshot read in the same Firestore transaction as
+ * the financial write. Missing fields remain compatible with legacy records;
+ * malformed or non-active values fail closed.
+ */
+export function assertLifecycleTargetWritable(
+  target: unknown,
+  kind: 'customer' | 'merchant' | 'debt',
+): void {
+  if (target === null || typeof target !== 'object' || Array.isArray(target)) return;
+  const value = (target as Record<string, unknown>).lifecycleStatus;
+  if (value === undefined || value === 'active') return;
+  if (value === 'deleting' || value === 'archiving' || value === 'deleted' || value === 'archived') {
+    throw new HttpsError('failed-precondition', `${kind} is in a destructive lifecycle transition`, {
+      code: `${kind.toUpperCase()}_LIFECYCLE_LOCKED`,
+    });
+  }
+  throw new HttpsError('failed-precondition', `${kind} lifecycle state is invalid`, {
+    code: 'LIFECYCLE_STATE_INVALID',
+  });
+}
