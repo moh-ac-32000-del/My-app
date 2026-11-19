@@ -110,6 +110,18 @@ describe('daily archive trusted balance capture', () => {
     expect(db.reads.filter((path) => path.endsWith('/transactions'))).toHaveLength(6);
   });
 
+  it('pauses archive creation while a destructive lifecycle job is active', async () => {
+    const db = fakeFirestore();
+    db.documents['spaces/space-a'].activeLifecycleJobCount = 1;
+    await expect(close(db)).rejects.toMatchObject({
+      code: 'failed-precondition',
+      details: { code: 'LIFECYCLE_IN_PROGRESS' },
+    });
+    expect(db.writes).toEqual([]);
+    expect(db.documents['spaces/space-a/dailyArchives/2026-10-18_000001']).toBeUndefined();
+    expect(db.documents['spaces/space-a/dailyClosingCounters/store-a_2026-10-18']).toBeUndefined();
+  });
+
   it('does not write an archive or counter when a cash record is invalid', async () => {
     const db = fakeFirestore();
     db.documents['spaces/space-a/transactions/bad'] = cash('bad', NaN, now);
