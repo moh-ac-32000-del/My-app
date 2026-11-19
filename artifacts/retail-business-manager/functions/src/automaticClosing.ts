@@ -9,6 +9,7 @@ import {
 import { closingSettings, workspaceDayBounds } from '../../data/workspaceClosing.js';
 import { closingCashBalances } from './closingCashBalances.js';
 import { projectArchiveSnapshot, type ArchiveRecord } from './dailyArchiveCommand.js';
+import { assertNoActiveLifecycleJobs } from './workspaceAccess.js';
 
 const LIMIT = 500;
 const MAX_SPACES = 3;
@@ -141,6 +142,7 @@ export async function closeAutomaticPeriod(
     ]);
     const space = spaceSnap.data();
     if (space?.status !== 'active' || !space.automaticClosing) return 'not-due';
+    assertNoActiveLifecycleJobs(space);
     const policy = automaticClosingPolicy(space.automaticClosing);
     if (policy.failures >= 3 || space.autoClosingNextAt > now || nextClosingAt(policy) > now) return 'not-due';
     const storeId = profile.data()?.storeId;
