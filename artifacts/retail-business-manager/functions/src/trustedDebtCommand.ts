@@ -1,6 +1,6 @@
 import { FieldValue, type Firestore } from 'firebase-admin/firestore';
 import { HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
-import { assertWorkspaceAccess } from './workspaceAccess.js';
+import { assertLifecycleTargetWritable, assertWorkspaceAccess } from './workspaceAccess.js';
 import { financialPostingTime } from '../../data/automaticClosing.js';
 import { readCustomerCredit, writeCustomerCredit } from './customerCreditState.js';
 import { legacyAmountExact, planCustomerCharge } from '../../data/customerCreditAccounting.js';
@@ -60,6 +60,7 @@ export async function trustedDebtCommandHandler(
         });
       }
       const customer = customerSnap.data();
+      assertLifecycleTargetWritable(customer, 'customer');
       if (
         !customerSnap.exists ||
         customer?.id !== input.customerId ||
