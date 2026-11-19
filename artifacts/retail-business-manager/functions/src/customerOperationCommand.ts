@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { FieldValue, type Firestore } from 'firebase-admin/firestore';
 import { HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
-import { assertWorkspaceAccess } from './workspaceAccess.js';
+import { assertLifecycleTargetWritable, assertWorkspaceAccess } from './workspaceAccess.js';
 import { readCustomerCredit, writeCustomerCredit } from './customerCreditState.js';
 import { financialPostingTime } from '../../data/automaticClosing.js';
 import { planCustomerDebtAmendment } from '../../data/customerDebtAmendment.js';
@@ -68,6 +68,7 @@ export async function customerOperationCommandHandler(request: CallableRequest<u
     assertWorkspaceAccess(member.data(), 'write');
     if (profile.data()?.storeId !== input.storeId) throw new HttpsError('permission-denied', 'Store scope mismatch');
     const customerData = customer.data();
+    assertLifecycleTargetWritable(customerData, 'customer');
     if (!customer.exists || customerData?.id !== input.customerId || customerData.workspaceId !== input.spaceId ||
       customerData.storeId !== input.storeId || customerData.isActive !== true) throw new HttpsError('not-found', 'Active customer unavailable');
     if (receipt.exists) {
