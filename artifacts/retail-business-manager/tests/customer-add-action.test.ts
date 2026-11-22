@@ -166,6 +166,18 @@ describe('single customer-add entry point (handler tests, not physical-device ac
     render();
     expect(state.form?.visible).toBe(true);
   });
+  it('reuses the same customer document ID when retrying an uncertain save', async () => {
+    state.create.mockRejectedValueOnce(new Error('network-timeout'));
+    render();
+    state.buttons['add-customer-header']();
+    render();
+    await state.form!.onSave({ name: 'Retry customer' });
+    const firstId = state.create.mock.calls[0][0].id;
+    await state.form!.onSave({ name: 'Retry customer' });
+    const secondId = state.create.mock.calls[1][0].id;
+    expect(secondId).toBe(firstId);
+    expect(state.create).toHaveBeenCalledTimes(2);
+  });
   it('ignores repeated submissions while the first customer write is still pending', async () => {
     let finish!: () => void;
     state.create.mockImplementationOnce(() => new Promise<void>((resolve) => { finish = resolve; }));
