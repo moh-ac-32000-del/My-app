@@ -115,6 +115,18 @@ export async function reminderCommandHandler(
         });
       }
       if (existing.deletedAt) return;
+      // Serialize reminder writes with customer/debt lifecycle locks. A deletion job
+      // that locks the debt and this command cannot both commit from stale reads.
+      const debtSnapshot = await transaction.get(spaceRef.collection('debts').doc(existing.debtId));
+      if (debtSnapshot.exists) {
+        const debt = debtSnapshot.data();
+        if (debt?.storeId !== input.storeId || debt?.workspaceId !== input.spaceId) {
+          throw new HttpsError('data-loss', 'Reminder debt reference is outside this workspace', {
+            code: 'REMINDER_DEBT_SCOPE_MISMATCH',
+          });
+        }
+        assertLifecycleTargetWritable(debt, 'debt');
+      }
       if (existing.note === SYSTEM_DUE_DATE_NOTE && input.status === 'pending') {
         throw new HttpsError('failed-precondition', 'Generated reminders cannot be reset manually', { code: 'SYSTEM_REMINDER_STATUS' });
       }
