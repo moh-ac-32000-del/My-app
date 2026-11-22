@@ -11,13 +11,18 @@ const state = vi.hoisted(() => ({
   slots: [] as unknown[],
   buttons: {} as Record<string, () => void>,
   create: vi.fn(),
-  form: null as null | { visible: boolean; onClose: () => void; onSave: (draft: any) => Promise<void> },
+  form: null as null | { visible: boolean; onClose: () => void; onSave: (draft: any) => Promise<boolean> },
+  guardRef: { current: boolean } | null,
 }));
 // A bounded state harness verifies the actual header/form handlers without native runtime or Firebase writes.
 vi.mock('react', async (importOriginal) => {
   const actual = await importOriginal<typeof import('react')>();
   return {
     ...actual,
+    useRef: (initial: unknown) => {
+      state.guardRef ??= { current: initial as boolean };
+      return state.guardRef;
+    },
     useState: (initial: unknown) => {
       const index = state.cursor++;
       if (!(index in state.slots)) state.slots[index] = initial;
@@ -116,6 +121,7 @@ beforeEach(() => {
   state.slots = [];
   state.buttons = {};
   state.form = null;
+  state.guardRef = null;
   state.create.mockReset();
   state.create.mockResolvedValue(undefined);
 });
@@ -159,6 +165,20 @@ describe('single customer-add entry point (handler tests, not physical-device ac
     await state.form!.onSave({ name: 'Test' });
     render();
     expect(state.form?.visible).toBe(true);
+  });
+  it('ignores repeated submissions while the first customer write is still pending', async () => {
+    let finish!: () => void;
+    state.create.mockImplementationOnce(() => new Promise<void>((resolve) => { finish = resolve; }));
+    render();
+    state.buttons['add-customer-header']();
+    render();
+    const submit = state.form!.onSave;
+    const first = submit({ name: 'Repeated tap' });
+    const second = submit({ name: 'Repeated tap' });
+    expect(state.create).toHaveBeenCalledOnce();
+    finish();
+    await Promise.all([first, second]);
+    expect(state.create).toHaveBeenCalledOnce();
   });
   it('allows Editor to open the same form, but does not show any add action to Viewer', () => {
     state.role = 'editor';
