@@ -120,7 +120,7 @@ export async function reminderCommandHandler(
       const debtSnapshot = await transaction.get(spaceRef.collection('debts').doc(existing.debtId));
       if (debtSnapshot.exists) {
         const debt = debtSnapshot.data();
-        if (debt?.storeId !== input.storeId || debt?.workspaceId !== input.spaceId) {
+        if (debt?.storeId !== input.storeId) {
           throw new HttpsError('data-loss', 'Reminder debt reference is outside this workspace', {
             code: 'REMINDER_DEBT_SCOPE_MISMATCH',
           });
