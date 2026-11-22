@@ -145,7 +145,7 @@ export function CustomerFormModal({
               </Pressable>
               <Pressable testID="save-customer-form" disabled={isSaving} onPress={submit} style={({ pressed }) => [styles.primaryButton, { backgroundColor: colors.primary }, pressed && styles.pressed]}>
                 <Ionicons name="checkmark-circle-outline" size={18} color={colors.primaryForeground} />
-                <Text style={[styles.primaryText, { color: colors.primaryForeground }]}>{isSaving ? t('loading') : initialCustomer ? t('saveChanges') : t('add')}</Text>
+                <Text style={[styles.primaryText, { color: colors.primaryForeground }]}>{isSaving ? t('followUpSaving') : initialCustomer ? t('saveChanges') : t('add')}</Text>
               </Pressable>
             </View>
           </KeyboardAwareScrollViewCompat>
