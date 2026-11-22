@@ -12,7 +12,7 @@ const state = vi.hoisted(() => ({
   buttons: {} as Record<string, () => void>,
   create: vi.fn(),
   form: null as null | { visible: boolean; onClose: () => void; onSave: (draft: any) => Promise<boolean> },
-  guardRef: { current: boolean } | null,
+  guardRef: null as { current: boolean } | null,
 }));
 // A bounded state harness verifies the actual header/form handlers without native runtime or Firebase writes.
 vi.mock('react', async (importOriginal) => {
