@@ -12,7 +12,8 @@ const state = vi.hoisted(() => ({
   buttons: {} as Record<string, () => void>,
   create: vi.fn(),
   form: null as null | { visible: boolean; onClose: () => void; onSave: (draft: any) => Promise<boolean> },
-  guardRef: null as { current: boolean } | null,
+  refCursor: 0,
+  refs: [] as Array<{ current: unknown }>,
 }));
 // A bounded state harness verifies the actual header/form handlers without native runtime or Firebase writes.
 vi.mock('react', async (importOriginal) => {
@@ -20,8 +21,9 @@ vi.mock('react', async (importOriginal) => {
   return {
     ...actual,
     useRef: (initial: unknown) => {
-      state.guardRef ??= { current: initial as boolean };
-      return state.guardRef;
+      const index = state.refCursor++;
+      if (!state.refs[index]) state.refs[index] = { current: initial };
+      return state.refs[index];
     },
     useState: (initial: unknown) => {
       const index = state.cursor++;
@@ -110,6 +112,7 @@ import CustomersScreen from '@/app/customers';
 
 function render() {
   state.cursor = 0;
+  state.refCursor = 0;
   state.buttons = {};
   return renderToStaticMarkup(React.createElement(CustomersScreen));
 }
@@ -118,10 +121,11 @@ beforeEach(() => {
   state.language = 'ar';
   state.platform = 'web';
   state.cursor = 0;
+  state.refCursor = 0;
+  state.refs = [];
   state.slots = [];
   state.buttons = {};
   state.form = null;
-  state.guardRef = null;
   state.create.mockReset();
   state.create.mockResolvedValue(undefined);
 });
