@@ -43,3 +43,40 @@ The latest reviewed head passed both GitHub Actions jobs in run [45081386226](ht
 ## Production-data impact of this review
 
 No Firebase production reads, writes, migrations, deletes, or deployments were performed. This document and the associated source-only branch changes do not directly alter live financial records. If this branch were later merged/deployed, only code paths actually deployed and subsequently invoked could affect behavior; destructive operations must remain unavailable until the gates above pass.
+
+
+## Follow-up verification — 2026-11-23
+
+### Latest branch CI
+- The current reviewed branch head `7c97f22b56e10986f00b10ed3e5620131b84e742` has PR-triggered CI run [45198651316](https://github.com/moh-ac-32000-del/My-app/actions/runs/45198651316).
+- Both jobs completed successfully: `check` and `firestore-rules`.
+- The `check` job completed TypeScript checks, Expo configuration validation, web export, Functions typecheck, tests, and independent static build.
+- The `firestore-rules` job completed Firestore Rules emulator tests and workspace transaction emulator tests.
+- This supersedes the earlier note that the documentation-only head had no visible CI run. It is still repository/emulator evidence only, not a live Firebase data-integrity or backup/restore test.
+
+### Additional writer and trigger inspection
+Inspected the current branch implementations and registration points for:
+- `createCashTransaction`, `createPayment`, `trustedDebtCommand`, `settleCustomerDebt`, and `customerOperationCommand`;
+- `merchantCommand` and `merchantReversal`;
+- `reminderCommand`, `dailyArchiveCommand`, and `automaticClosing`;
+- `merchantSettingsCommand`, `storeProfileCommand`, `bootstrapPrimarySpace`, and `workspaceCommand`;
+- `pushDeviceCommand`, notification dispatch, scheduled notification dispatch, and debt/reminder document-written triggers.
+
+Confirmed from source:
+- Customer-targeted financial paths reviewed read the customer and call `assertLifecycleTargetWritable` in the transaction before writing customer-linked debt/payment/merchant effects. Merchant command also checks the merchant lifecycle state before merchant operations.
+- Reminder update/delete paths read the linked debt and check its lifecycle state in the transaction.
+- Manual archive creation and scheduled automatic closing call `assertNoActiveLifecycleJobs`; archive listing with current-status annotation is read-only.
+- Workspace membership and ownership commands write workspace/member/membership metadata; the reviewed code documents these as distinct from financial-record mutation.
+- Notification triggers and dispatch update push-device/delivery metadata; they do not themselves perform financial posting.
+
+### Remaining limitations / review gates
+- The inspected source still contains no lifecycle job starter, durable lifecycle-job collection protocol, lease-fenced worker, bounded deletion processor, or terminal dependency verifier. The pure lifecycle protocol remains a foundation, not an executable deletion engine.
+- The workspace lifecycle barrier has no production job lifecycle that safely increments and releases it. It therefore cannot currently coordinate an actual destructive job.
+- `createCashTransaction` is a workspace-level cash movement and does not carry a customer target lock; this is expected for standalone cash entries, but deletion design must explicitly establish whether any legacy or future customer-linked cash records exist and preserve cash history independently of customer deletion.
+- `createPayment` can carry both `customerId` and `transactionId`; the deletion design must retain the payment, cash transaction, operation receipt, and archive evidence or replace customer identity with a safe historical snapshot under a separately tested policy. Do not cascade-delete these financial records.
+- Archive projection reads customer names to produce historical journal snapshots. If a customer document is removed, the source projection may no longer resolve that name; existing archive snapshots must remain immutable, and the deletion plan must not rewrite them.
+- Merchant direct-payment/reversal paths create linked customer debt/payment and cash/merchant-operation records. Their complete cross-reference retention and correction behavior still needs a formal relationship matrix and dedicated emulator fixtures before a customer or merchant deletion worker is implemented.
+- Merchant settings and workspace/store profile changes were inspected as separate metadata paths; their concurrency interaction with future lifecycle operations still needs an explicit policy.
+- No production Firebase data was read or changed. No Rules or Functions were deployed. No backup/restore drill against a separate Firebase project has yet been evidenced.
+
+**Decision:** keep PR #77 Draft and do not merge/deploy. Continue with a relationship matrix and a customer-only lifecycle design; do not implement broad cascade deletion until financial references, legacy schemas, archive invariants, retries, and concurrent writes are covered by emulator tests.
