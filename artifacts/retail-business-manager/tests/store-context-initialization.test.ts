@@ -161,7 +161,7 @@ describe('cloud workspace discovery', () => {
   });
   it('does not bootstrap over revoked existing memberships', async () => {
     mocks.discoverUserSpaces.mockResolvedValueOnce({memberships:[{spaceId:'removed',status:'suspended'}],primarySpaceId:null,lastActiveSpaceId:null});
-    await expect(resolveActiveSpaceForUser(firebaseUser.uid)).rejects.toThrow('activeWorkspaceMembershipMissing');
+    await expect(resolveActiveSpaceForUser(firebaseUser.uid)).resolves.toBeNull();
     expect(mocks.bootstrapPrimarySpace).not.toHaveBeenCalled();
   });
 });

@@ -1,5 +1,5 @@
 import { HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
-import { assertWorkspaceAccess } from './workspaceAccess.js';
+import { assertLifecycleTargetWritable, assertWorkspaceAccess } from './workspaceAccess.js';
 import { financialPostingTime } from '../../data/automaticClosing.js';
 import { readCustomerCredit, writeCustomerCredit } from './customerCreditState.js';
 import { legacyAmountExact, planCustomerPayment } from '../../data/customerCreditAccounting.js';
@@ -98,6 +98,7 @@ export async function settleCustomerDebtHandler(
           processedAt: String(receipt.processedAt ?? ''),
         };
       }
+      assertLifecycleTargetWritable(customerSnap.data(), 'customer');
 
       const matchingDebts = debtSnaps.docs
         .map((snapshot) => ({ ref: snapshot.ref, data: snapshot.data() }))

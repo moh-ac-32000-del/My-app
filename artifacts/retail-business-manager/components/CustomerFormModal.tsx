@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -66,17 +66,21 @@ export function CustomerFormModal({
   visible: boolean;
   initialCustomer?: Customer | null;
   onClose: () => void;
-  onSave: (draft: CustomerDraft) => void;
+  onSave: (draft: CustomerDraft) => Promise<boolean | void> | boolean | void;
 }) {
   const colors = useColors();
   const { t, isRTL } = useI18n();
   const insets = useSafeAreaInsets();
   const [draft, setDraft] = useState<CustomerDraft>(emptyDraft);
+  const [isSaving, setIsSaving] = useState(false);
+  const submitLock = useRef(false);
 
   useEffect(() => {
     if (!visible) {
       return;
     }
+    submitLock.current = false;
+    setIsSaving(false);
     setDraft({
       name: initialCustomer?.name ?? '',
       phone: initialCustomer?.phone ?? '',
@@ -89,13 +93,25 @@ export function CustomerFormModal({
     setDraft((current) => ({ ...current, [field]: value }));
   };
 
-  const submit = () => {
-    onSave({
-      name: draft.name.trim(),
-      phone: draft.phone?.trim() || undefined,
-      address: draft.address?.trim() || undefined,
-      notes: draft.notes?.trim() || undefined,
-    });
+  const submit = async () => {
+    if (submitLock.current || isSaving) return;
+    submitLock.current = true;
+    setIsSaving(true);
+    try {
+      const saved = await onSave({
+        name: draft.name.trim(),
+        phone: draft.phone?.trim() || undefined,
+        address: draft.address?.trim() || undefined,
+        notes: draft.notes?.trim() || undefined,
+      });
+      if (saved === false) {
+        submitLock.current = false;
+        setIsSaving(false);
+      }
+    } catch {
+      submitLock.current = false;
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -107,7 +123,7 @@ export function CustomerFormModal({
               <Text style={[styles.title, { color: colors.foreground, textAlign: isRTL ? 'right' : 'left' }]}>{initialCustomer ? t('editCustomer') : t('addCustomer')}</Text>
               <Text style={[styles.hint, { color: colors.mutedForeground, textAlign: isRTL ? 'right' : 'left' }]}>{t('customerFormHint')}</Text>
             </View>
-            <Pressable testID="close-customer-form" accessibilityLabel={t('close')} onPress={onClose} style={({ pressed }) => [styles.closeButton, { borderColor: colors.border, backgroundColor: colors.input }, pressed && styles.pressed]}>
+            <Pressable testID="close-customer-form" accessibilityLabel={t('close')} disabled={isSaving} onPress={onClose} style={({ pressed }) => [styles.closeButton, { borderColor: colors.border, backgroundColor: colors.input }, pressed && styles.pressed]}>
               <Ionicons name="close" size={20} color={colors.foreground} />
             </Pressable>
           </View>
@@ -124,12 +140,12 @@ export function CustomerFormModal({
             <FormField label={t('customerNotes')} value={draft.notes ?? ''} onChangeText={(value) => updateField('notes', value)} placeholder={t('customerNotesPlaceholder')} icon="document-text-outline" multiline testID="customer-notes-input" />
 
             <View style={[styles.actions, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
-              <Pressable testID="cancel-customer-form" onPress={onClose} style={({ pressed }) => [styles.secondaryButton, { borderColor: colors.border, backgroundColor: colors.input }, pressed && styles.pressed]}>
+              <Pressable testID="cancel-customer-form" disabled={isSaving} onPress={onClose} style={({ pressed }) => [styles.secondaryButton, { borderColor: colors.border, backgroundColor: colors.input }, pressed && styles.pressed]}>
                 <Text style={[styles.secondaryText, { color: colors.foreground }]}>{t('cancel')}</Text>
               </Pressable>
-              <Pressable testID="save-customer-form" onPress={submit} style={({ pressed }) => [styles.primaryButton, { backgroundColor: colors.primary }, pressed && styles.pressed]}>
+              <Pressable testID="save-customer-form" disabled={isSaving} onPress={submit} style={({ pressed }) => [styles.primaryButton, { backgroundColor: colors.primary }, pressed && styles.pressed]}>
                 <Ionicons name="checkmark-circle-outline" size={18} color={colors.primaryForeground} />
-                <Text style={[styles.primaryText, { color: colors.primaryForeground }]}>{initialCustomer ? t('saveChanges') : t('add')}</Text>
+                <Text style={[styles.primaryText, { color: colors.primaryForeground }]}>{isSaving ? t('followUpSaving') : initialCustomer ? t('saveChanges') : t('add')}</Text>
               </Pressable>
             </View>
           </KeyboardAwareScrollViewCompat>

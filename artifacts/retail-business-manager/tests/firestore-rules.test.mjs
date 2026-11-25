@@ -535,6 +535,14 @@ try {
         'ALLOW',
       );
       await runCase(
+        'Customer — client cannot create a reserved lifecycle state',
+        () => setDoc(
+          customerReference(userCForCustomers, 'space-A', 'customer-lifecycle-forged'),
+          customerDocument('customer-lifecycle-forged', { workspaceId: 'space-A', lifecycleStatus: 'deleting' }),
+        ),
+        'DENY',
+      );
+      await runCase(
         'Customer — mismatched store ID on create is denied',
         () => setDoc(
           customerReference(userCForCustomers, 'space-A', 'customer-wrong-store'),
@@ -557,6 +565,33 @@ try {
           { name: 'Updated Customer' },
         ),
         'ALLOW',
+      );
+      await runCase(
+        'Customer — client cannot set lifecycle state',
+        () => updateDoc(
+          customerReference(userCForCustomers, 'space-A', 'customer-A'),
+          { lifecycleStatus: 'deleting' },
+        ),
+        'DENY',
+      );
+      await testEnvironment.withSecurityRulesDisabled(async (context) => {
+        await updateDoc(customerReference(context, 'space-A', 'customer-A'), { lifecycleStatus: 'deleting' });
+      });
+      await runCase(
+        'Customer — client cannot edit a target locked by trusted lifecycle job',
+        () => updateDoc(
+          customerReference(userCForCustomers, 'space-A', 'customer-A'),
+          { name: 'Concurrent edit' },
+        ),
+        'DENY',
+      );
+      await runCase(
+        'Customer — client cannot clear a trusted lifecycle lock',
+        () => updateDoc(
+          customerReference(userCForCustomers, 'space-A', 'customer-A'),
+          { lifecycleStatus: 'active' },
+        ),
+        'DENY',
       );
       await runCase(
         'Customer — active member cannot hard-delete a document',

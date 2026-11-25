@@ -11,13 +11,20 @@ const state = vi.hoisted(() => ({
   slots: [] as unknown[],
   buttons: {} as Record<string, () => void>,
   create: vi.fn(),
-  form: null as null | { visible: boolean; onClose: () => void; onSave: (draft: any) => Promise<void> },
+  form: null as null | { visible: boolean; onClose: () => void; onSave: (draft: any) => Promise<boolean> },
+  refCursor: 0,
+  refs: [] as Array<{ current: unknown }>,
 }));
 // A bounded state harness verifies the actual header/form handlers without native runtime or Firebase writes.
 vi.mock('react', async (importOriginal) => {
   const actual = await importOriginal<typeof import('react')>();
   return {
     ...actual,
+    useRef: (initial: unknown) => {
+      const index = state.refCursor++;
+      if (!state.refs[index]) state.refs[index] = { current: initial };
+      return state.refs[index];
+    },
     useState: (initial: unknown) => {
       const index = state.cursor++;
       if (!(index in state.slots)) state.slots[index] = initial;
@@ -105,6 +112,7 @@ import CustomersScreen from '@/app/customers';
 
 function render() {
   state.cursor = 0;
+  state.refCursor = 0;
   state.buttons = {};
   return renderToStaticMarkup(React.createElement(CustomersScreen));
 }
@@ -113,6 +121,8 @@ beforeEach(() => {
   state.language = 'ar';
   state.platform = 'web';
   state.cursor = 0;
+  state.refCursor = 0;
+  state.refs = [];
   state.slots = [];
   state.buttons = {};
   state.form = null;
@@ -159,6 +169,32 @@ describe('single customer-add entry point (handler tests, not physical-device ac
     await state.form!.onSave({ name: 'Test' });
     render();
     expect(state.form?.visible).toBe(true);
+  });
+  it('reuses the same customer document ID when retrying an uncertain save', async () => {
+    state.create.mockRejectedValueOnce(new Error('network-timeout'));
+    render();
+    state.buttons['add-customer-header']();
+    render();
+    await state.form!.onSave({ name: 'Retry customer' });
+    const firstId = state.create.mock.calls[0][0].id;
+    await state.form!.onSave({ name: 'Retry customer' });
+    const secondId = state.create.mock.calls[1][0].id;
+    expect(secondId).toBe(firstId);
+    expect(state.create).toHaveBeenCalledTimes(2);
+  });
+  it('ignores repeated submissions while the first customer write is still pending', async () => {
+    let finish!: () => void;
+    state.create.mockImplementationOnce(() => new Promise<void>((resolve) => { finish = resolve; }));
+    render();
+    state.buttons['add-customer-header']();
+    render();
+    const submit = state.form!.onSave;
+    const first = submit({ name: 'Repeated tap' });
+    const second = submit({ name: 'Repeated tap' });
+    expect(state.create).toHaveBeenCalledOnce();
+    finish();
+    await Promise.all([first, second]);
+    expect(state.create).toHaveBeenCalledOnce();
   });
   it('allows Editor to open the same form, but does not show any add action to Viewer', () => {
     state.role = 'editor';

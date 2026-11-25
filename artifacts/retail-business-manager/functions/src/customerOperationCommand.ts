@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { FieldValue, type Firestore } from 'firebase-admin/firestore';
 import { HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
-import { assertWorkspaceAccess } from './workspaceAccess.js';
+import { assertLifecycleTargetWritable, assertWorkspaceAccess } from './workspaceAccess.js';
 import { readCustomerCredit, writeCustomerCredit } from './customerCreditState.js';
 import { financialPostingTime } from '../../data/automaticClosing.js';
 import { planCustomerDebtAmendment } from '../../data/customerDebtAmendment.js';
@@ -77,6 +77,7 @@ export async function customerOperationCommandHandler(request: CallableRequest<u
         prior.result?.targetId !== input.targetId) throw new HttpsError('already-exists', 'Operation ID already used', { code: 'IDEMPOTENCY_CONFLICT' });
       return { ...prior.result, outcome: 'replayed' };
     }
+    assertLifecycleTargetWritable(customerData, 'customer');
     const target = targetSnap.data();
     if (!targetSnap.exists || target?.id !== input.targetId || target.workspaceId !== input.spaceId ||
       target.storeId !== input.storeId || target.customerId !== input.customerId) throw new HttpsError('not-found', 'Operation unavailable');

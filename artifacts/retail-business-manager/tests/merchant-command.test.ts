@@ -41,6 +41,50 @@ const purchase = {
 };
 
 describe('merchant trusted command (not deployed)', () => {
+  it('rejects merchant postings while the merchant is being archived or deleted', async () => {
+    const backend = setup();
+    backend.docs['spaces/s/merchants/m'].lifecycleStatus = 'archiving';
+    await expect(backend.command('payment', 'blocked-payment', payment))
+      .rejects.toMatchObject({
+        code: 'failed-precondition',
+        details: { code: 'MERCHANT_LIFECYCLE_LOCKED' },
+      });
+    expect(backend.docs['spaces/s/merchantOperations/blocked-payment']).toBeUndefined();
+  });
+
+  it('rejects customer-to-merchant postings while the customer is being deleted', async () => {
+    const backend = setup();
+    backend.docs['spaces/s/customers/c'].lifecycleStatus = 'deleting';
+    await expect(backend.command('directPayment', 'blocked-direct', {
+      currency: 'TRY', amountExact: '30.00', customerId: 'c',
+    })).rejects.toMatchObject({
+      code: 'failed-precondition',
+      details: { code: 'CUSTOMER_LIFECYCLE_LOCKED' },
+    });
+    expect(backend.docs['spaces/s/merchantOperations/blocked-direct']).toBeUndefined();
+  });
+
+  it('replays completed merchant operations after a lifecycle lock without new writes', async () => {
+    const backend = setup();
+    await backend.command('payment', 'existing-payment', payment);
+    const writes = backend.writes.length;
+    backend.docs['spaces/s/merchants/m'].lifecycleStatus = 'archiving';
+    await expect(backend.command('payment', 'existing-payment', payment))
+      .resolves.toMatchObject({ outcome: 'replayed' });
+    expect(backend.writes).toHaveLength(writes);
+  });
+
+  it('replays completed direct payments after a customer lifecycle lock', async () => {
+    const backend = setup();
+    const direct = { currency: 'TRY', amountExact: '30.00', customerId: 'c' };
+    await backend.command('directPayment', 'existing-direct', direct);
+    const writes = backend.writes.length;
+    backend.docs['spaces/s/customers/c'].lifecycleStatus = 'deleting';
+    await expect(backend.command('directPayment', 'existing-direct', direct))
+      .resolves.toMatchObject({ outcome: 'replayed' });
+    expect(backend.writes).toHaveLength(writes);
+  });
+
   const separatePurchase = { ...purchase, paidExact: '0.00', separateLines: true };
   const createWithOpenings = {
     name: 'New merchant',

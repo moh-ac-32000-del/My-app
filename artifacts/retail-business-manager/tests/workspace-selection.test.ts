@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { workspaceCandidates, workspaceSessionKey } from '@/data/workspaceSelection';
+import { hasActiveWorkspaceMembership, workspaceCandidates, workspaceSessionKey } from '@/data/workspaceSelection';
 
 describe('workspace selection hints', () => {
   it.each([
@@ -28,6 +28,14 @@ describe('workspace selection hints', () => {
         'b',
       ),
     ).toEqual(['b', 'a', 'c']);
+  });
+  it('recognizes when all workspace memberships have been left or suspended', () => {
+    expect(hasActiveWorkspaceMembership({ primarySpaceId: 'old', lastActiveSpaceId: null, memberships: [
+      { spaceId: 'old', status: 'left' }, { spaceId: 'other', status: 'suspended' },
+    ] as never })).toBe(false);
+    expect(hasActiveWorkspaceMembership({ primarySpaceId: 'old', lastActiveSpaceId: null, memberships: [
+      { spaceId: 'new', status: 'active' },
+    ] as never })).toBe(true);
   });
   it('never derives authorization or roles from discovery hints', () => {
     expect(workspaceCandidates({ primarySpaceId: 'deleted', lastActiveSpaceId: null, memberships: [] })).toEqual([

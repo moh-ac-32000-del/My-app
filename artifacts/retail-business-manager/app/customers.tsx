@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -50,6 +50,8 @@ export default function CustomersScreen() {
   const { t, isRTL } = useI18n();
   const [search, setSearch] = useState<string>('');
   const [isFormVisible, setIsFormVisible] = useState<boolean>(false);
+  const customerCreateInFlight = useRef(false);
+  const pendingCustomer = useRef<Customer | null>(null);
 
   const visibleCustomers = useMemo(() => filterCustomers(customers, search), [customers, search]);
   const debtSummary = useMemo(() => selectCustomerDebtSummary({
@@ -57,31 +59,48 @@ export default function CustomersScreen() {
     isLoading: debtsLoading || !isReady || !isAuthenticated, error: debtError,
   }), [debts, credits, profile.id, activeSpaceId, debtSpaceId, debtsLoading, isReady, isAuthenticated, debtError]);
 
-  const addCustomer = async (draft: CustomerDraft) => {
+  const addCustomer = async (draft: CustomerDraft): Promise<boolean> => {
+    if (customerCreateInFlight.current) return false;
     if (!draft.name.trim()) {
       Alert.alert(t('customerName'), t('fieldRequired'));
-      return;
+      return false;
     }
 
+    customerCreateInFlight.current = true;
     const now = new Date().toISOString();
     const customer: Customer = {
-      id: createCustomerId(),
+      ...(pendingCustomer.current ?? {} as Customer),
+      id: pendingCustomer.current?.id ?? createCustomerId(),
       storeId: profile.id,
       name: draft.name.trim(),
       phone: draft.phone,
       address: draft.address,
       notes: draft.notes,
-      createdAt: now,
+      createdAt: pendingCustomer.current?.createdAt ?? now,
       updatedAt: now,
       isActive: true,
     };
+    pendingCustomer.current = customer;
     try {
       await createCustomer(customer);
+      pendingCustomer.current = null;
       setIsFormVisible(false);
       Alert.alert(t('customerAdded'));
+      return true;
     } catch {
+      // Keep the same document ID so retrying after an uncertain network result
+      // cannot create a second customer record.
       Alert.alert(t('somethingWentWrong'), t('reloadToContinue'));
+      return false;
+    } finally {
+      customerCreateInFlight.current = false;
     }
+  };
+
+  const closeCustomerForm = () => {
+    if (customerCreateInFlight.current) return;
+    pendingCustomer.current = null;
+    setIsFormVisible(false);
   };
 
   const openCustomer = (customer: Customer) => {
@@ -94,7 +113,7 @@ export default function CustomersScreen() {
         keyExtractor: item => item.id,
         renderItem: ({ item }) => <CustomerCard customer={item} onPress={() => openCustomer(item)} />,
       }}
-      overlay={<CustomerFormModal visible={isFormVisible} onClose={() => setIsFormVisible(false)} onSave={(draft) => void addCustomer(draft)} />}
+      overlay={<CustomerFormModal visible={isFormVisible} onClose={closeCustomerForm} onSave={addCustomer} />}
     >
       <PageHeader
         title={t('customers')}

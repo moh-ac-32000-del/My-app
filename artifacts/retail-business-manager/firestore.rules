@@ -58,11 +58,14 @@ service cloud.firestore {
       allow create: if canWriteBusiness(spaceId)
         && isValidCustomerDocument(spaceId, customerId, request.resource.data)
         && hasCanonicalStoreProfile(spaceId, request.resource.data.storeId)
+        && !request.resource.data.keys().hasAny(['lifecycleStatus'])
         && (
           !request.resource.data.keys().hasAny(['createdByUserId'])
           || request.resource.data.createdByUserId == request.auth.uid
         );
       allow update: if canWriteBusiness(spaceId)
+        && (!resource.data.keys().hasAny(['lifecycleStatus']) || resource.data.lifecycleStatus == 'active')
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['lifecycleStatus'])
         && isValidCustomerDocument(spaceId, customerId, request.resource.data)
         && hasCanonicalStoreProfile(spaceId, request.resource.data.storeId)
         && request.resource.data.id == resource.data.id

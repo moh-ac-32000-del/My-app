@@ -1,6 +1,6 @@
 import { FieldValue, type Firestore } from 'firebase-admin/firestore';
 import { HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
-import { assertWorkspaceAccess } from './workspaceAccess.js';
+import { assertLifecycleTargetWritable, assertWorkspaceAccess } from './workspaceAccess.js';
 import { financialPostingTime } from '../../data/automaticClosing.js';
 import { readCustomerCredit, writeCustomerCredit } from './customerCreditState.js';
 import { legacyAmountExact, planCustomerCharge } from '../../data/customerCreditAccounting.js';
@@ -90,6 +90,7 @@ export async function trustedDebtCommandHandler(
         return { outcome: 'replayed', debtId: input.debtId, processedAt: String(receipt.processedAt ?? '') };
       }
 
+      assertLifecycleTargetWritable(customer, 'customer');
       if (input.action === 'create' && debtSnap.exists) {
         throw new HttpsError('already-exists', 'Debt ID already exists', { code: 'DEBT_ALREADY_EXISTS' });
       }
