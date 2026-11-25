@@ -80,3 +80,21 @@ Confirmed from source:
 - No production Firebase data was read or changed. No Rules or Functions were deployed. No backup/restore drill against a separate Firebase project has yet been evidenced.
 
 **Decision:** keep PR #77 Draft and do not merge/deploy. Continue with a relationship matrix and a customer-only lifecycle design; do not implement broad cascade deletion until financial references, legacy schemas, archive invariants, retries, and concurrent writes are covered by emulator tests.
+
+
+## Follow-up source audit — 2026-11-25
+
+### Additional verified payment and notification edges
+- Inspected `customerOperationCommand.ts` and `customerPaymentAmendment.ts`. A customer payment amendment depends on exactly one matching completed creation receipt to prove its original accounting effect. When a cash transaction is linked, it requires exactly one payment reference to that transaction and validates the cash record's scope, currency, direction and exact amount. Ambiguous/shared cash links are rejected.
+- Payment amendments can create compensating cash transactions, correction debts, customer-credit revisions, and a new operation receipt containing the previous operation and correction details. Original payment, cash and receipt evidence must remain available for audit/replay; no cascade deletion is safe here.
+- The amendment handler reads at most 451 customer debt documents and rejects more than 450 for a single correction. This is a command-specific safety cap, not a complete customer dependency inventory and not an acceptable substitute for paginated lifecycle processing.
+- Inspected reminder reconciliation: generated due-date reminder documents may be physically removed when no longer valid, while explicit reminder deletion is represented through reminder status/tombstone data. A future customer cleanup must distinguish system-generated reminders from user-authored reminder history.
+- Inspected push-device and notification dispatch paths. Root `pushDevices` and `pushDeliveryReceipts` are scoped by UID, workspace, store and device/event identity. Notification dispatch is bounded and does not mutate financial ledgers. These records belong to a separate workspace/account privacy cleanup domain, not customer/merchant cascades.
+
+### Scope correction
+- The merchant accounting document's current opening section states that its later complete-export phase supersedes earlier staged notes. The current Functions index also registers `merchantCommand`; earlier historical statements that the callable was not exported must not be treated as current source status. This does not mean it has been deployed to Firebase.
+
+### Current implementation gate
+- No lifecycle job starter, durable job persistence, registered lifecycle worker, lease-fenced page processor or terminal dependency verifier was found in the inspected source.
+- No live Firestore data was enumerated. Current-source relationship discovery cannot prove that older production documents lack additional references.
+- Do not begin destructive worker implementation until remaining workspace/account subcollections and every export/projection consumer are inventoried, and the customer-specific retention decision for historical names/receipts is approved in code review.
