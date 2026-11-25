@@ -141,3 +141,28 @@ The following matrix separates the *entity being hidden/removed* from financial 
 - The checked-in composite indexes include store/date or store/time query patterns for archive and ledger operations, but they do not yet establish that every future target-indexed lifecycle query is supported. Add only indexes derived from concrete bounded worker queries and validate them in emulator/CI before deployment.
 
 **Gate:** this matrix is a conservative source-derived retention map, not a production Firestore inventory. Before implementing a worker, close each unresolved disposition with a code reference, a target-scoped query, a legacy-data fixture, and an invariant assertion. Any ambiguous or cross-scope edge must block the job rather than be guessed.
+
+
+## 9. Follow-up edge audit — payment amendments and notification records
+
+### Customer payment amendment chain
+
+Source checked: `functions/src/customerOperationCommand.ts`, `functions/src/customerPaymentAmendment.ts`, and `functions/src/customerCreditState.ts`.
+
+- The outer customer-operation transaction authorizes the active workspace/store/customer, checks an existing operation receipt for exact replay, then applies the customer lifecycle lock before changing a target payment.
+- Payment amendment requires exactly one completed creation receipt matching payment ID, space, store, customer and actor when a financial correction is required. The creation receipt is therefore not merely a retry token: it is the evidence used to reconstruct the original accounting effect.
+- For a payment linked to cash, the amendment checks that exactly one payment references the transaction (query limit 2). Shared or ambiguous cash links fail closed. The original cash record is validated for workspace, store, currency, direction, merchant linkage and exact amount.
+- Amendments write compensating cash transactions and/or correction debts, update customer credit/debt state, update the payment revision, and create a new operation receipt containing the previous operation and correction details. These are linked accounting evidence; they must not be cascade-deleted.
+- The amendment path reads up to 451 customer debt rows and refuses more than 450 in one correction. This is an existing bounded-command limit, not proof that the customer has at most 450 debts. A future lifecycle worker must paginate independently and must not copy this one-shot limit as its deletion strategy.
+- Merchant-originated payments are deliberately rejected by this customer edit/cancel path and must be amended/reversed through the linked merchant operation flow.
+
+### Reminder cleanup and notification records
+
+- Reminder reconciliation may physically delete generated due-date reminder rows when their source debt no longer qualifies; explicit user deletion is represented by reminder status/tombstone fields. A lifecycle worker must distinguish generated disposable reminders from user-created reminder history and preserve any required notification/audit trail.
+- Root `pushDevices/{deviceId}` documents contain a hashed token key plus UID/workspace/store scope and dispatch state. The notification dispatcher may disable a device by removing token and scope fields when authorization is no longer valid.
+- Root `pushDeliveryReceipts/{receiptId}` records are keyed from device/event identity and store UID, space, store, device, event key, claim ID, and delivery state. They are delivery evidence, not customer/merchant financial data. Workspace/account cleanup must scope by exact space/UID and avoid touching a device or receipt belonging to another workspace or account.
+- The notification dispatcher is bounded (device/source/event limits) and updates only notification state; it does not post financial entries. It remains a separate cleanup domain from customer and merchant lifecycle.
+
+### Audit boundary
+
+The repository search and source reads in this pass found no lifecycle worker registration, no durable lifecycle job collection, and no lifecycle scheduled trigger. The source audit is still not a production Firestore inventory: unindexed legacy records and data created by older app versions may contain relationships absent from current code. Do not infer absence of records from absence of a current writer.
